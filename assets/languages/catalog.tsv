@@ -1,0 +1,117 @@
+BACK|ATRÁS|RETOUR|ZURÜCK|戻る|返回|חזרה
+NEXT|SIGUIENTE|SUIVANT|WEITER|次へ|下一页|הבא
+NEXT PAGE|SIGUIENTE|SUIVANT|WEITER|次のページ|下一页|העמוד הבא
+CANCEL|CANCELAR|ANNULER|ABBRECHEN|取消|取消|ביטול
+SAVE|GUARDAR|ENREGISTRER|SPEICHERN|保存|保存|שמירה
+ON|SÍ|OUI|AN|有効|开启|פעיל
+OFF|NO|NON|AUS|無効|关闭|כבוי
+FIELD TOOLS|HERRAMIENTAS|OUTILS TERRAIN|FELDWERKZEUGE|フィールドツール|现场工具|כלי שטח
+FPV PIT BOARD|CANALES FPV|CANAUX FPV|FPV KANÄLE|FPV チャンネル|FPV 频道表|לוח ערוצי FPV
+DRONE READINGS|DATOS DE DRONES|DONNÉES DRONES|DROHNENDATEN|ドローン情報|无人机数据|נתוני רחפנים
+OWN TELEMETRY|MI TELEMETRÍA|MA TÉLÉMÉTRIE|EIGENE TELEMETRIE|自分の機体情報|我的遥测|טלמטריה אישית
+MY SENSORS|MIS SENSORES|MES CAPTEURS|MEINE SENSOREN|自分のセンサー|我的传感器|החיישנים שלי
+ALERT RULES|REGLAS DE AVISO|RÈGLES D'ALERTE|ALARMREGELN|通知ルール|提醒规则|כללי התראות
+ACCESSIBILITY|ACCESIBILIDAD|ACCESSIBILITÉ|BARRIEREFREIHEIT|使いやすさ|无障碍设置|נגישות
+LANGUAGE|IDIOMA|LANGUE|SPRACHE|言語|语言|שפה
+HELP|AYUDA|AIDE|HILFE|ヘルプ|帮助|עזרה
+HIGH CONTRAST|ALTO CONTRASTE|CONTRASTE ÉLEVÉ|HOHER KONTRAST|高コントラスト|高对比度|ניגודיות גבוהה
+REDUCED MOTION|MENOS ANIMACIÓN|MOINS D'ANIMATION|WENIGER BEWEGUNG|動きを減らす|减少动画|הפחתת תנועה
+LEFT HANDED|MANO IZQUIERDA|MAIN GAUCHE|LINKSHÄNDIG|左利き用|左手布局|פריסה לשמאליים
+LARGE CONTROLS|BOTONES GRANDES|GRANDS BOUTONS|GROSSE TASTEN|大きなボタン|大按钮|פקדים גדולים
+QUIET PREFIXES|PREFIJOS SILENCIOSOS|PRÉFIXES SILENCIEUX|PRÄFIXE STUMM|接頭辞のみは無音|仅前缀匹配静音|השתקת קידומות
+COMPOSITE ONLY|VARIAS PISTAS|PLUSIEURS INDICES|MEHRERE INDIZIEN|複数の手がかりのみ|仅多线索提醒|רק שילוב רמזים
+MUTE SELECTED|SILENCIAR EQUIPO|MASQUER L'ALERTE|GERÄT STUMM|選択機器を消音|所选设备静音|השתקת המכשיר
+CLEAR MUTES|QUITAR SILENCIOS|RÉTABLIR ALERTES|STUMM AUFHEBEN|消音を解除|清除静音|ביטול השתקות
+CONNECT|CONECTAR|CONNECTER|VERBINDEN|接続|连接|התחברות
+DISCONNECT|DESCONECTAR|DÉCONNECTER|TRENNEN|切断|断开|ניתוק
+EXPORT TO SD|EXPORTAR A SD|EXPORTER VERS SD|AUF SD EXPORTIEREN|SD に書き出す|导出到 SD|ייצוא לכרטיס SD
+DISCOVER|BUSCAR|DÉCOUVRIR|SUCHEN|検出|发现|גילוי
+PIN SENSOR|FIJAR SENSOR|CHOISIR CAPTEUR|SENSOR MERKEN|センサーを登録|固定传感器|בחירת חיישן
+FORGET SENSOR|OLVIDAR SENSOR|OUBLIER CAPTEUR|SENSOR ENTFERNEN|登録を解除|移除传感器|הסרת חיישן
+NO DATA|SIN DATOS|AUCUNE DONNÉE|KEINE DATEN|データなし|暂无数据|אין נתונים
+STALE|ANTIGUO|PÉRIMÉ|VERALTET|古いデータ|数据过期|נתונים ישנים
+POSSIBLE MATCH|POSIBLE COINCIDENCIA|CORRESPONDANCE POSSIBLE|MÖGLICHER TREFFER|一致の可能性|可能匹配|התאמה אפשרית
+RESEARCH LAB|LABORATORIO|LABORATOIRE|FORSCHUNG|調査ラボ|研究工具|מעבדת מחקר
+DNSP WALKTHROUGH|GUÍA DNSP|GUIDE DNSP|DNSP ANLEITUNG|DNSP ガイド|DNSP 指南|מדריך DNSP
+THEME|TEMA|THÈME|DESIGN|テーマ|主题|ערכת נושא
+SYSTEM|SISTEMA|SYSTÈME|SYSTEM|システム|系统|מערכת
+APPEARANCE|APARIENCIA|APPARENCE|DARSTELLUNG|外観|外观|מראה
+BACKGROUND|FONDO|ARRIÈRE-PLAN|HINTERGRUND|背景|背景|רקע
+OPEN DESK|ABRIR RELOJ|OUVRIR HORLOGE|UHR ÖFFNEN|時計を開く|打开时钟|פתיחת שעון
+CLOCK FONT|FUENTE DEL RELOJ|POLICE HORLOGE|UHRSCHRIFT|時計のフォント|时钟字体|גופן השעון
+CLOCK SIZE|TAMAÑO DEL RELOJ|TAILLE HORLOGE|UHRGRÖSSE|時計の大きさ|时钟大小|גודל השעון
+CLOCK BG|FONDO DEL RELOJ|FOND HORLOGE|UHRHINTERGRUND|時計の背景|时钟背景|רקע השעון
+SQUAD ON DESK|GRUPO EN RELOJ|GROUPE HORLOGE|GRUPPE AUF UHR|時計に仲間|时钟上的伙伴|חברים בשעון
+HOW MANY|CUÁNTOS|COMBIEN|ANZAHL|人数|人数|כמה
+VISITOR|VISITANTE|VISITEUR|BESUCHER|訪問者|访客|מבקר
+LOCK BACKGROUND|FIJAR FONDO|VERROUILLER FOND|HINTERGRUND FIX|背景を固定|锁定背景|נעילת הרקע
+BRIGHT -  +|BRILLO -  +|LUMINOSITÉ - +|HELLIGKEIT - +|明るさ - +|亮度 - +|בהירות - +
+INVERT COLORS|INVERTIR COLORES|INVERSER COULEURS|FARBEN UMKEHREN|色を反転|反转颜色|היפוך צבעים
+COLOR ORDER|ORDEN DE COLOR|ORDRE COULEURS|FARBREIHENFOLGE|色の順序|颜色顺序|סדר צבעים
+ROTATION LOCK|FIJAR ORIENTACIÓN|BLOQUER ROTATION|DREHUNG SPERREN|回転を固定|锁定旋转|נעילת סיבוב
+BORING MODE|MODO SENCILLO|MODE SIMPLE|SCHLICHTER MODUS|シンプルモード|简洁模式|מצב פשוט
+ALERT FILTER|FILTRO DE AVISOS|FILTRE ALERTES|ALARMFILTER|通知フィルター|提醒筛选|סינון התראות
+MICROSD STATUS|ESTADO MICROSD|ÉTAT MICROSD|MICROSD STATUS|MICROSD の状態|MICROSD 状态|מצב כרטיס MICROSD
+ALERT LENGTH|DURACIÓN AVISO|DURÉE ALERTE|ALARMDAUER|通知の長さ|提醒时长|משך ההתראה
+AUTO SNOOZE|PAUSA AUTOMÁTICA|PAUSE AUTOMATIQUE|AUTOMATISCHE RUHE|自動消音|自动暂停|השתקה אוטומטית
+TYPE FILTER|FILTRO POR TIPO|FILTRE PAR TYPE|TYPFILTER|種類フィルター|类型筛选|סינון לפי סוג
+IGNORED|IGNORADOS|IGNORÉS|IGNORIERT|無視した機器|已忽略|מכשירים מושתקים
+POWER SAVER|AHORRO DE ENERGÍA|ÉCONOMIE ÉNERGIE|ENERGIESPAREN|省電力|节能|חיסכון בחשמל
+STATUS LIGHT|LUZ DE ESTADO|VOYANT D'ÉTAT|STATUSLEUCHTE|状態ランプ|状态灯|נורית מצב
+SECURITY|SEGURIDAD|SÉCURITÉ|SICHERHEIT|セキュリティ|安全设置|אבטחה
+CALIBRATE TOUCH|CALIBRAR TÁCTIL|CALIBRER ÉCRAN|TOUCH KALIBRIEREN|タッチ調整|校准触摸|כיול מגע
+CHECK COLORS|COMPROBAR COLORES|VÉRIFIER COULEURS|FARBEN PRÜFEN|色の確認|检查颜色|בדיקת צבעים
+DIAGNOSTICS|DIAGNÓSTICO|DIAGNOSTIC|DIAGNOSE|診断|诊断|אבחון
+UPDATE FIRMWARE|ACTUALIZAR FIRMWARE|MISE À JOUR|FIRMWARE UPDATE|ファーム更新|更新固件|עדכון קושחה
+UPDATE CHECK|BUSCAR ACTUALIZACIÓN|VÉRIFIER MISE À JOUR|UPDATE PRÜFEN|更新を確認|检查更新|בדיקת עדכונים
+WIFI NETWORKS|REDES WIFI|RÉSEAUX WIFI|WIFI NETZE|WIFI ネットワーク|WIFI 网络|רשתות WIFI
+TIME ZONE|ZONA HORARIA|FUSEAU HORAIRE|ZEITZONE|タイムゾーン|时区|אזור זמן
+REPLAY INTRO|REPETIR INTRO|REVOIR INTRO|INTRO WIEDERHOLEN|イントロ再生|重播开场|הצגת הפתיחה
+SHOW OFF|DEMOSTRACIÓN|DÉMONSTRATION|VORFÜHRUNG|デモ|演示|הדגמה
+SHADES COLOR|COLOR DE GAFAS|COULEUR LUNETTES|BRILLENFARBE|眼鏡の色|眼镜颜色|צבע המשקפיים
+SIZE|TAMAÑO|TAILLE|GRÖSSE|大きさ|大小|גודל
+NAME|NOMBRE|NOM|NAME|名前|名称|שם
+OUTFIT|TRAJE|TENUE|KLEIDUNG|衣装|服装|לבוש
+PET|ACARICIAR|CARESSER|STREICHELN|なでる|摸摸|ליטוף
+BANTER|CHARLA|BAVARDAGE|GEPLAUDER|おしゃべり|闲聊|פטפוט
+SQUACHY'S DIARY|DIARIO DE SQUACHY|JOURNAL DE SQUACHY|SQUACHYS TAGEBUCH|SQUACHY の日記|SQUACHY 日记|היומן של SQUACHY
+DESK MODE|MODO RELOJ|MODE HORLOGE|UHRENMODUS|時計モード|时钟模式|מצב שעון
+RESET STATS|BORRAR ESTADÍSTICAS|EFFACER STATISTIQUES|STATISTIK LÖSCHEN|統計をリセット|重置统计|איפוס סטטיסטיקה
+WATCHING|VIGILANDO|SURVEILLANCE|BEOBACHTUNG|監視中|关注中|במעקב
+HUNTING|BUSCANDO|RECHERCHE|SUCHE|探索中|搜索中|בחיפוש
+MORE INFO|MÁS INFORMACIÓN|PLUS D'INFOS|MEHR INFOS|詳しい情報|更多信息|מידע נוסף
+WHY THIS MATCHED|POR QUÉ COINCIDE|POURQUOI CE RÉSULTAT|WARUM DIESER TREFFER|一致した理由|匹配原因|סיבת ההתאמה
+Language preview. Translations need human review.|Vista previa. Las traducciones necesitan revisión humana.|Aperçu. Les traductions nécessitent une relecture humaine.|Vorschau. Übersetzungen müssen geprüft werden.|翻訳はプレビューです。人による確認が必要です。|翻译为预览版本，需要人工审核。|תצוגה מקדימה. התרגומים דורשים בדיקה אנושית.
+Shared manufacturer prefix. This does not confirm the device type.|Prefijo de fabricante compartido. No confirma el tipo de dispositivo.|Préfixe fabricant partagé. Il ne confirme pas le type d'appareil.|Gemeinsames Herstellerpräfix. Es bestätigt nicht den Gerätetyp.|共通のメーカー接頭辞です。機器の種類は確定しません。|共享的厂商前缀，不能确认设备类型。|קידומת יצרן משותפת. היא אינה מאשרת את סוג המכשיר.
+Broadcast claims; identity not authenticated|Datos anunciados; identidad no autenticada|Données diffusées ; identité non authentifiée|Gesendete Angaben; Identität nicht bestätigt|放送された情報です。身元は未認証です|广播声称的信息，身份未经验证|נתונים משודרים; הזהות אינה מאומתת
+No detection does not mean no camera.|No detectar no significa que no haya cámara.|Aucune détection ne signifie pas absence de caméra.|Keine Erkennung bedeutet nicht, dass keine Kamera da ist.|未検出でもカメラがないとは限りません。|未检测到不代表没有摄像头。|היעדר זיהוי אינו מעיד על היעדר מצלמה.
+Welcome. This device observes radio clues, not people or intent.|Bienvenido. Este equipo observa pistas de radio, no personas ni intenciones.|Bienvenue. Cet appareil observe des indices radio, pas les personnes ni leurs intentions.|Willkommen. Das Gerät beobachtet Funksignale, keine Personen oder Absichten.|この機器は無線の手がかりを観測します。人や意図は判断しません。|本设备观察无线电线索，不判断人员或意图。|ברוכים הבאים. המכשיר קולט רמזי רדיו ואינו קובע זהות או כוונה.
+Use Why this matched to inspect evidence. A possible match is not confirmation.|Use el motivo de coincidencia para ver las pruebas. Una coincidencia posible no es confirmación.|Consultez la raison du résultat. Une correspondance possible n'est pas une confirmation.|Prüfen Sie den Grund des Treffers. Ein möglicher Treffer ist keine Bestätigung.|一致した理由で根拠を確認できます。一致の可能性は確定ではありません。|查看匹配原因以检查依据。可能匹配不等于确认。|בדקו את סיבת ההתאמה כדי לראות את הראיות. התאמה אפשרית אינה אישור.
+FPV equipment clues do not prove a drone is flying.|Las pistas de equipo FPV no prueban que un dron esté volando.|Les indices de matériel FPV ne prouvent pas qu'un drone vole.|FPV Hinweise beweisen keinen fliegenden Copter.|FPV 機器の手がかりは飛行中の証明ではありません。|FPV 设备线索不能证明无人机正在飞行。|רמזי ציוד FPV אינם מוכיחים שרחפן נמצא בטיסה.
+Choose channels together before powering video transmitters. This board does not measure 5.8 GHz.|Acuerden los canales antes de encender vídeo. Este equipo no mide 5,8 GHz.|Choisissez les canaux avant d'allumer la vidéo. Cet appareil ne mesure pas le 5,8 GHz.|Kanäle vor dem Einschalten absprechen. Dieses Gerät misst keine 5,8 GHz.|映像送信機の電源を入れる前にチャンネルを相談してください。本機は 5.8 GHz を測定しません。|开启图传前请协调频道。本设备不测量 5.8 GHz。|תאמו ערוצים לפני הפעלת משדרי וידאו. המכשיר אינו מודד 5.8 GHz.
+Use microSD for exports. Raw research files can contain device identifiers.|Use microSD para exportar. Los archivos sin anonimizar pueden incluir identificadores.|Exportez sur microSD. Les fichiers bruts peuvent contenir des identifiants.|Auf microSD exportieren. Rohdaten können Gerätekennungen enthalten.|microSD に書き出せます。生の調査データには機器識別子が含まれる場合があります。|可导出到 microSD。原始研究文件可能包含设备标识符。|ניתן לייצא לכרטיס microSD. קובצי מחקר גולמיים עשויים להכיל מזהי מכשירים.
+Verify a camera visually before reporting it. Open deflock.org/report on your phone.|Verifique visualmente antes de informar. Abra deflock.org/report en su teléfono.|Vérifiez visuellement avant de signaler. Ouvrez deflock.org/report sur votre téléphone.|Kamera vor dem Melden visuell prüfen. deflock.org/report auf dem Handy öffnen.|報告前にカメラを目視確認してください。スマートフォンで deflock.org/report を開けます。|报告前请目视确认摄像头。在手机上打开 deflock.org/report。|יש לוודא את קיום המצלמה בעיניים לפני דיווח. פתחו בטלפון את deflock.org/report.
+An upstream update replaces DNSP firmware. Reinstall a DNSP image from your-dnsp.|Una actualización original reemplaza DNSP. Reinstale una imagen DNSP de your-dnsp.|Une mise à jour d'origine remplace DNSP. Réinstallez une image DNSP de your-dnsp.|Ein Originalupdate ersetzt DNSP. Ein DNSP Abbild von your-dnsp neu installieren.|元の更新は DNSP を置き換えます。your-dnsp の DNSP イメージを再インストールしてください。|原版更新会替换 DNSP。请从 your-dnsp 获取 DNSP 固件重新安装。|עדכון מקורי מחליף את DNSP. ניתן להתקין מחדש קושחת DNSP מאת your-dnsp.
+GOT IT|ENTENDIDO|COMPRIS|VERSTANDEN|了解|知道了|הבנתי
+SKIP|OMITIR|PASSER|ÜBERSPRINGEN|スキップ|跳过|דילוג
+DONE|LISTO|TERMINÉ|FERTIG|完了|完成|סיום
+LOG|REGISTRO|JOURNAL|PROTOKOLL|記録|记录|יומן
+SCAN|ESCANEAR|SCANNER|SCANNEN|スキャン|扫描|סריקה
+SETTINGS|AJUSTES|RÉGLAGES|EINSTELLUNGEN|設定|设置|הגדרות
+BEHAVIOR|COMPORTAMIENTO|COMPORTEMENT|VERHALTEN|動作|行为|התנהגות
+DISPLAY|PANTALLA|ÉCRAN|ANZEIGE|画面|显示|תצוגה
+Possible camera-related equipment. Radio clues do not confirm the model, owner or recording status.|Posible equipo relacionado con cámaras. Las pistas no confirman modelo, propietario ni grabación.|Équipement possiblement lié à une caméra. Les indices ne confirment ni modèle, ni propriétaire, ni enregistrement.|Mögliche Kameraausrüstung. Funkhinweise bestätigen weder Modell noch Besitzer oder Aufnahme.|カメラ関連機器の可能性があります。機種、所有者、録画状態は確認できません。|可能与摄像设备有关。无线电线索不能确认型号、所有者或录制状态。|ייתכן ציוד הקשור למצלמה. רמזי הרדיו אינם מאשרים דגם, בעלות או מצב הקלטה.
+Possible tracking or proximity device. This does not establish its owner or intent.|Posible localizador o dispositivo de proximidad. No determina su propietario ni intención.|Possible balise de suivi ou de proximité. Cela ne détermine ni propriétaire ni intention.|Mögliches Ortungsgerät oder Näherungssender. Besitzer und Absicht sind unbekannt.|追跡タグや近接機器の可能性があります。所有者や意図は判断できません。|可能是追踪或近距离设备，不能确定所有者或意图。|ייתכן התקן איתור או קרבה. לא ניתן לקבוע בעלות או כוונה.
+A radio pattern matched. Inspect the evidence; this does not prove wrongdoing.|Coincidió un patrón de radio. Revise las pruebas; no demuestra una conducta indebida.|Un motif radio correspond. Examinez les indices ; cela ne prouve pas un acte malveillant.|Ein Funkmuster passt. Hinweise prüfen; dies beweist kein Fehlverhalten.|無線パターンが一致しました。根拠を確認してください。不正行為の証明ではありません。|无线电模式匹配。请检查依据，这不能证明不当行为。|נמצאה התאמה לדפוס רדיו. בדקו את הראיות; אין בכך הוכחה לפעולה פסולה.
+A network name matched. Names can be changed or imitated.|Coincidió un nombre de red. Los nombres pueden cambiarse o imitarse.|Un nom de réseau correspond. Les noms peuvent être modifiés ou imités.|Ein Netzwerkname passt. Namen können geändert oder nachgeahmt werden.|ネットワーク名が一致しました。名前は変更や偽装が可能です。|网络名称匹配。名称可以更改或仿冒。|שם רשת תאם. ניתן לשנות שמות או לחקות אותם.
+Bluetooth fields matched a listed rule. Other devices can share or imitate these fields.|Los campos Bluetooth coinciden con una regla. Otros equipos pueden compartirlos o imitarlos.|Des champs Bluetooth correspondent à une règle. D'autres appareils peuvent les partager ou les imiter.|Bluetooth Felder passen zu einer Regel. Andere Geräte können diese teilen oder nachahmen.|Bluetooth の項目がルールに一致しました。他の機器も同じ値を使ったり偽装したりできます。|蓝牙字段符合规则。其他设备可能使用相同字段或进行仿冒。|שדות Bluetooth תאמו לכלל. מכשירים אחרים עשויים להשתמש באותם שדות או לחקות אותם.
+Experimental combined clues matched. This does not confirm a particular device or recording.|Coincidieron pistas experimentales combinadas. No confirman un equipo concreto ni grabación.|Des indices expérimentaux combinés correspondent. Ils ne confirment ni appareil précis ni enregistrement.|Experimentelle kombinierte Hinweise passen. Sie bestätigen kein bestimmtes Gerät und keine Aufnahme.|実験的な複数の手がかりが一致しました。特定の機器や録画の確認ではありません。|实验性的组合线索匹配，不能确认特定设备或录制状态。|נמצאה התאמה לשילוב רמזים ניסיוני. אין בכך אישור למכשיר מסוים או להקלטה.
+Remote ID broadcasts received. Open Drone readings for individual records and freshness warnings.|Se recibió Remote ID. Abra Datos de drones para ver registros y avisos de antigüedad.|Remote ID reçu. Ouvrez Données drones pour les relevés et avertissements de fraîcheur.|Remote ID empfangen. Drohnendaten zeigen einzelne Datensätze und Aktualitätswarnungen.|Remote ID を受信しました。ドローン情報で各記録と鮮度の警告を確認できます。|收到 Remote ID 广播。打开无人机数据查看各条记录及过期提示。|נקלטו שידורי Remote ID. פתחו נתוני רחפנים לרשומות נפרדות ולהתראות על מידע ישן.
+Signal strength is not distance or direction. Confidence describes the matching evidence.|La señal no indica distancia ni dirección. La confianza describe las pruebas de coincidencia.|Le signal n'indique ni distance ni direction. La confiance décrit les indices de correspondance.|Signalstärke ist weder Entfernung noch Richtung. Die Einstufung beschreibt die Hinweise.|信号強度は距離や方向ではありません。信頼度は一致の根拠を表します。|信号强度不等于距离或方向。置信等级描述匹配依据。|עוצמת אות אינה מרחק או כיוון. דירוג הביטחון מתאר את ראיות ההתאמה.
+SHUTDOWN / REBOOT|APAGAR / REINICIAR|ARRÊT / REDÉMARRAGE|STOPP / NEUSTART|終了・再起動|关机 / 重启|כיבוי או הפעלה מחדש
+SAFE SHUTDOWN|APAGADO SEGURO|ARRÊT SÉCURISÉ|SICHER BEENDEN|安全に終了|安全关机|כיבוי בטוח
+REBOOT|REINICIAR|REDÉMARRER|NEUSTART|再起動|重启|הפעלה מחדש
+Finishing writes. Keep power connected.|Terminando la escritura. Mantenga la alimentación.|Écriture en cours. Gardez l'alimentation branchée.|Schreibvorgänge abschließen. Strom angeschlossen lassen.|書き込みを完了しています。電源を切らないでください。|正在完成写入，请保持供电。|הכתיבה מסתיימת. השאירו את החשמל מחובר.
+Stopped. Some writes could not be confirmed. The card is unmounted.|Detenido. No se pudieron confirmar algunas escrituras. Tarjeta desmontada.|Arrêté. Certaines écritures ne sont pas confirmées. Carte démontée.|Gestoppt. Einige Schreibvorgänge sind nicht bestätigt. Karte ausgehängt.|停止しました。一部の書き込みを確認できませんでした。カードは取り外し可能です。|已停止，部分写入未能确认。存储卡已卸载。|המכשיר נעצר. חלק מהכתיבות לא אושרו. הכרטיס נותק מהמערכת.
+Safe to power off. microSD is unmounted.|Puede apagar. La microSD está desmontada.|Vous pouvez éteindre. La microSD est démontée.|Ausschalten möglich. microSD ist ausgehängt.|電源を切れます。microSD は取り外し可能です。|可以关闭电源。microSD 已卸载。|אפשר לכבות את החשמל. כרטיס microSD נותק מהמערכת.
+Stop recording and finish microSD writes before unplugging. This board cannot switch off its own power.|Detenga la grabación y termine las escrituras antes de desconectar. Este equipo no corta su alimentación.|Arrêtez l'enregistrement et terminez les écritures avant de débrancher. Cet appareil ne coupe pas son alimentation.|Aufzeichnung und Schreibvorgänge vor dem Abziehen beenden. Das Gerät kann seinen Strom nicht selbst abschalten.|電源を抜く前に記録と書き込みを終了します。本機は自分で電源を切れません。|拔掉电源前停止记录并完成写入。本设备不能自行切断电源。|יש לעצור הקלטה ולסיים כתיבה לפני ניתוק החשמל. המכשיר אינו יכול לנתק את החשמל בעצמו.

@@ -1,10 +1,7 @@
-# Stamps the current git tag/commit into the firmware as FIRMWARE_VERSION,
-# shown on the Diary screen (see src/ui_diary.cpp). Falls back to "unknown"
-# if git isn't available or this isn't a git checkout at all -- never
-# breaks the build over a missing version string.
+# DNSP v0.1 uses the reviewed upstream baseline for OTA/mesh version comparison.
+# The UI separately identifies the DNSP draft.
 Import("env")
 import os
-import subprocess
 
 
 def get_version():
@@ -14,14 +11,7 @@ def get_version():
     forced = os.environ.get("SQW_VERSION", "").strip()
     if forced:
         return forced
-    try:
-        v = subprocess.check_output(
-            ["git", "describe", "--tags", "--always", "--dirty"],
-            stderr=subprocess.DEVNULL,
-        ).decode().strip()
-        return v if v else "unknown"
-    except Exception:
-        return "unknown"
+    return "1.19.1"  # DNSP v0.1 baseline; do not inherit a parent directory's git tag
 
 
 env.Append(BUILD_FLAGS=['-DFIRMWARE_VERSION=\\"%s\\"' % get_version()])
@@ -31,3 +21,10 @@ env.Append(BUILD_FLAGS=['-DFIRMWARE_VERSION=\\"%s\\"' % get_version()])
 # for a different board -- a different display driver, say -- is refused
 # rather than installed as a white screen. See include/ota_ble.h.
 env.Append(BUILD_FLAGS=['-DSQW_ENV=\\"%s\\"' % env["PIOENV"]])
+
+
+# Partition-table validation must include storage used outside named partitions.
+import runpy
+from pathlib import Path
+_project = Path(env.subst('$PROJECT_DIR'))
+runpy.run_path(str(_project / 'tools/check_flash_layout.py'))['check'](_project)

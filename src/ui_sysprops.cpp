@@ -204,7 +204,7 @@ void drawUpdateTab(TFT_eSPI& t, const Geom& g) {
     // As the build stamped it: a release is "v1.10.1", a bench build carries
     // the commit and "-dirty" after it, and both are the truth about what is
     // running. Cut to what the panel holds rather than dressed up.
-    row(t, g, y, "Running", OtaCore::runningVersion(), Theme::W95_DKSHADOW, true);
+    row(t, g, y, "Running", "DNSP v0.7-draft", Theme::W95_DKSHADOW, true);
     y += LINE;
 
     const char* name = OtaCore::releaseName();
@@ -221,8 +221,7 @@ void drawUpdateTab(TFT_eSPI& t, const Geom& g) {
 
     const int cb = checkboxY(g);
     para(t, g.px + 8, y, g.pw - 16, cb - 3,
-         "It downloads over WiFi and restarts into it. What you have now "
-         "is kept.");
+         "Upstream updates replace DNSP custom firmware. Reinstall using a DNSP image from your-dnsp.");
 
     checkbox(t, g.px + 8, cb, Settings::updateCheck(), "Look for updates every boot");
 }
@@ -385,3 +384,4 @@ SysPropsHit uiSysPropsTouch(TFT_eSPI& t, int x, int y) {
     }
     return SysPropsHit::NONE;
 }
+

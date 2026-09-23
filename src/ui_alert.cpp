@@ -142,6 +142,11 @@ static uint8_t glitchStepLevel(uint8_t step) {
 static bool s_first = false;
 static bool s_night = false;
 static bool s_lastFree = false;
+static uint8_t s_pending = 0;
+static uint32_t s_queueDropped = 0;
+void uiAlertSetPending(uint8_t count, uint32_t dropped) {
+    s_pending = count; s_queueDropped = dropped;
+}
 void uiAlertSetFirst(bool first) { s_first = first; }
 void uiAlertSetNight(bool night) { s_night = night; }
 void uiAlertSetLastFree(bool lastFree) { s_lastFree = lastFree; }
@@ -359,7 +364,7 @@ void uiAlertTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng,
     // Measured anyway, with a fallback, because a label that runs off the
     // side of a 240px rotation is not something to find out on hardware.
     {
-        const char* tgt = targetLabel(s_last.type);
+        const char* tgt = s_last.type == DetectionType::FLOCK ? "FLOCK MATCH" : targetLabel(s_last.type);
         // The budget is the space left of the IGNORE button, NOT the screen
         // width. The button is drawn over this strip's right-hand end, so
         // measuring against w put "PROXIMITY BEACON" straight through it on
@@ -540,8 +545,7 @@ void uiAlertTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng,
     // bearing is derived from the MAC so it holds still during an alert, and
     // it is otherwise arbitrary. One antenna cannot do direction finding, and
     // putting a recognisable object at a compass position would claim it can.
-    // Distance is honest -- RSSI really does map to a ring -- so that is what
-    // the rings show, with the object at the centre of its own field.
+    // The rings are a decorative signal display, not a distance measurement.
     {
         // The band the gauge actually owns: below the header strip, above
         // the buttons. Centring it on the PLATE instead put its well three
@@ -609,18 +613,18 @@ void uiAlertTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng,
         moreInfoBtnRect(w, h, bx, by, bw, bh);
         t.fillRect(bx, by, bw, bh, Theme::BG);
         t.drawRect(bx, by, bw, bh, Theme::PURPLE);
-        t.setTextSize(2);
+        t.setTextSize(1);
         t.setTextColor(Theme::CYAN, Theme::BG);
         t.setTextWrap(false);
         int lineH = t.fontHeight();
         const int lineGap = 3;
         int ty = by + (bh - (lineH * 2 + lineGap)) / 2;
-        int mw = t.textWidth("MORE");
+        int mw = t.textWidth("WHY THIS");
         t.setCursor(bx + (bw - mw) / 2, ty);
-        t.print("MORE");
-        int iw = t.textWidth("INFO");
+        t.print("WHY THIS");
+        int iw = t.textWidth("MATCHED");
         t.setCursor(bx + (bw - iw) / 2, ty + lineH + lineGap);
-        t.print("INFO");
+        t.print("MATCHED");
     }
 
     // HUNT -- starts tracking this exact device straight from the alert,
@@ -662,6 +666,15 @@ void uiAlertTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng,
     // breaks up along with it stops reading as a frame at all.
     drawRgbBorder(t, w, h, now);
 
+    if (s_pending || s_queueDropped) {
+        char queued[48];
+        if (s_queueDropped) snprintf(queued, sizeof queued, "%u more | %lu omitted", s_pending, (unsigned long)s_queueDropped);
+        else snprintf(queued, sizeof queued, "%u more - tap card for next", s_pending);
+        t.setTextSize(1);
+        t.setTextColor(Theme::WHITE, Theme::BG);
+        t.setCursor((w - t.textWidth(queued)) / 2, h - 62);
+        t.print(queued);
+    }
     // Info panel drawn last, opaquely on top of everything above
     // (including the static) -- same "modal drawn every tick on top of
     // a screen that keeps rendering underneath" pattern LOG's confirm/
@@ -675,3 +688,4 @@ bool uiAlertTouched() {
 
 // Hook called by main when it polls touch during ALERT.
 void uiAlertNoteTouch() { s_touched = true; }
+

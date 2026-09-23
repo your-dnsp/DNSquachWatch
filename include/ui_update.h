@@ -33,3 +33,5 @@ void      uiUpdateInit(TFT_eSPI& t);
 void      uiUpdateTick(TFT_eSPI& t, uint32_t now, bool full = true);
 UpdateHit uiUpdateHitTest(TFT_eSPI& t, int x, int y, int* netIndex);
 void      uiUpdateAskSwitch(bool ask);
+void      uiUpdateWarningSeen();
+

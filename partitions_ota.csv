@@ -31,13 +31,14 @@
 #   0x00E000   8 KB   otadata      which slot the bootloader should run
 #   0x010000   1.9 MB app0
 #   0x1F0000   1.9 MB app1
-#   0x3D0000  128 KB  (free)       deliberately unassigned, see below
+#   0x3D0000  128 KB  BlackBox (raw)       deliberately unassigned, see below
 #   0x3F0000  64 KB   coredump
 #
-# The 128 KB hole before coredump is not waste: partition offsets must stay
-# aligned to 64 KB, and growing either app slot into it would push app1 across
-# an alignment boundary. Leaving it unnamed keeps the table honest and leaves
-# somewhere for a future filesystem to land without moving anything.
+# The unnamed 128 KiB region is USED by BlackBox at raw flash addresses.
+# Do not grow OTA slots into it: BlackBox would disable itself and subsequent
+# OTA writes could erase persistent history. Preserve this region until a
+# separately reviewed storage migration preserves history and SD-free use.
+# tools/check_flash_layout.py guards this implicit reservation.
 #
 # Name,   Type, SubType, Offset,   Size,     Flags
 nvs,      data, nvs,     0x9000,   0x5000,
@@ -45,3 +46,4 @@ otadata,  data, ota,     0xe000,   0x2000,
 app0,     app,  ota_0,   0x10000,  0x1E0000,
 app1,     app,  ota_1,   0x1F0000, 0x1E0000,
 coredump, data, coredump,0x3F0000, 0x10000,
+

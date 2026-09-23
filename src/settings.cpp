@@ -40,6 +40,7 @@ static uint8_t     s_rotation = 1;
 // OFF / 5 / 10. Stored as the number itself rather than an index, so the
 // value in NVS still means something if the choices ever change.
 static uint8_t s_autoQuiet = 0;
+static uint8_t s_alertSeconds = 30;
 static bool        s_backgroundLocked = false;
 static uint8_t     s_deskBg     = 255;     // 255: not picked yet, follow s_background
 static bool        s_deskActive = false;
@@ -264,6 +265,9 @@ void load() {
     if (s_deskBg != 255 && s_deskBg >= BACKGROUND_COUNT) s_deskBg = 255;
     s_brightness = s_prefs.getUChar("bri", 255);
     if (s_brightness < 32) s_brightness = 32;
+    s_alertSeconds = s_prefs.getUChar("alertsecs", 30);
+    if (s_alertSeconds != 15 && s_alertSeconds != 30 && s_alertSeconds != 45 && s_alertSeconds != 60)
+        s_alertSeconds = 30;
     s_autoQuiet  = s_prefs.getUChar("autoquiet", 0);
     if (s_autoQuiet != 0 && s_autoQuiet != 5 && s_autoQuiet != 10) s_autoQuiet = 0;
     s_minConf    = (Confidence)s_prefs.getUChar("conf", (uint8_t)Confidence::LOW_CONF);
@@ -300,9 +304,9 @@ void load() {
     // install a signed release newer than the one it runs, with a countdown
     // and SKIP, and the trust is the phrase they already hold. Off is for
     // anyone who wants it.
-    s_remoteUpdate = s_prefs.getBool("rmtUpd", true);
+    s_remoteUpdate = s_prefs.getBool("rmtUpd", false);
     s_phraseShown  = s_prefs.getBool("phrShow", true);
-    s_updateCheck  = s_prefs.getBool("updChk", true);
+    s_updateCheck  = s_prefs.getBool("updChk", false);
     s_timeZone     = s_prefs.getUChar("tz", 10);
     s_tzChosen     = s_prefs.getBool("tzSet", false);
     if (s_timeZone >= Clock::zoneCount()) s_timeZone = 10;
@@ -568,6 +572,20 @@ void adjustBrightness(int8_t delta) {
     s_prefs.putUChar("bri", s_brightness);
 }
 
+uint8_t alertSeconds() { return s_alertSeconds; }
+void cycleAlertSeconds() {
+    s_alertSeconds = s_alertSeconds == 60 ? 15 : s_alertSeconds + 15;
+    s_prefs.putUChar("alertsecs", s_alertSeconds);
+}
+const char* alertSecondsLabel() {
+    switch (s_alertSeconds) {
+        case 15: return "15 seconds";
+        case 45: return "45 seconds";
+        case 60: return "60 seconds";
+        default: return "30 seconds";
+    }
+}
+
 Confidence minConfidence() { return s_minConf; }
 
 uint8_t autoQuietAfter() { return s_autoQuiet; }
@@ -751,3 +769,4 @@ uint8_t enabledTypeCount() {
 }
 
 }
+

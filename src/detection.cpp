@@ -1,5 +1,8 @@
 // SquachWatch-CYD — DetectionEngine implementation
 #include "detection.h"
+#include "research.h"
+#include "field_tools.h"
+#include "detection_record.h"
 #include "signatures.h"
 #include "settings.h"
 #include "blackbox.h"
@@ -136,6 +139,10 @@ class BleScanCallbacks : public NimBLEScanCallbacks {
         // 2.x hands back a reference to the device's own address, so the
         // pointer is good for the whole of this call.
         const uint8_t* mac = adv->getAddress().getBase()->val;
+        const bool ridPayloadValid=Field::observeBle(mac, adv->getPayload().data(), adv->getPayload().size(), millis());
+        const auto researchMatch = Research::matchBle(adv->getPayload().data(), adv->getPayload().size());
+        Research::observe(0, mac, adv->getAddress().getType(), (int8_t)adv->getRSSI(), 0,
+                          adv->getPayload().data(), adv->getPayload().size(), millis(), researchMatch);
 #if SQUACH_MESH
         // A peer is handled here and RETURNS, so it never reaches the
         // signature tables and can never become a Detection. Getting that
@@ -183,7 +190,8 @@ class BleScanCallbacks : public NimBLEScanCallbacks {
             memset(&r, 0, sizeof(r));
             memcpy(r.mac, mac, 6);
             r.rssi = adv->getRSSI();
-            const char* name = adv->getName().c_str();
+            const std::string advertName = adv->getName();
+            const char* name = advertName.c_str();
             if (name && name[0]) strncpy(r.name, name, sizeof(r.name) - 1);
             g_engine->postRawBle(r);
             return;
@@ -196,7 +204,8 @@ class BleScanCallbacks : public NimBLEScanCallbacks {
         det.firstSeen = det.lastSeen = millis();
         det.hits   = 1;
         det.active = true;
-        const char* name = adv->getName().c_str();
+        const std::string advertName = adv->getName();
+            const char* name = advertName.c_str();
         if (name && name[0]) {
             strncpy(det.name, name, sizeof(det.name) - 1);
         }
@@ -210,6 +219,8 @@ class BleScanCallbacks : public NimBLEScanCallbacks {
                 uint16_t mfgId = (uint8_t)mfg[0] | ((uint8_t)mfg[1] << 8);
                 det.type = lookupMfgId(mfgId);
                 label    = mfgIdName(mfgId);
+                det.evidence = MatchEvidence::BLE_COMPANY;
+                det.signature = mfgId;
                 // Apple's company ID alone is every Apple device, so it
                 // still has to be confirmed as a tag. That check now
                 // runs against the RAW advert rather than this parsed
@@ -227,6 +238,7 @@ class BleScanCallbacks : public NimBLEScanCallbacks {
                         const uint8_t* b = (const uint8_t*)mfg.data();
                         if (isIBeacon(b, (uint8_t)mfg.size())) {
                             det.type = DetectionType::IBEACON;
+                            det.evidence = MatchEvidence::IBEACON;
                             // Major and minor are BIG endian here, unlike the
                             // company ID two bytes earlier -- Apple's format
                             // is network order inside the block and Bluetooth
@@ -282,6 +294,8 @@ class BleScanCallbacks : public NimBLEScanCallbacks {
                         if (u.equals(NimBLEUUID((uint16_t)k))) {
                             det.type = lookupUuid(k);
                             label    = uuidName(k);
+                            det.evidence = MatchEvidence::BLE_SERVICE;
+                            det.signature = k;
                             break;
                         }
                     }
@@ -295,8 +309,10 @@ class BleScanCallbacks : public NimBLEScanCallbacks {
             det.type = lookupBtName(det.name);
             label    = nullptr;          // the name itself identifies it
             matchedByName = (det.type != DetectionType::UNKNOWN);
+            if (matchedByName) det.evidence = MatchEvidence::BLE_NAME;
         }
-        if (det.type == DetectionType::UNKNOWN) return;
+        if (det.type == DetectionType::UNKNOWN && researchMatch.type == DetectionType::UNKNOWN) return;
+        if (det.type == DetectionType::AIRTAG) det.evidence = MatchEvidence::FIND_MY;
         // BLE matches on service UUIDs, company IDs and device names --
         // none of those tables has a per-row grade, so the type's own
         // grade stands. Only the OUI table needed splitting.
@@ -310,10 +326,15 @@ class BleScanCallbacks : public NimBLEScanCallbacks {
         if (det.type == DetectionType::HACKER) {
             det.conf = matchedByName ? Confidence::MED_CONF : Confidence::HIGH_CONF;
         }
+        if (researchMatch.type != DetectionType::UNKNOWN) {
+            det.type = researchMatch.type; det.conf = researchMatch.conf; label = researchMatch.label;
+            det.evidence = MatchEvidence::RESEARCH_COMPOSITE; det.signature = researchMatch.rule; det.evidenceBits = researchMatch.bits;
+        }
         // A Remote ID advert carries far more than the fact that it exists.
         // Decode it before the entry is posted so the log row can be named
         // after the actual aircraft rather than after a service UUID.
         if (det.type == DetectionType::DRONE) {
+            det.conf=ridPayloadValid?Confidence::MED_CONF:Confidence::LOW_CONF;
             g_engine->mergeRemoteId(mac, adv->getPayload().data(),
                                     (uint8_t)adv->getPayload().size());
             const RemoteId::Info& rid = g_engine->remoteId();
@@ -372,7 +393,6 @@ void DetectionEngine::resetLifetime() {
     _lifetimeDirty  = false;
     _prefs.putUInt("total", 0);
     for (uint8_t i = 0; i < (uint8_t)DetectionType::COUNT; i++) {
-        _typeCounts[i]     = 0;
         _lifetimeByType[i] = 0;
     }
     saveLifetimeByType();
@@ -462,20 +482,39 @@ bool DetectionEngine::init() {
         s_wifiRaw++;
         if (!g_engine) return;
         const wifi_promiscuous_pkt_t* pkt = (const wifi_promiscuous_pkt_t*)buf;
-        if (pkt->rx_ctrl.sig_len < 24) return;
+        if (pkt->rx_ctrl.rx_state != 0 || pkt->rx_ctrl.sig_len < 28) return;
+        const size_t frameLength = pkt->rx_ctrl.sig_len - 4; // ESP-IDF length includes FCS
         // 802.11 frame header: bytes 0..23 contain frame control, duration,
         // addr1 (DA, offset 4), addr2 (SA, offset 10), addr3 (BSSID, offset 16)
         const uint8_t* frame = pkt->payload;
         uint8_t fc0 = frame[0];
         uint8_t type  = (fc0 & 0x0C) >> 2;
         uint8_t subtype = (fc0 & 0xF0) >> 4;
+        // Research stores management headers/IE prefixes only, never data-frame contents.
+        if (type == 0 && Field::observeWifi(frame,frameLength,millis())) {
+            Detection d{};memcpy(d.mac,frame+10,6);d.rssi=pkt->rx_ctrl.rssi;d.channel=pkt->rx_ctrl.channel;
+            d.type=DetectionType::DRONE;d.conf=Confidence::MED_CONF;d.vendor="WiFi Remote ID";
+            d.evidence=MatchEvidence::WIFI_REMOTE_ID;d.firstSeen=d.lastSeen=millis();d.hits=1;d.active=true;
+            g_engine->postBle(d);
+        }
+        if (type == 0) {
+            const auto match = Research::matchManagement(frame, frameLength);
+            Research::observe(1, frame + 10, (frame[10] & 2) ? 1 : 0,
+                pkt->rx_ctrl.rssi, pkt->rx_ctrl.channel, frame, frameLength, millis(), match);
+            if ((match.bits & Research::FINGERPRINT) && match.type != DetectionType::UNKNOWN) {
+                Detection d{};memcpy(d.mac,frame+10,6);d.rssi=pkt->rx_ctrl.rssi;d.channel=pkt->rx_ctrl.channel;
+                d.type=match.type;d.conf=Confidence::LOW_CONF;d.vendor="IE-class?";d.signature=match.rule; d.evidenceBits=match.bits;
+                d.evidence=MatchEvidence::RESEARCH_COMPOSITE;d.firstSeen=d.lastSeen=millis();d.hits=1;d.active=true;
+                g_engine->postBle(d); // bounded cross-task observation queue; channel still identifies WiFi
+            }
+        }
         // Management frame probe request: type=0, subtype=4
         if (type == 0 && subtype == 4) {
             // addr2 (transmitter) is at offset 10
             g_engine->postWiFi(frame + 10, pkt->rx_ctrl.rssi, pkt->rx_ctrl.channel);
         } else if (type == 2) {
             // Data frame: addr1 (DA) and addr2 (SA) both interesting
-            g_engine->postWiFi(frame + 4,  pkt->rx_ctrl.rssi, pkt->rx_ctrl.channel);
+            // addr1 is the recipient, whose signal was not measured. Only classify transmitter.
             g_engine->postWiFi(frame + 10, pkt->rx_ctrl.rssi, pkt->rx_ctrl.channel);
         } else if (type == 0 && subtype == 8) {
             // Beacon: fixed params (timestamp+interval+capability) run
@@ -484,7 +523,7 @@ bool DetectionEngine::init() {
             // then up to 32 bytes of SSID (unescaped, not
             // null-terminated in the frame itself).
             char ssid[33] = {0};
-            uint32_t sigLen = pkt->rx_ctrl.sig_len;
+            uint32_t sigLen = frameLength; // exclude FCS from all information-element bounds
             if (sigLen > 37) {
                 const uint8_t* ie = frame + 36;
                 if (ie[0] == 0x00) {
@@ -779,7 +818,7 @@ void radioTick(uint32_t now) {
         s_macSet = true;
     }
 
-    const bool want = Settings::meshTransmit();
+    const bool want = Settings::meshTransmit() && !Research::active();
     // Polled rather than event-driven, but setAdvertising() now returns on a
     // memcmp when nothing changed, so this costs one comparison every ten
     // seconds instead of rebuilding the advert 360 times an hour. A message
@@ -909,7 +948,8 @@ static bool scanModeTick(uint32_t now, uint32_t largest) {
     // says, since the pin ships in every build and the abort is real. That
     // is the pressed window (three early flushes in a minute) and the same
     // block bar that gates going active in AUTO.
-    if (pressedWindow)       want = true;
+    if (Research::active()) want = true;
+    else if (pressedWindow)       want = true;
     else if (s_scanPin == 1) {
         // Pinned active, while there is room: under the bar it goes passive
         // at once, and comes back only after the same dwell AUTO keeps, or
@@ -982,6 +1022,30 @@ static void scanFlushTick() {
 }
 
 void DetectionEngine::loop() {
+    if (_stopping.load() || g_rawMode == RawScanMode::UPDATE) return;
+    static int researchMode = -1;
+    static uint32_t coverageAt = 0;
+    const uint32_t coverageNow = millis();
+    int wanted = Research::active() ? (int)Research::profile() : -1;
+    if (wanted != researchMode) {
+        NimBLEScan* scan = NimBLEDevice::getScan();
+        if (scan) {
+            scan->stop();
+            if (wanted >= 0) { s_wantPassive = s_passiveNow = true; scan->setActiveScan(false); }
+            if (wanted != (int)Research::Profile::WIFI) scan->start(0, false, true);
+        }
+        if (wanted >= 0) { esp_wifi_disconnect(); esp_wifi_set_mode(WIFI_MODE_NULL); }
+        else esp_wifi_set_mode(WIFI_MODE_STA);
+        esp_wifi_set_promiscuous(wanted != (int)Research::Profile::BLUETOOTH);
+        researchMode = wanted;
+        coverageAt = coverageNow;
+    }
+    if (Research::active()) {
+        auto* scan = NimBLEDevice::getScan();
+        Research::coverage(coverageNow - coverageAt, scan && scan->isScanning(),
+                           wanted != (int)Research::Profile::BLUETOOTH, _wifiChannel);
+    }
+    coverageAt = coverageNow;
     if (g_rawMode != RawScanMode::NONE) {
         // A raw scan owns the radio right now -- channel hopping here
         // would fight WiFi.scanNetworks()'s own hopping during a WIFI
@@ -994,7 +1058,10 @@ void DetectionEngine::loop() {
     // After the raw-scan return above, so a raw scan that owns the radio is
     // never restarted out from under it.
     scanFlushTick();
-    hopChannel();
+    if (!Research::active() || Research::profile() != Research::Profile::BLUETOOTH) hopChannel();
+    Detection incoming;
+    for (uint8_t i = 0; i < 16 && _blePending.pop(incoming, millis()); ++i)
+        recordObservation(incoming);
     processWiFiQ();
     processDeauthQ();
     expireStale();
@@ -1005,6 +1072,7 @@ void DetectionEngine::loop() {
         _sd.logEvent(_sdQ[_sdQTail]);
         _sdQTail = (uint8_t)((_sdQTail + 1) % SD_Q_CAP);
     }
+    _sd.logPressure(alerts.dropped(), _blePending.dropped());
     _sd.tick();
 }
 
@@ -1032,6 +1100,8 @@ void DetectionEngine::hopChannel() {
 }
 
 void DetectionEngine::clearLog() {
+    alerts.clear();
+    _blePending.clear();
     _logCount = 0;
     _logHead  = 0;
     _latest   = nullptr;
@@ -1043,6 +1113,7 @@ void DetectionEngine::clearLog() {
 void IRAM_ATTR DetectionEngine::postWiFi(const uint8_t* mac, int8_t rssi, uint8_t channel,
                                          const char* ssid, bool encrypted,
                                          bool pwnagotchi) {
+    if (_stopping.load()) return;
     if (!mac) return;
     // Group-addressed (broadcast/multicast) destinations can never be a
     // real device: bit 0 of byte 0 is the I/G bit, and every OUI in
@@ -1077,6 +1148,7 @@ void IRAM_ATTR DetectionEngine::postWiFi(const uint8_t* mac, int8_t rssi, uint8_
 }
 
 void IRAM_ATTR DetectionEngine::postDeauth(const uint8_t* mac, int8_t rssi, uint8_t channel) {
+    if (_stopping.load()) return;
     if (!mac) return;
     uint8_t next = (_deauthQHead + 1) % DEAUTH_Q_CAP;
     if (next == _deauthQTail) return;           // queue full, drop
@@ -1120,6 +1192,7 @@ void DetectionEngine::processDeauthQ() {
             d.rssi    = e.rssi;
             d.channel = e.channel;
             d.type    = DetectionType::DEAUTH;
+            d.evidence = MatchEvidence::DEAUTH_BURST;
             d.conf    = confidenceFor(DetectionType::DEAUTH);
             d.vendor = "Deauth";
             d.firstSeen = d.lastSeen = now;
@@ -1155,6 +1228,7 @@ void DetectionEngine::processDeauthQ() {
                 Regulars::note(e.mac, DetectionType::DEAUTH);
                 _latest = &row;
                 _latestChangeMs = now;
+                alerts.push(row);
                 queueBlackBox(row, true);
                 return;
             }
@@ -1177,6 +1251,14 @@ void DetectionEngine::mergeRemoteId(const uint8_t* mac, const uint8_t* payload,
 }
 
 void DetectionEngine::postBle(Detection d) {
+    if (_stopping.load()) return;
+    // The NimBLE task never mutates the history while the main loop reads it.
+    // Copy into a bounded queue; merge, count and persist only on the main task.
+    if (d.type != DetectionType::UNKNOWN && (uint8_t)d.type < (uint8_t)DetectionType::COUNT)
+        _blePending.push(d);
+}
+
+void DetectionEngine::recordObservation(Detection d) {
     // Disabled types (Settings > DETECTION FILTER) are dropped here,
     // before the dedupe/merge below -- that merge branch re-activates
     // and re-alerts on an already-logged device without ever reaching
@@ -1185,60 +1267,25 @@ void DetectionEngine::postBle(Detection d) {
     // touched or removed; it just stops updating and ages out through
     // the normal expireStale() path like any other device that goes
     // out of range.
-    if (!Settings::typeEnabled(d.type)) return;
+    if (d.type == DetectionType::UNKNOWN || (uint8_t)d.type >= (uint8_t)DetectionType::COUNT || !Settings::typeEnabled(d.type)) return;
     // Try to dedupe / merge with existing log entry by MAC
     for (uint8_t i = 0; i < _logCount; i++) {
         uint8_t slot = (_logHead + LOG_CAP - 1 - i) % LOG_CAP;
         if (memcmp(_log[slot].mac, d.mac, 6) == 0 &&
             _log[slot].type == d.type) {
-            // Real bug, not a no-op: this used to be
-            // `_typeCounts[...] = _typeCounts[...]`, which does
-            // nothing. If the device had already gone stale (see
-            // expireStale — active=false, counter decremented) and
-            // is now seen again, it landed right here on every repeat
-            // sighting: hits/rssi/lastSeen updated, but active never
-            // flipped back on and the counter never re-incremented —
-            // so a device that comes and goes (exactly what an AirTag
-            // does) would only ever get counted once, on its very
-            // first sighting, and then silently stop being detected
-            // for good.
-            bool reactivating = !_log[slot].active;
-            // The reply to an active scan carries what the advert did not:
-            // the name, usually. Under 2.x the entry is made at first sight
-            // from the advert alone, so the reply's name lands here, on the
-            // entry that already exists.
-            if (d.name[0]) memcpy(_log[slot].name, d.name, sizeof _log[slot].name);
-            if (d.vendor && !_log[slot].vendor) _log[slot].vendor = d.vendor;
-            // hits counts distinct sightings (comes-and-goes, gated by
-            // expireStale's active flag), not raw advertisement
-            // packets -- a BLE beacon like an AirTag advertises every
-            // 1-2s, so incrementing on every packet made this climb
-            // into the thousands within an hour of it just sitting
-            // nearby instead of meaning anything. rssi/lastSeen still
-            // update on every packet regardless, since those drive
-            // "is it still actually here" freshness, not the count.
-            {
-                const uint8_t nowAt = (uint8_t)(millis() >> 11);
-                if (_log[slot].prevAt != nowAt) {
-                    _log[slot].prevRssi = _log[slot].rssi;
-                    _log[slot].prevAt   = nowAt;
-                }
-            }
-            _log[slot].rssi = d.rssi;
-            _log[slot].lastSeen = millis();
+            const bool returning = !_log[slot].active;
+            const bool notify = mergeObservation(_log[slot], d, millis());
             Bingo::note(d.type);
             Dex::note(d.type, d.rssi);
-    Regulars::note(d.mac, d.type);
             Regulars::note(d.mac, d.type);
-            if (reactivating) {
-                _log[slot].hits++;
-                _log[slot].active = true;
-                _log[slot].restored = 0;
-                _log[slot].firstSeen = millis();   // fresh sighting for alert purposes
+            if (returning) {
                 _typeCounts[(uint8_t)d.type]++;
                 _latest = &_log[slot];
                 _latestChangeMs = millis();
-                queueBlackBox(_log[slot], true);
+            }
+            if (notify) {
+                alerts.push(_log[slot]);
+                queueBlackBox(_log[slot], returning);
             }
             return;
         }
@@ -1638,59 +1685,29 @@ void DetectionEngine::processWiFiQ() {
                 matchedBySsid = (t != DetectionType::UNKNOWN);
                 // The SSID tables have no per-row grade, so an SSID match
                 // falls back to what the type is worth.
-                if (matchedBySsid) conf = confidenceFor(t);
+                if (matchedBySsid) conf = (t == DetectionType::FLOCK || t == DetectionType::AXON) ? Confidence::LOW_CONF : confidenceFor(t);
             }
         }
+        const auto researchMatch = (!evilTwin && !e.pwnagotchi) ? Research::matchWifi(e.mac, e.ssid) : Research::Match{};
+        const bool qualified = researchMatch.type != DetectionType::UNKNOWN && (researchMatch.bits & (Research::SSID | Research::IMPORTED));
+        if (qualified) { t = researchMatch.type; conf = researchMatch.conf; }
+        const char* fpv = (!evilTwin && !e.pwnagotchi) ? Field::fpvName(e.ssid) : nullptr;
+        if(fpv){t=DetectionType::FPV;conf=Confidence::LOW_CONF;}
         if (t == DetectionType::UNKNOWN) continue;
         // Disabled types (Settings > DETECTION FILTER) dropped here too
         // -- same reasoning as postBle()'s guard: the dedupe/merge loop
         // just below can re-activate and re-count an already-logged
         // device without ever reaching pushLog().
         if (!Settings::typeEnabled(t)) continue;
-        // Try to dedupe / merge. Same reactivation fix as postBle()'s
-        // merge branch — a device that went stale and comes back needs
-        // active flipped back on and the counter bumped again, or it
-        // silently stops being counted after its first sighting.
-        bool merged = false;
-        for (uint8_t i = 0; i < _logCount; i++) {
-            uint8_t slot = (_logHead + LOG_CAP - 1 - i) % LOG_CAP;
-            if (memcmp(_log[slot].mac, e.mac, 6) == 0 &&
-                _log[slot].type == t) {
-                bool reactivating = !_log[slot].active;
-                Bingo::note(t);
-                Dex::note(t, e.rssi);
-                Regulars::note(e.mac, t);
-                _log[slot].hits++;
-                {
-                    const uint8_t nowAt = (uint8_t)(millis() >> 11);
-                    if (_log[slot].prevAt != nowAt) {
-                        _log[slot].prevRssi = _log[slot].rssi;
-                        _log[slot].prevAt   = nowAt;
-                    }
-                }
-                _log[slot].rssi = e.rssi;
-                _log[slot].lastSeen = millis();
-                _log[slot].channel = e.channel;
-                if (reactivating) {
-                    _log[slot].active = true;
-                    _log[slot].restored = 0;
-                    _log[slot].firstSeen = millis();
-                    _typeCounts[(uint8_t)t]++;
-                    _latest = &_log[slot];
-                    _latestChangeMs = millis();
-                    queueBlackBox(_log[slot], true);
-                }
-                merged = true;
-                break;
-            }
-        }
-        if (merged) continue;
         Detection d;
         memset(&d, 0, sizeof(d));
         memcpy(d.mac, e.mac, 6);
         d.rssi    = e.rssi;
         d.channel = e.channel;
         d.type    = t;
+        d.evidence = evilTwin ? MatchEvidence::EVIL_TWIN
+                   : e.pwnagotchi ? MatchEvidence::PWNAGOTCHI
+                   : matchedBySsid ? MatchEvidence::SSID : MatchEvidence::OUI;
         d.conf    = (t == DetectionType::EVILTWIN) ? confidenceFor(t) : conf;
         // Vendor label: from the SSID-prefix table if that's what
         // matched, otherwise from the OUI table. An evil twin gets
@@ -1715,24 +1732,18 @@ void DetectionEngine::processWiFiQ() {
                 }
             }
         }
+        if (qualified) { d.vendor = researchMatch.label; d.evidence = MatchEvidence::RESEARCH_COMPOSITE; d.signature = researchMatch.rule; d.evidenceBits = researchMatch.bits; }
+        if(fpv){d.vendor=fpv;d.evidence=MatchEvidence::SSID;}
+
         d.firstSeen = d.lastSeen = millis();
         d.hits   = 1;
         d.active = true;
-        pushLog(d);
+        recordObservation(d);
     }
 }
 
 void DetectionEngine::pushLog(const Detection& d) {
-    _log[_logHead] = d;
-    _log[_logHead].prevRssi = d.rssi;                 // no trend on a first sight
-    _log[_logHead].prevAt   = (uint8_t)(millis() >> 11);
-    _logHead = (_logHead + 1) % LOG_CAP;
-    if (_logCount < LOG_CAP) _logCount++;
-    _latest = &_log[(_logHead + LOG_CAP - 1) % LOG_CAP];
-    _latestChangeMs = millis();
-    _typeCounts[(uint8_t)d.type]++;
-    _lifetimeTotal++;
-    if ((uint8_t)d.type < (uint8_t)DetectionType::COUNT) _lifetimeByType[(uint8_t)d.type]++;
+    if (!appendLive(d)) return;
     // Counted here, on the Bluetooth host task, and written to flash from
     // loop() (see saveLifetime). A flash write stalls both cores for a
     // millisecond and every so often for a sector erase, and two of them
@@ -1857,4 +1868,38 @@ static char g_macBuf[20];
 const char* macFmt(const uint8_t* mac) {
     formatMac(g_macBuf, sizeof(g_macBuf), mac);
     return g_macBuf;
+}
+
+
+// Shutdown owns the main task after entry. File writes are synchronous and
+// every SdLog/Research write closes its File before this routine advances.
+void DetectionEngine::beginShutdown() {
+    _stopping.store(true);
+    startUpdateRadio();
+    Detection incoming;
+    for (uint8_t i=0;i<16 && _blePending.pop(incoming,millis());i++) recordObservation(incoming);
+    processWiFiQ();
+    processDeauthQ();
+}
+bool DetectionEngine::shutdownTick() {
+    if (_sdQTail != _sdQHead) {
+        _sd.logEvent(_sdQ[_sdQTail]);
+        _sdQTail = (uint8_t)((_sdQTail+1)%SD_Q_CAP);
+        return false;
+    }
+    BlackBoxQ q;
+    bool have;
+    portENTER_CRITICAL(&s_bbMux);
+    have = _bbQTail != _bbQHead;
+    if (have) {q=_bbQ[_bbQTail];_bbQTail=(uint8_t)((_bbQTail+1)%BB_Q_CAP);}
+    portEXIT_CRITICAL(&s_bbMux);
+    if (have) {
+        for (uint8_t i=0;i<_logCount;i++) {
+            const Detection& d=_log[(_logHead+LOG_CAP-1-i)%LOG_CAP];
+            if(d.type==q.type&&!memcmp(d.mac,q.mac,6)){BlackBox::noteDetection(d,q.again);break;}
+        }
+        return false;
+    }
+    saveLifetime(millis()+5001);
+    return true;
 }

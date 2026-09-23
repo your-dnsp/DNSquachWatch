@@ -1,5 +1,7 @@
 // SquachWatch-CYD — theme implementation
 #include "theme.h"
+#include "field_tools.h"
+#include "language.h"
 #include "draw_band.h"
 #include "frame_prof.h"
 #include "caustic_tile.h"
@@ -83,6 +85,7 @@ void applyPalette(uint8_t idx) {
     PINK = p.pink; VAPOR_PINK = p.vaporPink; VAPOR_PURPLE = p.vaporPurple;
     VAPOR_BLUE = p.vaporBlue; VAPOR_YELLOW = p.vaporYellow; GREEN = p.green;
     AMBER = p.amber; RED = p.red;
+    if(Field::config.contrast){BG=0;TASKBAR=0;PURPLE=0xffff;CYAN=0xffff;PINK=0xffff;VAPOR_PINK=0xffff;VAPOR_PURPLE=0xffff;GREEN=0xffff;AMBER=0xffe0;}
 }
 
 Palette dimPaletteForOverlay(uint16_t t) {
@@ -375,10 +378,11 @@ void drawListRowPanel(TFT_eSPI& t, int w, int y, int hgt) {
     t.drawRect(x0, y + 1, ww, hh, PURPLE);
 }
 
-int pinnedBackH(int panelW) { return panelW >= 400 ? 36 : PINNED_BACK_H; }
+int pinnedBackH(int panelW) { return panelW >= 400 || Field::config.large ? 36 : PINNED_BACK_H; }
 
 void drawPinnedBack(TFT_eSPI& t, const char* label) {
     const int w = t.width(), h = pinnedBackH(w), y = t.height() - h;
+    if(Field::config.language){Lang::button(t,0,y,w,h,"BACK");return;}
     t.fillRect(0, y, w, h, BG);
     t.drawFastHLine(0, y, w, PURPLE);
     // The font, not just the size. textfont is sticky state on the sprite and
@@ -438,6 +442,7 @@ uint8_t uiMenuTextSize(TFT_eSPI& t) {
 
 void drawButton(TFT_eSPI& t, int x, int y, int w, int h,
                 const char* label, bool pressed, uint8_t textSize) {
+    if(Field::config.language){Lang::button(t,x,y,w,h,label,pressed);return;}
     uint16_t fill = pressed ? PURPLE : BG;
     uint16_t fg   = pressed ? labelOn(PURPLE) : CYAN;
     t.fillRect(x, y, w, h, fill);
@@ -511,7 +516,7 @@ ButtonBarGeom computeButtonBar(int screenW, int screenH) {
     // ~9mm finger-touch-target guidance) — explicitly requested smaller
     // to free up more room above for content. Still tappable, just a
     // tighter target than the original guidance-driven size.
-    g.h = 20;
+    g.h = Field::config.large ? 34 : 20;
     const int margin = 8, gap = 8;
     g.y = screenH - g.h - 6;
     int bw = (screenW - 2 * margin - 2 * gap) / 3;
@@ -4272,6 +4277,7 @@ static void releaseFire() {
 
 void drawActiveBackground(TFT_eSPI& t, uint32_t now, int yStart, int yEnd,
                           const DetectionEngine& eng, bool advance) {
+    if(Field::config.reduced){t.fillRect(0,yStart,t.width(),yEnd-yStart,BG);return;}
     const uint32_t bgT0 = micros();
     // The frame's worth of motion for every per-call stepper -- see s_animK.
     // Zero on a non-advancing call (cyd35's second band), which is also
@@ -9288,13 +9294,24 @@ void drawInfoPanel(TFT_eSPI& t, int w, int h, uint32_t now,
     t.fillRoundRect(px, py, pw, ph, 6, BG);
     t.drawRoundRect(px, py, pw, ph, 6, PURPLE);
 
+    if(Field::config.language){
+        if(typeName)Lang::draw(t,typeName,px+8,py+8,pw-16,36,CYAN,true,true);
+        Lang::draw(t,text,px+10,py+48,pw-20,btnY-py-54,WHITE);
+        drawButton(t,btnX,btnY,btnW,btnH,"GOT IT",false,1);return;
+    }
     // No heading during the one-time RSSI/confidence primer page --
     // typeName is null then since that page isn't about any one type.
     if (typeName) {
         int tw = bangersTextWidth(typeName, BangersSize::MD);
         int maxTw = pw - 16;
-        if (tw > maxTw) tw = maxTw; // clipped, not shrunk -- every real type name fits comfortably as-is
-        drawBangersText(t, px + (pw - tw) / 2, headingY, typeName, VAPOR_PINK, BangersSize::MD);
+        if (tw <= maxTw) {
+            drawBangersText(t, px + (pw - tw) / 2, headingY, typeName, VAPOR_PINK, BangersSize::MD);
+        } else {
+            t.setTextSize(1);
+            t.setTextColor(VAPOR_PINK, BG);
+            t.setCursor(px + (pw - t.textWidth(typeName)) / 2, headingY + 10);
+            t.print(typeName);
+        }
     }
 
     Squachy::drawWaving(t, squachyCx, squachyBaseY, now, squachyScale, nullptr, true, squachyWander);
@@ -9316,3 +9333,4 @@ void drawInfoPanel(TFT_eSPI& t, int w, int h, uint32_t now,
 }
 
 }  // namespace Theme
+

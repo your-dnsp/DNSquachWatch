@@ -9,6 +9,7 @@ class DetectionEngine;
 void uiAlertInit(TFT_eSPI& t, const Detection& d);
 // The first of this type this board has ever caught: the card says so.
 void uiAlertSetFirst(bool first);
+void uiAlertSetPending(uint8_t count, uint32_t dropped);
 // Caught between eleven at night and five in the morning, by the real
 // clock: the card says so. False whenever the clock is not set.
 void uiAlertSetNight(bool night);
@@ -60,3 +61,4 @@ bool uiAlertHitIgnore(int x, int y, int screenW, int screenH);
 // corner the rest of this screen's centred layout leaves clear at every
 // rotation. Same "only meaningful while the info panel is down" caveat.
 bool uiAlertHitIgnore(int x, int y, int screenW, int screenH);
+

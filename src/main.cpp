@@ -1,3 +1,6 @@
+#include "ui_breakout.h"
+#include "ui_care.h"
+#include "care.h"
 // SquachWatch-CYD — main firmware
 // Wires the state machine (DESIGN.md §9) across the UI modules
 // and the DetectionEngine.
@@ -288,6 +291,11 @@ static void drawCrashCard(TFT_eSPI& t) {
 #include "state.h"
 #include "theme.h"
 #include "detection.h"
+#include "research.h"
+#include "ui_research.h"
+#include "field_tools.h"
+#include "ui_field.h"
+#include "language.h"
 #include "clock.h"
 #include "ui_desk.h"
 #include "ui_zone.h"
@@ -580,7 +588,7 @@ static const uint32_t TAP_MAX_MS = 500;
 // RSSI) — tapping it away is the expected dismiss, but the automatic
 // fallback still needs to actually clear itself in a reasonable time
 // if nobody's there to tap it.
-const uint32_t      ALERT_AUTO_DISMISS_MS = 10000;
+static uint32_t alertDurationMs() { return (uint32_t)Settings::alertSeconds() * 1000u; }
 // Longer than an alert's: this one is a reward, not a warning, and the
 // reveal animation alone eats the first second of it.
 const uint32_t      OUTFIT_UNLOCK_AUTO_MS = 12000;
@@ -1044,6 +1052,28 @@ static bool alertMayInterrupt(const Detection& d) {
     }
 }
 
+static bool alertEligible(const Detection& d) {
+    return Settings::typeEnabled(d.type) && d.conf >= Settings::minConfidence()
+        && !IgnoreList::silenced(d.mac) && Field::allowAlert(d);
+}
+static bool takeAlert(Detection& d, uint32_t now) {
+    while (engine.alerts.pop(d, now))
+        if (alertEligible(d) && alertMayInterrupt(d)) return true;
+    return false;
+}
+static Detection s_alertSnapshot{};
+static bool s_showWhy = false;
+static bool s_showFlockResources = false;
+static bool s_dnspStorage = false;
+static uint8_t s_dnspPage = 0;
+static char s_sdDescription[320];
+static const char* const DNSP_GUIDE[] = {
+    "Welcome to DNSquachWatch v0.7 by DNSP, built on SquachWatch 1.19.1. Your companion watches for radio signatures. This walkthrough is optional; reopen it from Settings any time.",
+    "A match is a clue, not proof of a camera or its owner. Tap WHY THIS MATCHED to see the rule. LOW means weak evidence. RSSI is signal strength, not distance or direction.",
+    "Alert length is in Settings: 15, 30, 45 or 60 seconds. The default is 30. Tap a card to dismiss it. More alerts wait their turn; crowded scenes can exceed the queue. Open LOG for retained detections.",
+    "SNOOZE quiets that device until restart; IGNORE keeps it quiet. Neither erases its history. Settings > System > microSD status shows card storage. Normal upstream updates replace DNSP features: keep your DNSP image."
+};
+
 // The current alert's target, captured in enterAlert(). Kept separate
 // from the s_confirm* trio above on purpose: those belong to LOG's
 // long-press confirm panel, and an alert arriving while that panel is
@@ -1146,6 +1176,8 @@ static void restoreFrameBuffer();
 // An ALERT opened from the desk's small card goes back to the desk when it
 // is dismissed, not to CLEAR. Set in enterAlert(), spent here.
 static bool s_backToDesk = false;
+static bool s_backToBreakout = false;
+static bool s_watchGameArmed = true;
 static void enterDesk();
 
 // The screens that run the raw scan, which switches detection off while it
@@ -1161,6 +1193,10 @@ static bool onRawScanScreen() {
 static void enterClear() {
     if (Security::locked()) { enterLocked(); return; }
     restoreFrameBuffer();   // lent to a download that did not end in a restart
+    if (s_backToBreakout) {
+        s_backToBreakout=false;state=AppState::BREAKOUT;transitionStart=millis();
+        BreakoutUI::open(transitionStart);return;
+    }
     if (s_backToDesk) { s_backToDesk = false; enterDesk(); return; }
     Settings::deskActive(false);
     Theme::releaseClockBackdrop();   // the clock fire's heat, if the desk had one
@@ -1228,6 +1264,10 @@ static void squachyCatch(DetectionType type, const uint8_t* mac, uint32_t hits, 
 }
 
 static void enterAlert(const Detection& d) {
+    if(state==AppState::BREAKOUT){BreakoutUI::suspend(millis());s_backToBreakout=true;}
+    s_showFlockResources = false;
+    s_alertSnapshot = d;
+    s_showWhy = false;
     s_backToDesk = (state == AppState::DESK);
     state = AppState::ALERT;
     // FIRST. uiAlertInit() clears the card's banner flags, and it used to run
@@ -1288,6 +1328,8 @@ static void enterAlert(const Detection& d) {
 }
 
 static void enterWatchAlert() {
+    s_watchGameArmed=(state!=AppState::BREAKOUT);
+    if(state==AppState::BREAKOUT){BreakoutUI::suspend(millis());s_backToBreakout=true;}
     state = AppState::WATCH_ALERT;
     watchAlertStart = millis();
     transitionStart = watchAlertStart;
@@ -1430,6 +1472,7 @@ static void startNudgedUpdate() {
         return;
     }
     enterUpdate();
+    uiUpdateWarningSeen(); // the squad countdown already carried the DNSP warning
     engine.startUpdateRadio();
     if (!OtaWifi::begin()) {
         engine.stopUpdateRadio();
@@ -1702,6 +1745,8 @@ static void startPinFlow(PinFlow f, const char* prompt = nullptr) {
 }
 
 static void enterLocked() {
+    if(state==AppState::BREAKOUT)BreakoutUI::suspend(millis());
+    s_backToBreakout=false;
     Settings::deskActive(false);
     state = AppState::LOCKED;
     transitionStart = millis();
@@ -1884,6 +1929,7 @@ static void printBootBanner() {
     // "v1.5.16-dirty" and a commit past a tag as "v1.5.16-3-g554330d", both
     // of which walk the border off the end of the line. Truncated here only;
     // the boot screen and the diary still show the version in full.
+    Serial.println("DNSquachWatch v0.7-draft by DNSP | SquachWatch baseline 1.19.1");
     Serial.printf ("║  |   -   |     TALKING SASQUACH  .  %-13.13s║\n", FIRMWARE_VERSION);
     // Same %-34s trick as the version line above: the reason is variable
     // length ("interrupt watchdog" is the longest at eighteen characters)
@@ -1975,6 +2021,9 @@ void setup() {
     // of tft.setRotation() below so that call can already use the
     // saved rotation instead of always starting from the board default.
     Settings::load();
+    Field::begin();
+    Care::begin();
+    Theme::applyPalette(Settings::paletteIndex());
     Clock::begin();   // after Settings: the zone is applied there, the history here
     Security::begin();
     // Which version lives in this slot, and whether this boot is a fresh
@@ -2463,11 +2512,208 @@ static const char* timedScreenName(AppState s) {
         default:                    return nullptr;
     }
 }
+static void openSettingsRow(SettingsRow row,uint32_t now,int gestureStartX) {
+    if (Security::locked()) {enterLocked();return;}
+    if (uiSettingsRowIsOff(row)) {Theme::showToast("BORING MODE IS ON",nullptr,Theme::CYAN);return;}
+                    switch (row) {
+                        case SettingsRow::CARE:
+                        case SettingsRow::QUICK_MENU:
+                            if(OtaWifi::state()!=OtaWifi::State::OFF||OtaBle::state()!=OtaBle::State::OFF){Theme::showToast("BUSY","Finish the update first",Theme::AMBER);break;}
+                            CareUI::open(row==SettingsRow::QUICK_MENU?CareUI::Page::FAVORITES:CareUI::Page::HOME);
+                            state=AppState::CARE;transitionStart=now;break;
+                        case SettingsRow::ALERTS: uiSettingsOpenPage(SettingsPage::ALERTS); break;
+                        case SettingsRow::FUN: uiSettingsOpenPage(SettingsPage::FUN); break;
+                        case SettingsRow::LANGUAGE:
+                        case SettingsRow::ACCESSIBILITY:
+                        case SettingsRow::ALERT_RULES:
+                            if(row==SettingsRow::LANGUAGE) FieldUI::openLanguage();
+                            else if(row==SettingsRow::ACCESSIBILITY) FieldUI::openAccessibility();
+                            else FieldUI::openRules();
+                            state=AppState::FIELD_TOOLS;transitionStart=now;break;
+                        case SettingsRow::SYSTEM:
+                            uiSettingsOpenPage(SettingsPage::SYSTEM);
+                            break;
+                        // Tapping a tracking row stops it. This and the pill on
+                        // CLEAR are the only two ways to end a watch short of a
+                        // reboot; before either existed there were none.
+                        case SettingsRow::WATCH_TARGET:
+                            engine.clearWatch();
+                            Theme::showToast("WATCH STOPPED", nullptr, Theme::CYAN);
+                            break;
+                        case SettingsRow::HUNT_TARGET:
+                            engine.clearHunt();
+                            Theme::showToast("HUNT STOPPED", nullptr, Theme::CYAN);
+                            break;
+                        case SettingsRow::THEME:      Settings::cyclePalette(); break;
+                        case SettingsRow::BACKGROUND: Settings::cycleBackground(); break;
+                        case SettingsRow::BACKGROUND_LOCK: Settings::toggleBackgroundLocked(); break;
+                        case SettingsRow::UPDATE_CHECK:    Settings::toggleUpdateCheck();     break;
+                        case SettingsRow::TIME_ZONE:       Settings::cycleTimeZone();         break;
+                        case SettingsRow::INVERT:
+                            Settings::toggleInvert();
+                            // XOR against the panel's own baseline, not an
+                            // absolute call -- see PANEL_NEEDS_INVERSION.
+                            tft.invertDisplay(PANEL_NEEDS_INVERSION != Settings::inverted());
+                            break;
+                        case SettingsRow::RGB_SWAP:
+                            Settings::toggleRgbSwap();
+                            applyColorOrder();
+                            break;
+                        case SettingsRow::ROTATION_LOCK: Settings::toggleRotationLock(); break;
+                        case SettingsRow::BRIGHTNESS:
+                            Settings::adjustBrightness(gestureStartX < tft.width() / 2 ? -16 : 16);
+                            applyBrightness();
+                            break;
+                        case SettingsRow::POWER_CONTROL:
+                            if(OtaWifi::state()!=OtaWifi::State::OFF||OtaBle::state()!=OtaBle::State::OFF){Theme::showToast("BUSY","Finish the update first",Theme::AMBER);break;}
+                            state=AppState::POWER_CONTROL;transitionStart=now;break;
+                        case SettingsRow::BREAKOUT:
+                            Field::telemetryStop();Settings::deskActive(false);Theme::releaseClockBackdrop();
+                            BreakoutUI::open(now);state=AppState::BREAKOUT;transitionStart=now;break;
+                        case SettingsRow::FIELD_TOOLS:
+                            if (OtaWifi::state()!=OtaWifi::State::OFF || OtaBle::state()!=OtaBle::State::OFF) { Theme::showToast("RADIO BUSY", "Finish the update first", Theme::AMBER); break; }
+                            FieldUI::open(); state=AppState::FIELD_TOOLS;transitionStart=now;break;
+                        case SettingsRow::RESEARCH:
+                            if (OtaWifi::state() != OtaWifi::State::OFF || OtaBle::state() != OtaBle::State::OFF) { Theme::showToast("RADIO BUSY", "Finish the update first", Theme::AMBER); break; }
+                            ResearchUI::open(); state = AppState::RESEARCH; transitionStart = now; break;
+                        case SettingsRow::DNSP_GUIDE:
+                            if(Field::config.language){FieldUI::openHelp();state=AppState::FIELD_TOOLS;transitionStart=now;break;}
+                            s_dnspStorage = false; s_dnspPage = 0;
+                            state = AppState::DNSP_INFO; transitionStart = now; break;
+                        case SettingsRow::SD_STATUS:
+                            engine.sd().describe(s_sdDescription, sizeof s_sdDescription);
+                            s_dnspStorage = true; state = AppState::DNSP_INFO; transitionStart = now; break;
+                        case SettingsRow::ALERT_DURATION: Settings::cycleAlertSeconds(); break;
+                        case SettingsRow::CONFIDENCE: Settings::cycleMinConfidence(); break;
+                        case SettingsRow::AUTO_QUIET:  Settings::cycleAutoQuiet(); break;
+                        case SettingsRow::DETECTION_FILTER: enterDetFilter(); break;
+                        case SettingsRow::POWER_SAVER: enterPower(); break;
+                        case SettingsRow::STATUS_LIGHT: enterLight(); break;
+                        case SettingsRow::SECURITY:    enterSecurity(); break;
+                        case SettingsRow::IGNORED_DEVICES:  enterIgnoreList(); break;
+#if SQUACH_MESH
+                        case SettingsRow::SQUACHMESH:
+                            // Asked once. After that the row opens the menu
+                            // directly -- re-consenting on every visit trains
+                            // people to dismiss the thing without reading it,
+                            // which is worse than not asking.
+                            if (Settings::meshConsent()) enterMeshMenu();
+                            else                        enterMeshWarn();
+                            break;
+#endif
+                        // These ask first -- see the confirm panel over in
+                        // ui_settings. A row earns one when tapping it a
+                        // second time does not put things back: calibration
+                        // overwrites the calibration you are using, reset
+                        // zeroes a count that most of the outfits are gated
+                        // on, and the intro takes the screen over.
+                        case SettingsRow::CALIBRATE:
+                        case SettingsRow::RESET_STATS:
+                        case SettingsRow::REPLAY_INTRO:
+                            uiSettingsSetConfirm(row);
+                            break;
+                        case SettingsRow::BORING_MODE:
+                            // Asked on the way IN only. Boring mode hides
+                            // every Squachy row, which is exactly what makes
+                            // it hard to undo by accident -- but turning it
+                            // back off restores all of them, so a panel there
+                            // would just be friction on the fix for the thing
+                            // the panel exists to warn about.
+                            if (Settings::boringMode()) Settings::toggleBoringMode();
+                            else                        uiSettingsSetConfirm(row);
+                            break;
+                        case SettingsRow::CHECK_COLORS: enterColorCheck(true); break;
+                        case SettingsRow::DIAGNOSTICS:  enterDiagnostics(); break;
+                        case SettingsRow::WIFI_NETWORKS: enterWifiNets(); break;
+                        case SettingsRow::DESK_MODE:    uiSettingsOpenPage(SettingsPage::DESK); break;
+                        case SettingsRow::DESK_OPEN:
+                            // Settings' BACK from the desk comes back to it;
+                            // having just been sent there, that is not a
+                            // detour anybody wants on the way out.
+                            s_backToDesk = false;
+                            enterDesk();
+                            break;
+                        case SettingsRow::DESK_BACKGROUND:
+                            if (gestureStartX < tft.width() / 2) Settings::cyclePrevDeskBackground();
+                            else                                 Settings::cycleDeskBackground();
+                            break;
+                        case SettingsRow::CLOCK_FONT:     Settings::cycleClockFont();     break;
+                        case SettingsRow::CLOCK_SIZE:     Settings::cycleClockSize();     break;
+                        case SettingsRow::CLOCK_BACKDROP: Settings::cycleClockBackdrop(); break;
+#if SQUACH_MESH
+                        case SettingsRow::DESK_SQUAD:   Settings::toggleDeskSquad();     break;
+                        case SettingsRow::DESK_CROWD:   Settings::cycleDeskCrowd();      break;
+                        case SettingsRow::DESK_VISIT:   Settings::toggleDeskFullVisit(); break;
+#endif
+                        case SettingsRow::UPDATE_FIRMWARE: enterUpdate(); break;
+                        case SettingsRow::SHOW_OFF:
+                            Squachy::startShowOff();
+                            enterClear();
+                            break;
+                        case SettingsRow::SHADES_COLOR: Squachy::cycleShadesColor(); break;
+                        case SettingsRow::SQUACHY_SIZE: Settings::cycleSquachySize(); break;
+                        case SettingsRow::OUTFIT:       enterOutfit(); break;
+                        case SettingsRow::PET:          Squachy::cyclePet(); break;
+                        case SettingsRow::BANTER:       Settings::cycleBanter(); break;
+                        case SettingsRow::VIEW_DIARY:   enterDiary(); break;
+                        case SettingsRow::BINGO:        enterBingo(); break;
+                        case SettingsRow::DEX:          enterDex(); break;
+                        case SettingsRow::APPEARANCE:  uiSettingsOpenAppearance(true); break;
+                        case SettingsRow::TOP_HAT:     Settings::toggleTopHat(); break;
+                        // From a sub-page, back to the main list; from the
+                        // main list, out.
+                        case SettingsRow::BACK:
+                            if (uiSettingsCurrentPage() != SettingsPage::MAIN) uiSettingsOpenPage(SettingsPage::MAIN);
+                            else                                               enterClear();
+                            break;
+                        default: break;
+                    }
+}
+
+static bool s_shutdownReboot=false,s_shutdownDone=false,s_shutdownFailed=false,s_shutdownRedraw=true;
+static uint32_t s_shutdownAt=0;
+static void beginSafeShutdown(bool reboot) {
+    Backup::cancel();
+    Field::telemetryStop();Research::stop("Stopping for shutdown");
+    engine.beginShutdown();
+    s_shutdownReboot=reboot;s_shutdownDone=false;s_shutdownFailed=false;s_shutdownRedraw=true;s_shutdownAt=millis();
+    state=AppState::SAFE_OFF;transitionStart=millis();
+}
 static const char* s_lastScreenName = nullptr;
 static uint32_t    s_lastScreenUs   = 0;
 static uint32_t    s_lastScreenAt   = 0;     // transitionStart of the screen being timed
 
 void loop() {
+    if(state==AppState::SAFE_OFF){
+        const uint32_t now=millis();
+        if(!s_shutdownDone){
+            Research::tick(now);
+            if(engine.shutdownTick() && Research::settled()){
+                s_shutdownFailed=Research::stats().errors!=0;
+                s_shutdownFailed=!engine.sd().safeEnd()||s_shutdownFailed;
+                Bingo::flush();Dex::flush();Regulars::flush();
+                s_shutdownDone=true;s_shutdownRedraw=true;s_shutdownAt=now;
+            }
+        }
+        if(s_shutdownRedraw){
+        drawTwoBand([&](TFT_eSPI& t,bool){
+            t.fillRect(0,0,t.width(),t.height(),Theme::BG);
+            const char* msg=!s_shutdownDone?"Finishing writes. Keep power connected.":s_shutdownFailed?"Stopped. Some writes could not be confirmed. The card is unmounted.":"Safe to power off. microSD is unmounted.";
+            Lang::draw(t,msg,12,40,t.width()-24,t.height()-110,Theme::WHITE);
+            if(s_shutdownDone)Lang::button(t,12,t.height()-52,t.width()-24,38,"REBOOT");
+        });
+        if(frameBufferOk)pushFrame(0,0);
+        s_shutdownRedraw=false;
+        }
+        TouchPoint offTouch=pollTouch();
+        if(s_shutdownDone && ((s_shutdownReboot&&!s_shutdownFailed&&now-s_shutdownAt>1200)||
+           (offTouch.valid&&now-s_shutdownAt>800&&offTouch.y>=tft.height()-52))){
+#if defined(ARDUINO_ARCH_ESP32)
+            ESP.restart();
+#endif
+        }
+        delay(20);return;
+    }
     // Cheap and unconditional: available() is a register read, and this
     // is the only way in for the one serial command the firmware takes.
     Clock::pollSerial();
@@ -2476,6 +2722,7 @@ void loop() {
     s_pushAccumUs = 0;
     FramePush::newFrame();
     uint32_t now = millis();
+    Care::noteLoop(now,ESP.getFreeHeap(),heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
     Clock::tick(now);   // the note to self, when it is due
 #if SQUACH_MESH && defined(BENCH_TOOLS)
     if (g_benchUpdateNow && (state == AppState::CLEAR || state == AppState::DESK)) {
@@ -2569,7 +2816,10 @@ void loop() {
     // Bluetooth update's flash work -- the BLE callbacks only hand it jobs.
     OtaCore::tick(now);
     OtaBle::tick(now);
-    OtaWifi::tick(now);
+    if (!Research::active() && !Backup::busy()) OtaWifi::tick(now);
+    if(state==AppState::CLEAR&&!Security::locked()&&Care::giftDue()){
+        Care::consumeGift();CareUI::open(CareUI::Page::WELCOME);state=AppState::CARE;transitionStart=now;
+    }
     if (state == AppState::CLEAR) {
         const char* sub = nullptr;
         bool good = false;
@@ -2620,6 +2870,19 @@ void loop() {
     uiClearEmoteTick(now);
 #endif
 
+    if (Security::locked() && state == AppState::RESEARCH) enterLocked();
+    if (Research::active() && (Security::locked() || state != AppState::RESEARCH)) Research::stop("Stopped on lock or screen change");
+    Research::tick(now);
+    if(Backup::busy()&&(Security::locked()||state!=AppState::CARE))Backup::cancel();
+    Backup::tick();
+    Field::tick();
+    if(Security::locked() && (state==AppState::FIELD_TOOLS||state==AppState::POWER_CONTROL||state==AppState::BREAKOUT||state==AppState::CARE)) enterLocked();
+    if(Field::telemetryActive() && (Security::locked() || state!=AppState::FIELD_TOOLS))Field::telemetryStop();
+    static bool fieldRadio=false;
+    if(Field::telemetryActive() && !fieldRadio){engine.startUpdateRadio();fieldRadio=true;}
+    if(!Field::telemetryActive() && fieldRadio){engine.stopUpdateRadio();fieldRadio=false;}
+    Field::telemetryTick(now);
+
     // The padlock, left of the rotate icon while a PIN is set, on the screens
     // that draw the corner icons. Ahead of the rotate handler, whose oversized
     // target overlaps it, and it takes the whole gesture -- the same swallow a
@@ -2627,11 +2890,11 @@ void loop() {
     if (touchJustDown && Security::enabled() && !Security::locked() &&
         (state == AppState::CLEAR || state == AppState::LOG || state == AppState::SETTINGS ||
          state == AppState::OUTFIT || state == AppState::RAWSCAN || state == AppState::DETECTION_FILTER ||
-         state == AppState::IGNORE_LIST || state == AppState::POWER_SAVER || state == AppState::SECURITY ||
+         state == AppState::IGNORE_LIST || state == AppState::POWER_SAVER || state == AppState::SECURITY || state == AppState::RESEARCH || state == AppState::FIELD_TOOLS || state == AppState::CARE ||
          state == AppState::STATUS_LIGHT ||
          state == AppState::DIARY || state == AppState::HUNT || state == AppState::DIAGNOSTICS ||
          state == AppState::DESK) &&
-        Theme::lockButtonHit(tp.x, tp.y, tft.width())) {
+        Theme::lockButtonHit(tp.x, tp.y, tft.width()) && ((state!=AppState::FIELD_TOOLS && state!=AppState::CARE) || tp.y<20)) {
         lastTouch = now;
         if (onRawScanScreen()) engine.stopRawScan();
         Security::lock();
@@ -2662,7 +2925,8 @@ void loop() {
         (state == AppState::CLEAR || state == AppState::LOG ||
                       state == AppState::SETTINGS || state == AppState::OUTFIT ||
                       state == AppState::RAWSCAN || state == AppState::DETECTION_FILTER ||
-                      state == AppState::IGNORE_LIST || state == AppState::DESK) &&
+                      state == AppState::IGNORE_LIST || state == AppState::DESK || state == AppState::FIELD_TOOLS || state == AppState::CARE) &&
+        ((state!=AppState::FIELD_TOOLS && state!=AppState::CARE) || tp.y<20) &&
         Theme::rotateButtonHit(tp.x, tp.y, tft.width()) &&
         (now - lastTouch) > TOUCH_DEBOUNCE_MS) {
         lastTouch = now;
@@ -2729,7 +2993,8 @@ void loop() {
                       state == AppState::RAWSCAN || state == AppState::DETECTION_FILTER ||
                       state == AppState::IGNORE_LIST || state == AppState::POWER_SAVER ||
                       state == AppState::SECURITY || state == AppState::STATUS_LIGHT ||
-                      state == AppState::DESK) &&
+                      state == AppState::DESK || state == AppState::FIELD_TOOLS || state == AppState::CARE) &&
+        ((state!=AppState::FIELD_TOOLS && state!=AppState::CARE) || tp.y<20) &&
         Theme::settingsButtonHit(tp.x, tp.y) &&
         // ...but not where the watch/hunt pill is sitting. The gear's tap box
         // is 55x50, much larger than its 28px glyph, so it reaches into the
@@ -2882,10 +3147,9 @@ void loop() {
             // news -- and it has no timeout, so without this it held every
             // alert back until somebody happened to tap it.
             {
-                const Detection* latest = engine.latest();
-                if (latest && (now - latest->firstSeen) < 200 &&
-                    latest->conf >= Settings::minConfidence() && !IgnoreList::silenced(latest->mac) &&
-                    alertMayInterrupt(*latest)) {
+                Detection queued;
+                const Detection* latest = &queued;
+                if (takeAlert(queued, now)) {
                     uiAlertSetRedacted(false);
                     enterAlert(*latest);
                     s_backToDesk = Settings::deskWanted();   // dismissed, back where the window was over
@@ -2901,11 +3165,6 @@ void loop() {
                         // makes: the radio changes hands and the update screen
                         // carries it from there.
                         enterUpdate();
-                        engine.startUpdateRadio();
-                        if (!OtaWifi::begin()) {
-                            engine.stopUpdateRadio();
-                            Theme::showToast("CAN'T START UPDATE", updateRefusedWhy(), Theme::AMBER);
-                        }
                         break;
                     case SysPropsHit::CLOSE: goHome(); break;
                     case SysPropsHit::NONE:  break;
@@ -3039,22 +3298,9 @@ void loop() {
             } else if (engine.watchHitPending()) {
                 enterWatchAlert();
             } else {
-                const Detection* latest = engine.latest();
-                if (latest && (now - latest->firstSeen) < 200 &&
-                    // This sighting's grade, not the type's -- which is what
-                    // finally makes ALERT FILTER mean something. Set it to
-                    // High and an ESP32 probe request matching a
-                    // module-vendor OUI stays in the log without taking over
-                    // the screen.
-                    latest->conf >= Settings::minConfidence() &&
-                    // Your own AirTag and your own doorbell are true
-                    // positives every single time, and a detector that
-                    // shouts about them constantly is one you stop reading.
-                    // Only the ALERT is suppressed -- the detection is
-                    // still counted and still written to the LOG above, so
-                    // the device stays visible and un-ignorable.
-                    !IgnoreList::silenced(latest->mac) &&
-                    alertMayInterrupt(*latest)) {
+                Detection queued;
+                const Detection* latest = &queued;
+                if (takeAlert(queued, now)) {
                     uiAlertSetRedacted(false);
                     enterAlert(*latest);
                 }
@@ -3354,11 +3600,18 @@ void loop() {
             break;
         }
         case AppState::ALERT: {
-            const char* alertInfoText = s_infoShowingPrimer ? DetectionInfo::rssiConfidencePrimer()
+            const uint8_t pending = engine.alerts.retain(alertEligible, now);
+            uiAlertSetPending(pending, engine.alerts.dropped());
+            const char* alertInfoText = s_showFlockResources
+                ? "Radio evidence does not confirm a camera. If you verify one, report its location to your municipality. For background and reporting resources, open alprradar.com or deflock.org on your phone."
+                : s_showWhy ? DetectionInfo::why(s_alertSnapshot) : s_infoShowingPrimer ? DetectionInfo::rssiConfidencePrimer()
                                                               : DetectionInfo::explainFor(s_confirmType, s_confirmVendor, s_confirmName, engine);
+            if(Field::config.language){
+                alertInfoText=s_showFlockResources?"Verify a camera visually before reporting it. Open deflock.org/report on your phone.":s_showWhy?Lang::why(s_alertSnapshot):s_infoShowingPrimer?"Signal strength is not distance or direction. Confidence describes the matching evidence.":Lang::detectionNote(s_confirmType);
+            }
             // No heading during the primer page -- it's about RSSI/
             // confidence in general, not any one detection type.
-            const char* alertInfoTypeName = s_infoShowingPrimer ? nullptr
+            const char* alertInfoTypeName = s_showFlockResources ? "CAMERA RESOURCES" : s_showWhy ? "WHY THIS MATCHED" : s_infoShowingPrimer ? nullptr
                                           : DetectionInfo::titleFor(s_confirmType, s_confirmVendor, s_confirmName);
 #if defined(CYD35)
             if (frameBufferOk) {
@@ -3399,13 +3652,19 @@ void loop() {
                 } else if (tp.valid && (now - lastTouch) > TOUCH_DEBOUNCE_MS &&
                            Theme::infoPanelHitDismiss(tp.x, tp.y, tft.width(), tft.height())) {
                     lastTouch = now;
-                    if (s_infoShowingPrimer) {
+                    if (s_showWhy) {
+                        s_showWhy = false;
+                        s_infoArmed = false;
+                    } else if (s_infoShowingPrimer) {
                         // First page done -- move straight to this
                         // alert's own explanation rather than closing,
                         // and only mark the primer seen once its page
                         // has actually been read past.
                         Settings::markInfoPrimerShown();
                         s_infoShowingPrimer = false;
+                        s_infoArmed = false;
+                    } else if (lastAlertType == DetectionType::FLOCK && !s_showFlockResources) {
+                        s_showFlockResources = true;
                         s_infoArmed = false;
                     } else {
                         // GOT IT on the actual explanation (not the
@@ -3429,7 +3688,7 @@ void loop() {
             // any tap -- or the timeout -- goes back to the lock screen.
             if (Security::locked()) {
                 if ((tp.valid && (now - lastTouch) > TOUCH_DEBOUNCE_MS) ||
-                    (now - alertStart) > ALERT_AUTO_DISMISS_MS) {
+                    (now - alertStart) > alertDurationMs()) {
                     lastTouch = now;
                     enterClear();       // the lock screen, while locked
                 }
@@ -3441,6 +3700,7 @@ void loop() {
                     s_confirmType        = lastAlertType;
                     memcpy(s_confirmVendor, s_alertVendor, sizeof s_confirmVendor);
                     memcpy(s_confirmName,   s_alertName,   sizeof s_confirmName);
+                    s_showWhy = true;
                     s_infoShowingPrimer  = !Settings::infoPrimerShown();
                     s_infoPending        = true;
                     s_infoArmed          = false;
@@ -3482,7 +3742,7 @@ void loop() {
                     squachyCatch(lastAlertType, s_alertMac, lastAlertHits, lastAlertRssi, lastAlertConf);
                     enterClear();
                 }
-            } else if ((now - alertStart) > ALERT_AUTO_DISMISS_MS) {
+            } else if ((now - alertStart) > alertDurationMs()) {
                 squachyCatch(lastAlertType, s_alertMac, lastAlertHits, lastAlertRssi, lastAlertConf);
                 enterClear();
             }
@@ -3522,6 +3782,7 @@ void loop() {
             break;
         }
         case AppState::WATCH_ALERT: {
+            if(!s_watchGameArmed){if(!tp.valid)s_watchGameArmed=true;else tp.valid=false;}
 #if defined(CYD35)
             if (frameBufferOk) {
                 // Same two-pass half-height `frame` trick CLEAR/BOOT/
@@ -3552,7 +3813,7 @@ void loop() {
                     Theme::showToast("UNWATCHED", nullptr, Theme::CYAN);
                 }
                 enterClear();
-            } else if ((now - watchAlertStart) > ALERT_AUTO_DISMISS_MS) {
+            } else if ((now - watchAlertStart) > alertDurationMs()) {
                 enterClear();
             }
             break;
@@ -3564,6 +3825,7 @@ void loop() {
 
             // No heading during the primer page -- it's about RSSI/
             // confidence in general, not any one detection type.
+            if(Field::config.language)infoText=s_infoShowingPrimer?"Signal strength is not distance or direction. Confidence describes the matching evidence.":Lang::detectionNote(s_confirmType);
             const char* infoTypeName = s_infoShowingPrimer ? nullptr
                                      : DetectionInfo::titleFor(s_confirmType, s_confirmVendor, s_confirmName);
             // Nothing on LOG moves by the call -- the note about
@@ -4038,125 +4300,7 @@ void loop() {
                         gestureActive = false;
                         break;
                     }
-                    switch (row) {
-                        case SettingsRow::SYSTEM:
-                            uiSettingsOpenPage(SettingsPage::SYSTEM);
-                            break;
-                        // Tapping a tracking row stops it. This and the pill on
-                        // CLEAR are the only two ways to end a watch short of a
-                        // reboot; before either existed there were none.
-                        case SettingsRow::WATCH_TARGET:
-                            engine.clearWatch();
-                            Theme::showToast("WATCH STOPPED", nullptr, Theme::CYAN);
-                            break;
-                        case SettingsRow::HUNT_TARGET:
-                            engine.clearHunt();
-                            Theme::showToast("HUNT STOPPED", nullptr, Theme::CYAN);
-                            break;
-                        case SettingsRow::THEME:      Settings::cyclePalette(); break;
-                        case SettingsRow::BACKGROUND: Settings::cycleBackground(); break;
-                        case SettingsRow::BACKGROUND_LOCK: Settings::toggleBackgroundLocked(); break;
-                        case SettingsRow::UPDATE_CHECK:    Settings::toggleUpdateCheck();     break;
-                        case SettingsRow::TIME_ZONE:       Settings::cycleTimeZone();         break;
-                        case SettingsRow::INVERT:
-                            Settings::toggleInvert();
-                            // XOR against the panel's own baseline, not an
-                            // absolute call -- see PANEL_NEEDS_INVERSION.
-                            tft.invertDisplay(PANEL_NEEDS_INVERSION != Settings::inverted());
-                            break;
-                        case SettingsRow::RGB_SWAP:
-                            Settings::toggleRgbSwap();
-                            applyColorOrder();
-                            break;
-                        case SettingsRow::ROTATION_LOCK: Settings::toggleRotationLock(); break;
-                        case SettingsRow::BRIGHTNESS:
-                            Settings::adjustBrightness(gestureStartX < tft.width() / 2 ? -16 : 16);
-                            applyBrightness();
-                            break;
-                        case SettingsRow::CONFIDENCE: Settings::cycleMinConfidence(); break;
-                        case SettingsRow::AUTO_QUIET:  Settings::cycleAutoQuiet(); break;
-                        case SettingsRow::DETECTION_FILTER: enterDetFilter(); break;
-                        case SettingsRow::POWER_SAVER: enterPower(); break;
-                        case SettingsRow::STATUS_LIGHT: enterLight(); break;
-                        case SettingsRow::SECURITY:    enterSecurity(); break;
-                        case SettingsRow::IGNORED_DEVICES:  enterIgnoreList(); break;
-#if SQUACH_MESH
-                        case SettingsRow::SQUACHMESH:
-                            // Asked once. After that the row opens the menu
-                            // directly -- re-consenting on every visit trains
-                            // people to dismiss the thing without reading it,
-                            // which is worse than not asking.
-                            if (Settings::meshConsent()) enterMeshMenu();
-                            else                        enterMeshWarn();
-                            break;
-#endif
-                        // These ask first -- see the confirm panel over in
-                        // ui_settings. A row earns one when tapping it a
-                        // second time does not put things back: calibration
-                        // overwrites the calibration you are using, reset
-                        // zeroes a count that most of the outfits are gated
-                        // on, and the intro takes the screen over.
-                        case SettingsRow::CALIBRATE:
-                        case SettingsRow::RESET_STATS:
-                        case SettingsRow::REPLAY_INTRO:
-                            uiSettingsSetConfirm(row);
-                            break;
-                        case SettingsRow::BORING_MODE:
-                            // Asked on the way IN only. Boring mode hides
-                            // every Squachy row, which is exactly what makes
-                            // it hard to undo by accident -- but turning it
-                            // back off restores all of them, so a panel there
-                            // would just be friction on the fix for the thing
-                            // the panel exists to warn about.
-                            if (Settings::boringMode()) Settings::toggleBoringMode();
-                            else                        uiSettingsSetConfirm(row);
-                            break;
-                        case SettingsRow::CHECK_COLORS: enterColorCheck(true); break;
-                        case SettingsRow::DIAGNOSTICS:  enterDiagnostics(); break;
-                        case SettingsRow::WIFI_NETWORKS: enterWifiNets(); break;
-                        case SettingsRow::DESK_MODE:    uiSettingsOpenPage(SettingsPage::DESK); break;
-                        case SettingsRow::DESK_OPEN:
-                            // Settings' BACK from the desk comes back to it;
-                            // having just been sent there, that is not a
-                            // detour anybody wants on the way out.
-                            s_backToDesk = false;
-                            enterDesk();
-                            break;
-                        case SettingsRow::DESK_BACKGROUND:
-                            if (gestureStartX < tft.width() / 2) Settings::cyclePrevDeskBackground();
-                            else                                 Settings::cycleDeskBackground();
-                            break;
-                        case SettingsRow::CLOCK_FONT:     Settings::cycleClockFont();     break;
-                        case SettingsRow::CLOCK_SIZE:     Settings::cycleClockSize();     break;
-                        case SettingsRow::CLOCK_BACKDROP: Settings::cycleClockBackdrop(); break;
-#if SQUACH_MESH
-                        case SettingsRow::DESK_SQUAD:   Settings::toggleDeskSquad();     break;
-                        case SettingsRow::DESK_CROWD:   Settings::cycleDeskCrowd();      break;
-                        case SettingsRow::DESK_VISIT:   Settings::toggleDeskFullVisit(); break;
-#endif
-                        case SettingsRow::UPDATE_FIRMWARE: enterUpdate(); break;
-                        case SettingsRow::SHOW_OFF:
-                            Squachy::startShowOff();
-                            enterClear();
-                            break;
-                        case SettingsRow::SHADES_COLOR: Squachy::cycleShadesColor(); break;
-                        case SettingsRow::SQUACHY_SIZE: Settings::cycleSquachySize(); break;
-                        case SettingsRow::OUTFIT:       enterOutfit(); break;
-                        case SettingsRow::PET:          Squachy::cyclePet(); break;
-                        case SettingsRow::BANTER:       Settings::cycleBanter(); break;
-                        case SettingsRow::VIEW_DIARY:   enterDiary(); break;
-                        case SettingsRow::BINGO:        enterBingo(); break;
-                        case SettingsRow::DEX:          enterDex(); break;
-                        case SettingsRow::APPEARANCE:  uiSettingsOpenAppearance(true); break;
-                        case SettingsRow::TOP_HAT:     Settings::toggleTopHat(); break;
-                        // From a sub-page, back to the main list; from the
-                        // main list, out.
-                        case SettingsRow::BACK:
-                            if (uiSettingsCurrentPage() != SettingsPage::MAIN) uiSettingsOpenPage(SettingsPage::MAIN);
-                            else                                               enterClear();
-                            break;
-                        default: break;
-                    }
+                    openSettingsRow(row, now, gestureStartX);
                 }
                 gestureActive = false;
             }
@@ -4822,10 +4966,9 @@ void loop() {
             // much of a new one reaches the glass. The same test CLEAR makes.
             {
                 const Security::LockAlerts la = Security::lockAlerts();
-                const Detection* latest = engine.latest();
-                if (la != Security::LockAlerts::NONE && latest && (now - latest->firstSeen) < 200 &&
-                    latest->conf >= Settings::minConfidence() && !IgnoreList::silenced(latest->mac) &&
-                    alertMayInterrupt(*latest)) {
+                Detection queued;
+                const Detection* latest = &queued;
+                if (la != Security::LockAlerts::NONE && takeAlert(queued, now)) {
                     uiAlertSetRedacted(la == Security::LockAlerts::TYPE_ONLY);
                     enterAlert(*latest);
                     break;
@@ -4988,10 +5131,11 @@ void loop() {
             // The same test CLEAR makes, but the answer is a small card
             // beside the clock, and Squachy's reaction, not a new screen.
             {
-                const Detection* latest = engine.latest();
-                if (latest && (now - latest->firstSeen) < 200 &&
-                    latest->conf >= Settings::minConfidence() && !IgnoreList::silenced(latest->mac) &&
-                    alertMayInterrupt(*latest)) {
+                Detection queued;
+                const Detection* latest = &queued;
+                static uint32_t deskAlertAt = 0;
+                if ((!deskAlertAt || now - deskAlertAt >= alertDurationMs()) && takeAlert(queued, now)) {
+                    deskAlertAt = now;
                     uiDeskAlert(*latest, now);
                     lastAlertType = latest->type;
                     squachyCatch(latest->type, latest->mac, latest->hits, latest->rssi, latest->conf);
@@ -5045,6 +5189,93 @@ void loop() {
                     else           Settings::cycleDeskBackground();
                     Theme::showToast(Settings::backgroundName(Settings::background()), "DESK BACKGROUND", Theme::CYAN);
                 }
+            }
+            break;
+        }
+        case AppState::BREAKOUT: {
+            if(engine.watchHitPending()){enterWatchAlert();break;}
+            Detection gameAlert;
+            if(takeAlert(gameAlert,now)){uiAlertSetRedacted(false);enterAlert(gameAlert);break;}
+            if(tp.valid)lastTouch=now;
+            if(BreakoutUI::input(tp.x,tp.y,tft.width(),tft.height(),tp.valid,touchJustDown,now)){
+                s_backToBreakout=false;enterSettings();break;
+            }
+            if(BreakoutUI::tick(now)||now-transitionStart<=TRANSITION_MS+100)
+                drawTwoBand([&](TFT_eSPI& t,bool){BreakoutUI::draw(t);});
+            break;
+        }
+        case AppState::CARE: {
+            static bool transitionDirty=false;
+            const bool animating=now-transitionStart<TRANSITION_MS;
+            if(CareUI::needsDraw(now,tft.width(),tft.height())||animating||transitionDirty)
+                drawTwoBand([&](TFT_eSPI& t,bool){CareUI::draw(t,now,engine);});
+            transitionDirty=animating; // always repair the final cached transition frame, even after a stall
+            if(touchJustDown&&now-transitionStart>TOUCH_DEBOUNCE_MS){
+                lastTouch=now;SettingsRow action=CareUI::tap(tp.x,tp.y,tft.width(),tft.height(),now,engine);
+                if(action==SettingsRow::BACK)enterSettings();
+                else if(action!=SettingsRow::NONE){enterSettings();openSettingsRow(action,now,tp.x);}
+            }
+            break;
+        }
+        case AppState::POWER_CONTROL: {
+            drawTwoBand([&](TFT_eSPI& t,bool){
+                t.fillRect(0,0,t.width(),t.height(),Theme::BG);
+                Lang::draw(t,"Stop recording and finish microSD writes before unplugging. This board cannot switch off its own power.",12,20,t.width()-24,t.height()-156,Theme::WHITE);
+                Lang::button(t,12,t.height()-126,t.width()-24,36,"SAFE SHUTDOWN");
+                Lang::button(t,12,t.height()-84,t.width()-24,36,"REBOOT");
+                Lang::button(t,12,t.height()-42,t.width()-24,36,"BACK");
+            });
+            if(touchJustDown&&now-transitionStart>TOUCH_DEBOUNCE_MS){
+                lastTouch=now;
+                if(tp.x>=12&&tp.x<tft.width()-12){
+                    if(tp.y>=tft.height()-42)enterSettings();
+                    else if(tp.y>=tft.height()-84&&tp.y<tft.height()-48)beginSafeShutdown(true);
+                    else if(tp.y>=tft.height()-126&&tp.y<tft.height()-90)beginSafeShutdown(false);
+                }
+            }
+            break;
+        }
+        case AppState::FIELD_TOOLS: {
+            if(FieldUI::needsDraw(now,tft.width(),tft.height()) || now-transitionStart<=TRANSITION_MS+100)
+                drawTwoBand([&](TFT_eSPI& t,bool){FieldUI::draw(t,now,engine);});
+            if(touchJustDown && now-transitionStart>TOUCH_DEBOUNCE_MS){lastTouch=now;if(FieldUI::tap(tp.x,tp.y,tft.width(),tft.height(),now,engine))enterSettings();}
+            break;
+        }
+        case AppState::RESEARCH: {
+            drawTwoBand([&](TFT_eSPI& t, bool) { ResearchUI::draw(t, now); });
+            if (touchJustDown && now - transitionStart > TOUCH_DEBOUNCE_MS) {
+                lastTouch = now;
+                if (ResearchUI::tap(tp.x, tp.y, tft.width(), tft.height(), now, engine.sd().ready(), (uint32_t)esp_random())) enterSettings();
+            }
+            break;
+        }
+        case AppState::DNSP_INFO: {
+            drawTwoBand([&](TFT_eSPI& t, bool) {
+                const int w = t.width(), h = t.height();
+                t.fillRect(0, 0, w, h, Theme::BG);
+                Theme::drawTitleBar(t, s_dnspStorage ? "MICROSD STATUS" : "DNSP WALKTHROUGH");
+                t.setTextSize(1); t.setTextWrap(false);
+                t.setTextColor(Theme::CYAN, Theme::BG);
+                t.setCursor(12, 18); t.print(s_dnspStorage ? "MICROSD STATUS" : "DNSP WALKTHROUGH - v0.7");
+                t.setTextColor(Theme::WHITE, Theme::BG);
+                char lines[16][48];
+                uint8_t n = Theme::wrapText(t, s_dnspStorage ? s_sdDescription : DNSP_GUIDE[s_dnspPage],
+                                           w - 24, lines, 16);
+                for (uint8_t i = 0; i < n; ++i) {
+                    t.setCursor(12, 36 + i * 11); t.print(lines[i]);
+                }
+                if (!s_dnspStorage) {
+                    char page[20]; snprintf(page, sizeof page, "%u / 4", s_dnspPage + 1);
+                    t.setCursor(12, h - 58); t.print(page);
+                    Theme::drawButton(t, w / 2 + 4, h - 40, w / 2 - 16, 30,
+                                      s_dnspPage == 3 ? "DONE" : "NEXT", false);
+                }
+                Theme::drawButton(t, 12, h - 40, w / 2 - 16, 30, s_dnspStorage ? "BACK" : "SKIP", false);
+            });
+            if (touchJustDown && now - transitionStart > TOUCH_DEBOUNCE_MS && tp.y >= tft.height() - 40 && tp.y <= tft.height() - 10) {
+                lastTouch = now;
+                if (tp.x < tft.width() / 2 || (!s_dnspStorage && s_dnspPage == 3)) enterSettings();
+                else if (!s_dnspStorage) ++s_dnspPage;
             }
             break;
         }
@@ -5187,7 +5418,7 @@ void loop() {
     // real screen -- pushing `frame` here would just paint stale data
     // from the sprite we stopped using back over the top of it.
     if (frameBufferOk) {
-        if (now - transitionStart < TRANSITION_MS) {
+        if (!Field::config.reduced && now - transitionStart < TRANSITION_MS) {
             Theme::drawTransitionGlitch(frame, now - transitionStart, TRANSITION_MS);
         }
         FrameProf::lap(FrameProf::POST);
@@ -5262,6 +5493,10 @@ void loop() {
             applyBrightness();
         }
 
+        if(s_screenDimmed && state==AppState::BREAKOUT &&
+           (BreakoutUI::game().phase==Breakout::Phase::PLAYING || BreakoutUI::game().phase==Breakout::Phase::READY))
+            BreakoutUI::suspend(now);
+
         // Auto-lock, on the saver's idle clock: after N idle minutes, or the
         // moment the saver dims the screen. Never out of the boot, a PIN being
         // typed, or an alert that is still up.
@@ -5328,3 +5563,4 @@ void loop() {
     }
     prevTouchValid = tp.valid;
 }
+

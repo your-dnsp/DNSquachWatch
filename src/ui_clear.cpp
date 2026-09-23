@@ -1,5 +1,6 @@
 // SquachWatch-CYD — clear (idle) screen implementation
 #include "ui_clear.h"
+#include "field_tools.h"
 #include "draw_band.h"
 #include "frame_prof.h"
 // Needed this early: the message helpers sit up with the visit machine,
@@ -2684,7 +2685,7 @@ uint32_t uiMascotStepMs()            { if (!s_mascotStepMs) s_mascotStepMs = Set
 
 bool uiMascotStep(uint32_t now, bool advance) {
     static uint32_t s_lastStep = 0;
-    if (!advance) return false;
+    if (!advance || Field::config.reduced) return false;
     if ((uint32_t)(now - s_lastStep) < uiMascotStepMs()) return false;
     s_lastStep = now;
     return true;
@@ -3150,3 +3151,4 @@ void uiClearTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool adv
     }
 #endif
 }
+

@@ -1,5 +1,6 @@
 // SquachWatch-CYD — the UPDATE FIRMWARE screen. See include/ui_update.h.
 #include "ui_update.h"
+#include "care.h"
 #include "ota_core.h"
 #include "ota_ble.h"
 #include "ota_wifi.h"
@@ -11,6 +12,7 @@
 namespace {
 
 bool s_askSwitch = false;
+bool s_dnspWarning = true;
 
 const int BTN_H   = 28;
 const int SLOP    = 6;
@@ -397,8 +399,11 @@ void drawWifi(TFT_eSPI& t) {
 void uiUpdateInit(TFT_eSPI& t) {
     OtaCore::refreshOther();
     s_askSwitch = false;
+    s_dnspWarning = true;
     t.fillRect(0, 0, t.width(), t.height(), Theme::BG);
 }
+
+void uiUpdateWarningSeen() { s_dnspWarning = false; }
 
 void uiUpdateAskSwitch(bool ask) { s_askSwitch = ask; }
 
@@ -418,6 +423,15 @@ void uiUpdateTick(TFT_eSPI& t, uint32_t now, bool full) {
     t.setTextSize(1);
     t.setTextWrap(false);
 
+    if (s_dnspWarning) {
+        label(t, 34, Theme::AMBER, "DNSP CUSTOM FIRMWARE");
+        para(t, 58, Theme::WHITE,
+             Backup::verifiedThisBoot()?"Upstream updates replace DNSP. A backup was verified this boot; copy it to a computer. USB recovery needs the matching DNSP release kit.":"Upstream updates replace DNSP. No backup verified this boot. Use Settings > Help & Recovery first, or keep a DNSP release kit from your-dnsp.");
+        const Row r = bottomRow(t, 2);
+        Theme::drawButton(t, r.x[0], r.y, r.w, BTN_H, "CONTINUE", false);
+        Theme::drawButton(t, r.x[1], r.y, r.w, BTN_H, "BACK", false);
+        return;
+    }
     const bool wifiOn = OtaWifi::state() != OtaWifi::State::OFF;
     const bool btOn   = OtaBle::state()  != OtaBle::State::OFF;
     const bool busyInstalling = (wifiOn && OtaWifi::state() >= OtaWifi::State::VERIFYING &&
@@ -438,6 +452,13 @@ void uiUpdateTick(TFT_eSPI& t, uint32_t now, bool full) {
 }
 
 UpdateHit uiUpdateHitTest(TFT_eSPI& t, int x, int y, int* netIndex) {
+    if (s_dnspWarning) {
+        const Row r = bottomRow(t, 2);
+        if (in(x, y, r.x[0], r.y, r.w, BTN_H)) { s_dnspWarning = false; return UpdateHit::NONE; }
+        if (in(x, y, r.x[1], r.y, r.w, BTN_H)) return UpdateHit::BACK;
+        return UpdateHit::NONE;
+    }
+
     if (OtaCore::restartPending()) return UpdateHit::NONE;
     const Geom g = geom(t);
     const bool onBack = in(x, y, g.backX, g.backY, g.backW, BTN_H);
@@ -505,3 +526,4 @@ UpdateHit uiUpdateHitTest(TFT_eSPI& t, int x, int y, int* netIndex) {
             return UpdateHit::NONE;
     }
 }
+

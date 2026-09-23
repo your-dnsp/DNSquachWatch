@@ -33,7 +33,8 @@ enum class DetectionType : uint8_t {
     // chip, and sixteen Espressif prefixes already sit under FLOCK. HACKER
     // takes exact signatures only, which is what keeps it worth alerting on.
     HACKER  = 17,
-    COUNT   = 18
+    FPV     = 18, // Equipment clue, not proof of an airborne aircraft
+    COUNT   = 19
 };
 
 inline const char* detectionTypeName(DetectionType t) {
@@ -45,6 +46,7 @@ inline const char* detectionTypeName(DetectionType t) {
         case DetectionType::RAVEN:       return "RAVEN";
         case DetectionType::AIRTAG:      return "AIRTAG";
         case DetectionType::DRONE:       return "DRONE";
+        case DetectionType::FPV:         return "FPV GEAR";
         case DetectionType::ALPR:        return "ALPR";
         case DetectionType::CAMERA:      return "CAMERA";
         case DetectionType::SAMSUNG_TAG: return "SAMSUNG_TAG";
@@ -70,6 +72,11 @@ inline const char* detectionTypeName(DetectionType t) {
 // macros through the preprocessor, which enum class scoping does not
 // protect against -- hence the _CONF suffix.
 enum class Confidence : uint8_t { LOW_CONF, MED_CONF, HIGH_CONF };
+
+enum class MatchEvidence : uint8_t {
+    UNKNOWN, OUI, SSID, BLE_COMPANY, BLE_SERVICE, BLE_NAME, FIND_MY, IBEACON,
+    DEAUTH_BURST, EVIL_TWIN, PWNAGOTCHI, RESEARCH_COMPOSITE, WIFI_REMOTE_ID
+};
 
 struct Detection {
     uint8_t        mac[6];
@@ -107,9 +114,7 @@ struct Detection {
     // doorbell across the street without ever going deaf to it coming
     // closer, which a plain mute would not manage.
     //
-    // NOT `hits`: that counts every sighting on the WiFi path and only the
-    // returns on the Bluetooth one, so it means two different things
-    // depending on which radio found the device.
+    // `hits` counts separate encounters on both radios, not packets.
     uint8_t        alerts;
     int8_t         quietBar;
     // When it last spent one. NOT lastSeen: by the time the gate runs, the
@@ -119,6 +124,9 @@ struct Detection {
     uint32_t       lastAlertMs;
     // The grade of the signature that actually matched, not the grade of
     // the type. See lookupOui().
+    MatchEvidence  evidence;
+    uint16_t       evidenceBits; // research fields, runtime only; legacy history has none
+    uint16_t       signature; // matched BLE company/service ID, when applicable
     Confidence     conf;
     bool           active;
 };
@@ -187,6 +195,13 @@ enum class AppState : uint8_t {
     // row steps it in place now.
     BINGO            = 36, // the detection bingo card, from Settings' BINGO
                             // row. See ui_bingo.h.
+    DNSP_INFO        = 38,
+    RESEARCH         = 39,
+    FIELD_TOOLS      = 40,
+    POWER_CONTROL    = 41,
+    SAFE_OFF         = 42,
+    BREAKOUT         = 43,
+    CARE             = 44,
     DEX              = 37  // the SQUACHY-DEX, from Settings' row. See ui_dex.h.
 };
 
@@ -196,3 +211,4 @@ enum class ButtonId : uint8_t {
     LOG   = 1,
     CLR   = 2
 };
+

@@ -1,6 +1,12 @@
 // SquachWatch-CYD — SD log implementation
 #include "sd_log.h"
+#include "research.h"
+namespace Research { bool storageSink(const char*, const char*, bool); }
 #include <SD.h>
+#include "ff.h"
+#include "diskio_impl.h"
+#include "diskio.h"
+#include "csv_text.h"
 #include <stdio.h>
 // The Phantoms define CYD (they ARE a CYD) but still need this reference,
 // because their touch shares the display's bus and SdLog::begin() has to hand
@@ -35,6 +41,7 @@ static const uint8_t SD_MAX_FILES = 2;
 
 bool SdLog::begin() {
     if (_ready) return true;
+    ff_diskio_get_drive(&_drive); // SD.begin reserves the next free FAT drive below.
     Serial.printf("[sd] mounting: heap %lu, largest block %lu\n", (unsigned long)ESP.getFreeHeap(), (unsigned long)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
 #if defined(CYD35)
     // (The RL Phantom used to land here too, and its SD card never worked as
@@ -96,8 +103,57 @@ bool SdLog::begin() {
     }
     Serial.printf("[sd] card mounted: %llu MB\n", (unsigned long long)(SD.cardSize() >> 20));
     _ready = true;
+    Research::setSink(Research::storageSink);
+    Research::setReportSink(Research::storageReport);
     openDaily();
     return true;
+}
+
+void SdLog::logPressure(uint32_t alerts, uint32_t ble) {
+    if (!_ready || (alerts == _loggedAlerts && ble == _loggedBle) || millis() - _pressureAt < 10000) return;
+    _pressureAt = millis();
+    // Two bounded files, no recursive attempt to log a logging failure.
+    File f = SD.open("/dnsp-health.log", FILE_APPEND);
+    if (!f) { if (_writeErrors != UINT32_MAX) ++_writeErrors; return; }
+    if (f.size() >= 32768) {
+        f.close();
+        SD.remove("/dnsp-health.old");
+        if (!SD.rename("/dnsp-health.log", "/dnsp-health.old")) {
+            if (_writeErrors != UINT32_MAX) ++_writeErrors;
+            return;
+        }
+        f = SD.open("/dnsp-health.log", FILE_APPEND);
+        if (!f) { if (_writeErrors != UINT32_MAX) ++_writeErrors; return; }
+    }
+    char line[128];
+    snprintf(line, sizeof line, "uptime_ms=%lu alert_queue_omitted=%lu ble_queue_omitted=%lu write_errors=%lu\n",
+             (unsigned long)millis(), (unsigned long)alerts, (unsigned long)ble, (unsigned long)_writeErrors);
+    if (f.print(line) == strlen(line)) { _loggedAlerts = alerts; _loggedBle = ble; }
+    else if (_writeErrors != UINT32_MAX) ++_writeErrors;
+    f.close();
+}
+
+void SdLog::describe(char* out, size_t cap) {
+    if (!_ready) {
+        snprintf(out, cap, "No mounted microSD card. Insert a FAT-formatted card with power off, then restart. Logging is unavailable.");
+        return;
+    }
+    FATFS* fs = nullptr;
+    DWORD freeClusters = 0;
+    char drive[] = {char('0' + _drive), ':', 0};
+    if (_drive > 9 || f_getfree(drive, &freeClusters, &fs) != FR_OK || !fs || fs->n_fatent < 2) {
+        snprintf(out, cap, "Card mounted at boot, but storage information cannot be read now. Power off before checking the card.");
+        return;
+    }
+    const char* format = fs->fs_type == FS_FAT12 ? "FAT12" : fs->fs_type == FS_FAT16 ? "FAT16"
+                       : fs->fs_type == FS_FAT32 ? "FAT32" : "unknown";
+    const uint64_t total = SD.totalBytes(), used = SD.usedBytes();
+    snprintf(out, cap,
+        "microSD: %s. Format: %s. Card: %llu MiB. Volume: %llu MiB. Used: %llu MiB (%u%%). Write errors: %lu. Volume name: unavailable in this driver.",
+        SD.cardType() == CARD_SDHC ? "SDHC/SDXC" : "SD", format,
+        (unsigned long long)(SD.cardSize() >> 20), (unsigned long long)(total >> 20),
+        (unsigned long long)(used >> 20), total ? unsigned(used * 100 / total) : 0,
+        (unsigned long)_writeErrors);
 }
 
 void SdLog::openDaily() {
@@ -110,17 +166,15 @@ void SdLog::openDaily() {
 void SdLog::logEvent(const Detection& d) {
     if (!_ready) return;
     File f = SD.open(_filename, FILE_APPEND);
-    if (!f) return;
+    if (!f) { if (_writeErrors != UINT32_MAX) ++_writeErrors; return; }
     char line[96];
     char mac[18];
     snprintf(mac, sizeof(mac), "%02X:%02X:%02X:%02X:%02X:%02X",
              d.mac[0], d.mac[1], d.mac[2], d.mac[3], d.mac[4], d.mac[5]);
     // Sanitize any commas in vendor / name
     char vendorSafe[12], nameSafe[20];
-    strncpy(vendorSafe, vendorText(d), sizeof(vendorSafe) - 1); vendorSafe[sizeof(vendorSafe)-1] = 0;
-    strncpy(nameSafe,   d.name,   sizeof(nameSafe)   - 1); nameSafe[sizeof(nameSafe)-1]   = 0;
-    for (char* p = vendorSafe; *p; p++) if (*p == ',') *p = '.';
-    for (char* p = nameSafe;   *p; p++) if (*p == ',') *p = '.';
+    safeCsvText(vendorSafe, sizeof vendorSafe, vendorText(d), strlen(vendorText(d)));
+    safeCsvText(nameSafe, sizeof nameSafe, d.name, sizeof d.name);
     snprintf(line, sizeof(line),
              "%lu,%s,%d,%s,%u,%s,%s\n",
              (unsigned long)millis(),
@@ -130,12 +184,17 @@ void SdLog::logEvent(const Detection& d) {
              d.channel,
              vendorSafe,
              nameSafe);
-    f.print(line);
+    if (f.print(line) != strlen(line) && _writeErrors != UINT32_MAX) ++_writeErrors;
     f.close();
 }
 
 void SdLog::wipe() {
+    Research::storageWipe();
     if (!_ready) return;
+    SD.remove("/dnsp-telemetry.txt");
+    SD.remove("/dnsp-fpv-pit.csv");
+    SD.remove("/dnsp-health.log");
+    SD.remove("/dnsp-health.old");
     // Walk the root and remove every file this firmware writes. Names are
     // /squachwatch-YYYYMMDD.log; matching on the prefix takes them all rather
     // than only today's, which is the whole point of a wipe.
@@ -174,4 +233,13 @@ void SdLog::tick() {
             openDaily();
         }
     }
+}
+
+
+bool SdLog::safeEnd() {
+    if (!_ready) return true;
+    const bool ok = _drive < 10 && disk_ioctl(_drive, CTRL_SYNC, nullptr) == RES_OK && _writeErrors == 0;
+    SD.end();
+    _ready = false;
+    return ok;
 }

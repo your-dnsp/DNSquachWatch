@@ -66,9 +66,9 @@ void uiNudgeTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
     snprintf(line, sizeof line, "to %s. This board runs %s.", s_ver, OtaCore::runningVersion());
     centred(t, y, Theme::WHITE, line);
     y += 12;
-    centred(t, y, Theme::W95_LIGHT, "It joins WiFi, installs, and restarts.");
+    centred(t, y, Theme::W95_LIGHT, "Upstream replaces DNSP features.");
     y += 12;
-    centred(t, y, Theme::W95_LIGHT, "Nothing changes if that fails.");
+    centred(t, y, Theme::W95_LIGHT, "Reinstall: DNSP image from your-dnsp.");
 
     // The count, big, in the middle of what is left.
     const Btns b = btns(t);
@@ -90,3 +90,4 @@ NudgeHit uiNudgeHit(TFT_eSPI& t, int x, int y) {
     return NudgeHit::NONE;
 }
 #endif // SQUACH_MESH
+

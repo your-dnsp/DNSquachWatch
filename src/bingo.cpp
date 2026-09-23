@@ -147,6 +147,8 @@ void begin(const DetectionEngine& eng) {
     tick(millis());
 }
 
+void flush(){applyPending();if(s_dirty){save();s_dirty=false;s_saveAt=0;}}
+
 void tick(uint32_t now) {
     applyPending();
 
@@ -247,3 +249,4 @@ Event takeEvent(DetectionType& type) {
 }
 
 }  // namespace Bingo
+

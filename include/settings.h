@@ -271,6 +271,9 @@ namespace Settings {
     // Minimum confidence an alert needs to interrupt with the ALERT
     // screen. LOW_CONF = no filtering (every match alerts, the
     // original behavior).
+    uint8_t alertSeconds();
+    void cycleAlertSeconds();
+    const char* alertSecondsLabel();
     Confidence  minConfidence();
     void        cycleMinConfidence();
     const char* minConfidenceLabel();
@@ -410,3 +413,4 @@ namespace Settings {
     uint8_t  huntProgress(Hunt h);
     void     setHuntProgress(Hunt h, uint8_t v);   // writes only on a change
 }
+

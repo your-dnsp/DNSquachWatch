@@ -1,0 +1,5 @@
+ssid=ExpressLRS TX Backpack 123456
+password=
+source=10.0.0.1
+system=1
+port=14550

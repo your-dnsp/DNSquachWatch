@@ -16,6 +16,7 @@ static const char* const AXON_BODY =
     "An Axon body camera's own WiFi, up while it pairs or offloads video. Worn by police officers: it means a camera is near, not necessarily one pointed at you.";
 
 const Device kDevices[] = {
+    {DetectionType::FPV,"FPV EQUIPMENT","ELRS receiver setup|ELRS transmitter setup|ELRS TX Backpack",nullptr,"An ExpressLRS setup or Backpack network. It can belong to a receiver or transmitter accessory. Names can be imitated. This is an equipment clue, not proof of an airborne drone."},
     // ---- HACKER -------------------------------------------------------------
     { DetectionType::HACKER, "FLIPPER ZERO", "Flipper", nullptr,
       "A Flipper Zero: a pocket tool for radio, NFC, RFID and infrared. Mostly a hobby toy, but it can replay signals, copy badges and flood phones with fake Bluetooth popups." },
@@ -30,11 +31,11 @@ const Device kDevices[] = {
 
     // ---- FLOCK: names first, then the one registered block, then the maybes --
     { DetectionType::FLOCK, "FLOCK POWER", nullptr, "FS Ext Battery",
-      "The Bluetooth name of a Flock Safety external battery, which runs cameras on poles with no mains power. One of these nearby means a Flock unit is close." },
+      "The Bluetooth name of a Flock Safety external battery, which runs cameras on poles with no mains power. A matching name is a clue, not proof: names can be imitated." },
     { DetectionType::FLOCK, "FLOCK SETUP", "Flock-Setup", "Flock_Setup",
-      "A Flock camera's setup network, used while an installer configures it. Near a new pole it usually means a camera going in, or one being serviced." },
+      "A network name matching Flock's setup pattern. It may indicate installation or servicing, but network names can be imitated; confirm the camera separately." },
     { DetectionType::FLOCK, "FLOCK CAMERA", "Flock-MA-L", nullptr,
-      "A radio on Flock Safety's own registered block: one of their plate-reader cameras, which photograph every passing car and feed a database police search across towns." },
+      "The MAC prefix matches Flock Safety's registered block. This is stronger evidence than a shared chip prefix, but does not prove the model, owner, or presence of a camera." },
     { DetectionType::FLOCK, "FLOCK BLE", "Flock-BLE", nullptr,
       "A Bluetooth radio from XUNTONG, the supplier behind Flock's Bluetooth parts. Flock reportedly turns Bluetooth off on newer units, and XUNTONG sells to others -- a lead." },
     { DetectionType::FLOCK, "ESP32 MODULE", "Flock-ESP32|Flok-ESP-S3|Flok-ESP-S2|Flok-ESP-C6", nullptr,
@@ -61,7 +62,7 @@ const Device kDevices[] = {
     { DetectionType::ALPR, "MOTOROLA", "ALPR-Mtrla", nullptr,
       "A radio on a Motorola Solutions block. Motorola owns Vigilant, a big plate-reader maker, but also makes police radios and much else: a possible plate reader, not a sure one." },
     { DetectionType::ALPR, "GENETEC", "ALPR-Gentec", nullptr,
-      "A radio on a Genetec block. Genetec's AutoVu reads licence plates for police and parking enforcement, often from cameras mounted on patrol cars." },
+      "A Genetec vendor-prefix match. Genetec offers AutoVu license-plate readers and other products. This prefix alone does not identify an ALPR camera; model support is unvalidated." },
 
     // ---- SKIMMER: names first -- over Bluetooth the label is just "BLE" -------
     { DetectionType::SKIMMER, "HC-05 MODULE", nullptr, "HC-0",
@@ -99,6 +100,16 @@ const Device kDevices[] = {
     { DetectionType::CAMERA, "AXIS", "Axis", nullptr,
       "An Axis Communications network camera, from one of the oldest professional CCTV makers. Common in shops, transit and city surveillance." },
 
+    { DetectionType::AXON, "AXON EQUIP", "Axon-equip|TASER-equip", nullptr,
+      "Experimental Axon/TASER company or service signature. Multiple clues can corroborate it. This does not confirm a body camera, its operator or recording state." },
+    { DetectionType::FLOCK, "FLOCK ACCESS", "Flock-acc?", nullptr,
+      "Experimental battery/accessory signature reported by Flock firmware research. An accessory is not proof of a nearby ALPR camera. Shared radio suppliers alone do not identify a camera." },
+    { DetectionType::FLOCK, "FLOCK NAME", "Flock-name?", nullptr,
+      "A Flock-like WiFi name, optionally corroborated by the vendor prefix. Names can be imitated. Visually verify nearby equipment before reporting it." },
+    { DetectionType::META, "GLASSES", "Glasses?", nullptr,
+      "Experimental combination of Luxottica/Meta fields or a glasses-like name. Not proof of recording. Glasses can capture without a phone connection; Bluetooth disconnection is not reliable protection." },
+    { DetectionType::META, "META RADIO", "Meta-radio", nullptr,
+      "A Meta-related Bluetooth identifier. Other Meta products or software may share it. This single clue does not confirm camera glasses or recording." },
     // ---- META ---------------------------------------------------------------
     { DetectionType::META, "RAY-BAN META", "RayBanMeta", nullptr,
       "Ray-Ban Meta glasses, matched on the Bluetooth ID only they send. They take photos and video from the wearer's eye line; a small white LED is the only warning." },
@@ -137,3 +148,4 @@ const Device* find(DetectionType t, const char* vendor, const char* name) {
 }
 
 }
+

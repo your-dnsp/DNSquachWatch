@@ -63,17 +63,17 @@ const OuiEntry kOuiTable[] = {
     // copied from another detector, after the one above turned out to be
     // wrong. Motorola Solutions absorbed Vigilant, so its blocks are the
     // nearest honest thing to the entry they replace.
-    {{0x00, 0x04, 0x7D}, "ALPR-Mtrla",   DetectionType::ALPR,       Confidence::HIGH_CONF},
-    {{0x00, 0x18, 0x85}, "ALPR-Mtrla",   DetectionType::ALPR,       Confidence::HIGH_CONF},
-    {{0x00, 0x1F, 0x92}, "ALPR-Mtrla",   DetectionType::ALPR,       Confidence::HIGH_CONF},
-    {{0x4C, 0xCC, 0x34}, "ALPR-Mtrla",   DetectionType::ALPR,       Confidence::HIGH_CONF},
+    {{0x00, 0x04, 0x7D}, "ALPR-Mtrla",   DetectionType::ALPR,       Confidence::LOW_CONF},
+    {{0x00, 0x18, 0x85}, "ALPR-Mtrla",   DetectionType::ALPR,       Confidence::LOW_CONF},
+    {{0x00, 0x1F, 0x92}, "ALPR-Mtrla",   DetectionType::ALPR,       Confidence::LOW_CONF},
+    {{0x4C, 0xCC, 0x34}, "ALPR-Mtrla",   DetectionType::ALPR,       Confidence::LOW_CONF},
     // Registered to Motorola Solutions Malaysia Sdn. Bhd. rather than to the
     // US parent, which is why it was missing from the sweep that found the
     // four above -- same company, different registry line.
-    {{0xB8, 0xE2, 0x8C}, "ALPR-Mtrla",   DetectionType::ALPR,       Confidence::HIGH_CONF},
+    {{0xB8, 0xE2, 0x8C}, "ALPR-Mtrla",   DetectionType::ALPR,       Confidence::LOW_CONF},
     // Genetec's AutoVu is an LPR platform, so these sit with the ALPR set.
-    {{0x00, 0xBF, 0x15}, "ALPR-Gentec",  DetectionType::ALPR,       Confidence::HIGH_CONF},
-    {{0x0C, 0xBF, 0x15}, "ALPR-Gentec",  DetectionType::ALPR,       Confidence::HIGH_CONF},
+    {{0x00, 0xBF, 0x15}, "ALPR-Gentec",  DetectionType::ALPR,       Confidence::LOW_CONF},
+    {{0x0C, 0xBF, 0x15}, "ALPR-Gentec",  DetectionType::ALPR,       Confidence::LOW_CONF},
     // Verkada sells LPR too but is mostly general-purpose surveillance, so
     // it is filed as a camera rather than overstated as a plate reader.
 
@@ -164,10 +164,11 @@ const UuidEntry kUuidTable[] = {
     {0x1101, "Skim-SPP",   DetectionType::SKIMMER},   // Classic SPP
     {0xFEED, "Tile",       DetectionType::TILE},      // Tile, Inc. — Bluetooth SIG assigned
     {0xFEEC, "Tile",       DetectionType::TILE},      // Tile, Inc. — second SIG-assigned UUID
-    // Its own label, not "Meta": this UUID is the one signature specific to
-    // Ray-Ban Meta, and the company-ID rows below say Meta too -- which is
-    // any Meta radio, Quest headsets included. Two different pages.
-    {0xFD5F, "RayBanMeta", DetectionType::META},      // Ray-Ban Meta glasses
+    // Company/service assignments identify vendors; research.cpp combines fields.
+    {0xFC81, "Axon-equip", DetectionType::AXON},
+    {0xFE6B, "TASER-equip", DetectionType::AXON},
+    {0xFE6C, "TASER-equip", DetectionType::AXON},
+    {0xFD5F, "Meta-radio", DetectionType::META},      // Meta service; not glasses-exclusive
     {0x3100, "Raven",      DetectionType::RAVEN},     // Raven gunshot detector
     {0x3200, "Raven",      DetectionType::RAVEN},
     {0x3300, "Raven",      DetectionType::RAVEN},
@@ -227,19 +228,12 @@ const uint16_t kSsidCount = sizeof(kSsidPrefixes) / sizeof(kSsidPrefixes[0]);
 // 16-bit BLE manufacturer IDs.
 const MfgIdEntry kMfgIdTable[] = {
     {0x004C, "Apple",      DetectionType::AIRTAG},    // AirTag / FindMy
+    {0x034D, "Axon-equip", DetectionType::AXON}, // SIG company assignment; model unverified
     {0x09C8, "XUNTONG",    DetectionType::FLOCK},     // Flock BLE radio supplier
 
     // ---- Camera glasses -------------------------------------------------
-    // Service UUID 0xFD5F caught Ray-Ban Meta and nothing else. These are
-    // the Bluetooth SIG company IDs the dedicated glasses-spotting apps
-    // actually key on, which is what widens this from one product to the
-    // category.
-    //
-    // The catch, and the reason META is no longer graded High: Meta uses
-    // these same company IDs across their other Bluetooth products, Quest
-    // headsets included. A hit here means a Meta radio nearby, not
-    // necessarily a camera pointed at you. The 0xFD5F match remains the
-    // specific one.
+    // These company identifiers are shared across products. A single field
+    // is a low-grade vendor clue; the research matcher adds corroboration.
     {0x01AB, "Meta",       DetectionType::META},      // Meta Platforms
     {0x058E, "Meta-Tech",  DetectionType::META},      // Meta Platforms Technologies
     {0x0D53, "Luxottica",  DetectionType::META},      // Ray-Ban's manufacturer
@@ -281,11 +275,13 @@ bool isIBeacon(const uint8_t* mfg, uint8_t len) {
 // --- lookups ---
 
 DetectionType lookupOui(const uint8_t* mac, Confidence* conf) {
-    if (!mac) return DetectionType::UNKNOWN;
+    if (!mac || (mac[0] & 1)) return DetectionType::UNKNOWN; // group/local addresses are not manufacturer assignments
     for (uint16_t i = 0; i < kOuiCount; i++) {
         if (mac[0] == kOuiTable[i].b[0] &&
             mac[1] == kOuiTable[i].b[1] &&
             mac[2] == kOuiTable[i].b[2]) {
+            // Explicit hacker-tool address patterns are not manufacturer assignments.
+            if ((mac[0] & 2) && kOuiTable[i].type != DetectionType::HACKER) continue;
             if (conf) *conf = kOuiTable[i].conf;
             return kOuiTable[i].type;
         }
@@ -423,6 +419,9 @@ Confidence confidenceFor(DetectionType t) {
     switch (t) {
         case DetectionType::FLOCK:
         case DetectionType::AXON:
+        case DetectionType::META:
+        case DetectionType::ALPR:
+            return Confidence::LOW_CONF; // generic identity does not establish model
         case DetectionType::SKIMMER:
         case DetectionType::CAMERA:
         case DetectionType::SAMSUNG_TAG:
@@ -440,16 +439,9 @@ Confidence confidenceFor(DetectionType t) {
         case DetectionType::IBEACON:
         case DetectionType::EVILTWIN:
             return Confidence::HIGH_CONF;
-        // Was High when it was only Ray-Ban Meta's 0xFD5F service UUID, which
-        // is specific to the glasses. Broadening it to the Meta, Luxottica and
-        // Snap company IDs catches the rest of the category and costs that
-        // precision: Meta puts the same IDs on Quest headsets. Medium is the
-        // conservative grade the rule at the top of this function asks for.
-        case DetectionType::META:
         case DetectionType::RAVEN:
         case DetectionType::AIRTAG:
         case DetectionType::DRONE:
-        case DetectionType::ALPR:
         case DetectionType::GOOGLE_TAG:
         // Rate-thresholded (see DetectionEngine's deauth-flood
         // tracking), not a single-frame guess -- a real burst pattern,
@@ -548,3 +540,4 @@ bool pwnagotchiName(const uint8_t* frame, uint32_t len,
     }
     return false;
 }
+

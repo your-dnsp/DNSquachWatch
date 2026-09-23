@@ -163,11 +163,17 @@ static const SimDetectionProfile* parseProfile(const char* s) {
 // so animation speed matches hardware when the GUI steps at ~30fps.
 static const uint32_t STEP_MS = 33;
 
+#include "dnsp_ui_checks.h"
+
 int main() {
     SimClock::virtualTime = true;
     // SQUACHSIM_ROTATE=1: rotation really turns the screen (see the shim).
     TFT_eSPI::rotates = getenv("SQUACHSIM_ROTATE") != nullptr;
+    if (getenv("DNSP_UI_TEST")) {
+        Preferences pref;pref.begin("squachy",false);pref.putBool("onboarded",true);pref.end();
+    }
     setup();
+    if (getenv("DNSP_UI_TEST")) return runDnspUiChecks();
 
     char line[128];
     while (fgets(line, sizeof(line), stdin)) {
@@ -228,3 +234,4 @@ int main() {
     }
     return 0;
 }
+

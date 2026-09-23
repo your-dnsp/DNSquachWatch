@@ -40,6 +40,7 @@ const char* radio(DetectionType t);      // "BLUETOOTH" / "WIFI"
 // back from loop() a while after it changed.
 void begin();
 void note(DetectionType t, int8_t rssi);
+void flush(); // commit pending progress before safe shutdown
 void tick(uint32_t now);
 
 struct Record {
@@ -62,3 +63,4 @@ DetectionType nemesis(const DetectionEngine& eng);
 void reset();
 
 }  // namespace Dex
+

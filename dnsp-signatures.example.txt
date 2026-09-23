@@ -1,0 +1,2 @@
+DNSP-SIG|1|2026092301
+1000|N|DNSP-LAB-TEST-ONLY|2|Synthetic test|https://example.org/dnsp-test|2026-09-23

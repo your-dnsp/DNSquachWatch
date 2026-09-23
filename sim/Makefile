@@ -56,7 +56,11 @@ EXTRA_CXXFLAGS ?=
 CXXFLAGS := -std=c++17 -O1 -g -Wall -Wno-unused-parameter $(EXTRA_CXXFLAGS) \
             -I$(SIM_DIR) -I$(INC) -DSQUACH_MESH=1
 
-UI_SRCS  := $(SRC)/theme.cpp \
+UI_SRCS  := $(SRC)/care.cpp $(SRC)/backup.cpp $(SRC)/ui_care.cpp $(SRC)/research_report.cpp $(SRC)/breakout.cpp $(SRC)/ui_breakout.cpp  $(SRC)/field_tools.cpp $(SRC)/field_storage.cpp $(SRC)/ui_field.cpp $(SRC)/language.cpp \
+            $(SRC)/research.cpp \
+            $(SRC)/research_storage.cpp \
+            $(SRC)/ui_research.cpp \
+            $(SRC)/theme.cpp \
             $(SRC)/squachy.cpp \
             $(SRC)/squachmesh.cpp \
             $(SRC)/mesh.cpp \
@@ -260,3 +264,4 @@ clean:
 	rm -rf out .nvs $(WASM_DIR)/squachsim.js $(WASM_DIR)/squachsim.wasm
 
 .PHONY: all live wasm shots clean
+

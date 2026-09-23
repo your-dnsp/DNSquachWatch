@@ -23,7 +23,18 @@ CXX      ?= g++
 CXXFLAGS := -std=c++17 -O1 -g -Wall -Wextra -Wno-unused-parameter \
             -I$(SIM) -I$(INC)
 
-TESTS := remote_id_test ibeacon_test signatures_test emitter_roundtrip_test ignore_list_test hacker_test pwnagotchi_test shim_fidelity_test squachmesh_test qwerty_test meshmsg_test device_info_test security_test emote_script_test blackbox_test bingo_test hunt_test bgretire_test autoquiet_test framepush_test touchfit_test logindex_test dex_test regulars_test
+research_test_SRCS := $(SRC)/research_report.cpp $(SRC)/research.cpp $(SRC)/signatures.cpp $(SRC)/field_tools.cpp $(SRC)/remote_id.cpp
+
+field_test_SRCS := $(SRC)/field_tools.cpp $(SRC)/remote_id.cpp
+
+breakout_test_SRCS := $(SRC)/breakout.cpp
+
+care_test_SRCS := $(SRC)/care.cpp $(SRC)/field_tools.cpp $(SRC)/remote_id.cpp
+
+TESTS := care_test verified_copy_test breakout_test glyph_test field_test research_test dnsp_detection_test dnsp_csv_test dnsp_settings_test remote_id_test ibeacon_test signatures_test emitter_roundtrip_test ignore_list_test hacker_test pwnagotchi_test shim_fidelity_test squachmesh_test qwerty_test meshmsg_test device_info_test security_test emote_script_test blackbox_test bingo_test hunt_test bgretire_test autoquiet_test framepush_test touchfit_test logindex_test dex_test regulars_test
+
+dnsp_detection_test_SRCS := $(SIM)/detection_sim.cpp $(SRC)/remote_id.cpp $(SRC)/detection_info.cpp $(SRC)/device_info.cpp $(SRC)/signatures.cpp
+dnsp_settings_test_SRCS := $(SRC)/settings.cpp
 
 # Only the units under test get linked in. Pulling the whole firmware
 # would drag in TFT_eSPI, NimBLE and the UI, and a test that needs a
@@ -50,7 +61,7 @@ emote_script_test_FLAGS      := -DSQUACH_MESH=1
 # The pages against the signature tables and the emulator's profiles.
 device_info_test_SRCS        := $(SRC)/device_info.cpp $(SRC)/signatures.cpp
 # The lock's arithmetic, through the sim's Preferences shim.
-security_test_SRCS           := $(SRC)/security.cpp $(SRC)/ignore_list.cpp
+security_test_SRCS           := $(SRC)/security.cpp $(SRC)/ignore_list.cpp $(SRC)/field_tools.cpp $(SRC)/remote_id.cpp
 # The rings, on the emulator's RAM flash. The two clock calls it makes are
 # stubbed in the test.
 blackbox_test_SRCS           := $(SRC)/blackbox.cpp
@@ -85,7 +96,7 @@ $(OUT):
 	@mkdir -p $(OUT)
 
 define TEST_rule
-$(OUT)/$(1): $(1).cpp $$($(1)_SRCS) | $(OUT)
+$(OUT)/$(1): $(1).cpp $$($(1)_SRCS) $$(wildcard $$(INC)/*.h) $$(wildcard $$(SIM)/*.h) Makefile | $(OUT)
 	@$$(CXX) $$(CXXFLAGS) $$($(1)_FLAGS) -o $$@ $$< $$($(1)_SRCS)
 
 .PHONY: run-$(1)
@@ -97,3 +108,4 @@ $(foreach t,$(TESTS),$(eval $(call TEST_rule,$(t))))
 
 clean:
 	@rm -rf $(OUT)
+

@@ -21,6 +21,7 @@ void note(const uint8_t* mac, DetectionType type);
 // The same, for a given day number -- what the tests and the emulator use.
 void noteOnDay(const uint8_t* mac, DetectionType type, uint32_t day);
 // Writes the table back a while after it changed. From loop().
+void flush(); // commit pending progress before safe shutdown
 void tick(uint32_t now);
 
 // The device's name, or null while it is not yet a regular.
@@ -33,3 +34,4 @@ uint8_t count();   // regulars (named) in the table
 void reset();
 
 }  // namespace Regulars
+

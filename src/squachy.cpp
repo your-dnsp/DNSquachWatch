@@ -1492,7 +1492,7 @@ void trigger(Event evt, DetectionType dt, uint32_t lifetimeTotal, uint32_t hitCo
                 }
                 // High confidence hits get the line straight — no need
                 // to hedge on something we're actually sure about. Med
-                // /Low get an honest number tacked on so a shakier
+                // /Low get the qualitative grade, not an uncalibrated percentage, so a shakier
                 // match doesn't read as equally certain.
                 // Passed in from the sighting rather than looked up from the
                 // type: the number he says out loud has to be about the
@@ -1500,8 +1500,8 @@ void trigger(Event evt, DetectionType dt, uint32_t lifetimeTotal, uint32_t hitCo
                 if (conf == Confidence::HIGH_CONF) {
                     say(base, 4500);
                 } else {
-                    snprintf(s_detBuf, sizeof(s_detBuf), "%s (~%u%%)",
-                             base, confidencePercent(conf));
+                    snprintf(s_detBuf, sizeof(s_detBuf), "%s (%s)",
+                             base, confidenceLabel(conf));
                     say(s_detBuf, 5500);
                 }
             }
@@ -6524,3 +6524,4 @@ void tick(TFT_eSPI& t, int cx, int topY, int availHeight, uint32_t now,
 }
 
 } // namespace Squachy
+

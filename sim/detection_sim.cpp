@@ -20,9 +20,14 @@
 #include <cstring>
 
 // ---- SdLog: no card, ever -------------------------------------------
+void SdLog::describe(char* out, size_t cap) { snprintf(out, cap, "No mounted microSD card. The desktop emulator has no card hardware."); }
 bool SdLog::begin() { _ready = false; return false; }
 void SdLog::logEvent(const Detection&) {}
 void SdLog::tick() {}
+bool SdLog::safeEnd(){_ready=false;return true;}
+void DetectionEngine::beginShutdown(){_stopping.store(true);}
+bool DetectionEngine::shutdownTick(){return true;}
+void SdLog::logPressure(uint32_t, uint32_t) {}
 void SdLog::wipe() {}
 void SdLog::openDaily() {}
 
@@ -58,6 +63,7 @@ void     setScanWindow(uint8_t) {}
 void     setScanPin(uint8_t)    {}
 
 void DetectionEngine::clearLog() {
+    alerts.clear();
     _logCount = 0;
     _logHead = 0;
     _latest = nullptr;
@@ -74,25 +80,17 @@ const Detection* DetectionEngine::logAt(uint8_t idx) const {
 
 void DetectionEngine::resetLifetime() {
     _lifetimeTotal = 0;
-    memset(_typeCounts, 0, sizeof(_typeCounts));
+    memset(_lifetimeByType, 0, sizeof(_lifetimeByType));
 }
 
 void DetectionEngine::pushLog(const Detection& d) {
-    _log[_logHead] = d;
-    _latest = &_log[_logHead];
-    _logHead = (uint8_t)((_logHead + 1) % LOG_CAP);
-    if (_logCount < LOG_CAP) _logCount++;
-    if ((uint8_t)d.type < (uint8_t)DetectionType::COUNT) {
-        _typeCounts[(uint8_t)d.type]++;
-        _lifetimeByType[(uint8_t)d.type]++;   // the DEX and the outfits read this
-    }
-    _lifetimeTotal++;
+    appendLive(d);
 }
 
 // Radio-fed entry points: inert here, nothing calls them in the sim.
 void DetectionEngine::postWiFi(const uint8_t*, int8_t, uint8_t, const char*, bool, bool) {}
 void DetectionEngine::postDeauth(const uint8_t*, int8_t, uint8_t) {}
-void DetectionEngine::postBle(Detection d) { pushLog(d); }
+void DetectionEngine::postBle(Detection d) { if(!_stopping.load())pushLog(d); }
 
 // Not a stub. Everything else in this file is inert because it would need
 // a radio, but the Remote ID decoder is pure arithmetic over a byte
@@ -196,3 +194,4 @@ void DetectionEngine::processDeauthQ() {}
 void DetectionEngine::expireStale() {}
 void DetectionEngine::hopChannel() {}
 void DetectionEngine::decayChannelActivity() {}
+

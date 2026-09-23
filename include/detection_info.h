@@ -9,6 +9,7 @@
 class DetectionEngine;
 
 namespace DetectionInfo {
+    const char* why(const Detection& d);
     // One paragraph per DetectionType, written to explain what the
     // thing actually is and why it's worth knowing about -- distinct
     // from squachy.cpp's DET_LINES, which are short in-the-moment
@@ -43,3 +44,4 @@ namespace DetectionInfo {
                            const DetectionEngine& eng);
     const char* titleFor(DetectionType t, const char* vendor, const char* name);
 }
+

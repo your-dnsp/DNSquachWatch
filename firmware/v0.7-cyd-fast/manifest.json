@@ -1,0 +1,38 @@
+{
+  "version": "DNSquachWatch v0.7-draft",
+  "baseline": "23ff05b111ecec2eb275287946b259837ad490d5",
+  "target": "cyd-fast",
+  "board": "ESP32 CYD ST7789",
+  "display_clock_mhz": 80,
+  "flash_clock_mhz": 40,
+  "flash_mode": "dio",
+  "flash_size_mb": 4,
+  "unsigned_local_usb_build": true,
+  "partition_layout_unchanged": true,
+  "files": [
+    {
+      "file": "bootloader.bin",
+      "offset": "0x1000",
+      "bytes": 17536,
+      "sha256": "0f65515a7e0dfe9cc4bc78c01bef79c941af1b2deb34d01ddd500ee3d465eedf"
+    },
+    {
+      "file": "partitions.bin",
+      "offset": "0x8000",
+      "bytes": 3072,
+      "sha256": "53b39ac69f21abb9b90559315ea6cb0ab00216639cdccf2fec5c61d04e0aa970"
+    },
+    {
+      "file": "boot_app0.bin",
+      "offset": "0xe000",
+      "bytes": 8192,
+      "sha256": "f94c5d786a7a8fab06ac5d10e33bf37711a6697636dc037559ea19cc410a17f0"
+    },
+    {
+      "file": "firmware.bin",
+      "offset": "0x10000",
+      "bytes": 1845376,
+      "sha256": "47df6b118676f5236131e5d14c6fa948c3fec78d8e5672fccf689121f1a6cd5a"
+    }
+  ]
+}

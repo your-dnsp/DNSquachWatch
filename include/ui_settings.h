@@ -13,6 +13,12 @@ enum class SettingsRow : uint8_t {
     RGB_SWAP,
     ROTATION_LOCK,
     BORING_MODE,
+    DNSP_GUIDE,
+    RESEARCH,
+    FIELD_TOOLS,
+    POWER_CONTROL,
+    SD_STATUS,
+    ALERT_DURATION,
     CONFIDENCE,
     AUTO_QUIET,     // "AUTO SNOOZE": how often one device may interrupt
     DETECTION_FILTER,
@@ -55,6 +61,14 @@ enum class SettingsRow : uint8_t {
     CLOCK_SIZE,      // on the DESK MODE page: small, medium, large
     CLOCK_BACKDROP,  // on the DESK MODE page: what plays inside the clock
     BACK,
+    BREAKOUT,
+    ALERTS,
+    FUN,
+    LANGUAGE,
+    ACCESSIBILITY,
+    ALERT_RULES,
+    CARE,
+    QUICK_MENU,
     COUNT,
     NONE = 255
 };
@@ -70,7 +84,7 @@ void uiSettingsScroll(int delta);     // positive = scroll down
 // Each page keeps its OWN scroll position, so leaving a page and coming back
 // puts you where you were instead of at the top -- the list is long enough
 // that losing your place was the most-felt annoyance on this screen.
-enum class SettingsPage : uint8_t { MAIN = 0, APPEARANCE = 1, SYSTEM = 2, DESK = 3 };
+enum class SettingsPage : uint8_t { MAIN = 0, APPEARANCE = 1, SYSTEM = 2, DESK = 3, ALERTS = 4, FUN = 5, COUNT = 6 };
 void         uiSettingsOpenPage(SettingsPage p);
 SettingsPage uiSettingsCurrentPage();
 
@@ -117,3 +131,4 @@ enum class SettingsConfirmTap { NONE, CONFIRM, CANCEL };
 void               uiSettingsSetConfirm(SettingsRow r);
 SettingsRow        uiSettingsConfirmRow();
 SettingsConfirmTap uiSettingsHitConfirm(int x, int y, int screenW, int screenH);
+

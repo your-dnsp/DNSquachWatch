@@ -25,7 +25,7 @@ struct Entry {
 // In type order, so indexOf() is arithmetic. Rarity is a judgement about
 // the world, not a count: a Tile is on every third keyring, a Raven is bolted
 // to a pole in a city that paid for it.
-const Entry ENTRY[ENTRIES] = {
+const Entry ENTRY[] = {
     { DetectionType::FLOCK, Rarity::UNCOMMON, "FLOCK", "POLICE KIT", "WIFI",
       "A plate-reading camera on a pole, sold to towns by the subscription. Photographs every car that passes, keeps the plate, and shares the list with anyone else who pays.",
       "Intersections. Car park exits. The one road into a subdivision.",
@@ -111,7 +111,14 @@ const Entry ENTRY[ENTRIES] = {
       "Conferences. The back of a hoodie. Two tables over.",
       "A radio-attack tool is in the room. Act natural. I am a lamp.",
       "A pocket toy for attacking radios. It announces itself." },
+    { DetectionType::FPV, Rarity::UNCOMMON, "FPV", "RADIO KIT", "WIFI",
+      "An ExpressLRS setup network from a receiver, transmitter or backpack. An equipment clue, not proof of a drone in flight. Normal ELRS control traffic is not decoded here.",
+      "Workbenches. Flight bags. Pilots setting up their own equipment.",
+      "Tiny aircraft, enormous enthusiasm. Mind the propellers.",
+      "A setup network. Not a flight detector or video receiver." },
 };
+static_assert(sizeof ENTRY / sizeof ENTRY[0] == ENTRIES,
+              "Every detection category needs a DEX card");
 
 Record   s_rec[ENTRIES];
 bool     s_newBest[ENTRIES];
@@ -189,10 +196,13 @@ void note(DetectionType t, int8_t rssi) {
 
 // Ten seconds after the last change, not on every sighting: a beacon that
 // bobs in and out of range would otherwise write flash all afternoon.
+void flush() {
+    if (!s_began || !s_dirty) return;
+    if(s_prefs.putBytes(KEY,s_rec,sizeof s_rec)==sizeof s_rec)s_dirty=false;
+}
 void tick(uint32_t now) {
     if (!s_began || !s_dirty || now - s_changed < 10000) return;
-    s_dirty = false;
-    s_prefs.putBytes(KEY, s_rec, sizeof s_rec);
+    flush();
 }
 
 const Record& record(DetectionType t) {
@@ -226,3 +236,4 @@ void reset() {
 }
 
 }  // namespace Dex
+

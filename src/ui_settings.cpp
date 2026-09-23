@@ -1,5 +1,8 @@
 // SquachWatch-CYD — settings screen implementation
 #include "ui_settings.h"
+#include "care.h"
+#include "field_tools.h"
+#include "language.h"
 #include "ota_core.h"
 #include "ota_wifi.h"
 #include "theme.h"
@@ -23,7 +26,8 @@ static const int TOP_MARGIN = 32;
 
 // One scroll position per page, not one shared: see SettingsPage in the header.
 static SettingsPage s_page = SettingsPage::MAIN;
-static int g_scrollFor[4] = { 0, 0, 0, 0 };
+static constexpr uint8_t PAGE_COUNT = (uint8_t)SettingsPage::COUNT;
+static int g_scrollFor[PAGE_COUNT] = {};
 #define g_scroll (g_scrollFor[(uint8_t)s_page])
 
 // BACK is pinned along the bottom now. Height of that strip, reserved out of
@@ -34,7 +38,9 @@ static int g_scrollFor[4] = { 0, 0, 0, 0 };
 
 // Which groups are folded shut. Session-only on purpose: a fold is a "get this
 // out of my way for a minute", not a preference worth surviving a reboot.
-static bool s_folded[6] = { false, false, false, false, false, false };
+static constexpr uint8_t GROUP_COUNT = 10;
+static bool s_foldedFor[PAGE_COUNT][GROUP_COUNT] = {};
+#define s_folded (s_foldedFor[(uint8_t)s_page])
 
 // Whether a watch/hunt target exists. Set every tick from the engine, read by
 // buildDisplayList() -- which has no engine of its own, and is called by the
@@ -52,34 +58,27 @@ static uint8_t s_dexCaught = 0;
 // has turned off) are filtered out by visibleRows() below rather than
 // removed here, so their SettingsRow values stay stable regardless of
 // which mode is active.
+// Main menu contains destinations; detailed alert controls live on their own page.
 static const SettingsRow ALL_ROWS[] = {
-    SettingsRow::BORING_MODE, SettingsRow::CONFIDENCE, SettingsRow::AUTO_QUIET,
-    SettingsRow::DETECTION_FILTER,
-    SettingsRow::IGNORED_DEVICES,
-    // APPEARANCE opens the display page -- see APPEARANCE_ROWS. It sat at the
-    // very top of this list, which put it under the first thumb that opened
-    // the screen and got pressed by accident. Down here with SQUACHMESH it is
-    // beside the other row that opens a page rather than changing a value.
-    SettingsRow::APPEARANCE,
+    SettingsRow::QUICK_MENU,
+    SettingsRow::ALERTS, SettingsRow::FIELD_TOOLS, SettingsRow::RESEARCH,
+    SettingsRow::APPEARANCE, SettingsRow::ACCESSIBILITY, SettingsRow::LANGUAGE,
+    SettingsRow::DESK_MODE, SettingsRow::FUN,
 #if SQUACH_MESH
-    // One row, not two: NAME moved inside the SquachMesh menu, which is a
-    // row back on a list carrying twenty-five with three colliding in
-    // portrait.
     SettingsRow::SQUACHMESH,
 #endif
-    // SIZE, OUTFIT, PET and SHADES COLOR all live on the APPEARANCE page now
-    // -- see APPEARANCE_ROWS. Everything about how he LOOKS is on one page;
-    // what stays here is what he DOES.
-    SettingsRow::REPLAY_INTRO, SettingsRow::SHOW_OFF, SettingsRow::VIEW_DIARY,
-    SettingsRow::BINGO, SettingsRow::DEX, SettingsRow::DESK_MODE,
-    SettingsRow::POWER_SAVER,
-    SettingsRow::SECURITY,
-    // CALIBRATE, CHECK COLORS, DIAGNOSTICS and RESET STATS moved behind the
-    // SYSTEM row -- see SYSTEM_ROWS. They are the four you touch once a year,
-    // and they were sitting below everything you actually adjust.
-    SettingsRow::SYSTEM,
-    // No BACK here: it is pinned to the bottom edge instead, so it is reachable
-    // from anywhere in the list rather than only from the end of it.
+    SettingsRow::CARE, SettingsRow::DNSP_GUIDE,
+    SettingsRow::SD_STATUS, SettingsRow::POWER_SAVER, SettingsRow::SECURITY,
+    SettingsRow::SYSTEM, SettingsRow::POWER_CONTROL,
+};
+static const SettingsRow ALERT_ROWS[] = {
+    SettingsRow::ALERT_DURATION, SettingsRow::CONFIDENCE, SettingsRow::AUTO_QUIET,
+    SettingsRow::DETECTION_FILTER, SettingsRow::ALERT_RULES, SettingsRow::IGNORED_DEVICES,
+};
+static const SettingsRow FUN_ROWS[] = {
+    SettingsRow::BREAKOUT, SettingsRow::BINGO, SettingsRow::DEX,
+    SettingsRow::VIEW_DIARY, SettingsRow::SHOW_OFF, SettingsRow::REPLAY_INTRO,
+    SettingsRow::BORING_MODE,
 };
 static const uint8_t ALL_ROWS_N = sizeof(ALL_ROWS) / sizeof(ALL_ROWS[0]);
 
@@ -124,6 +123,8 @@ static const uint8_t APPEARANCE_ROWS_N = sizeof(APPEARANCE_ROWS) / sizeof(APPEAR
 // It used to be the main one, until that list lost its NICKNAME row and
 // the APPEARANCE page outgrew it.
 static const uint8_t LIST_MAX_N = APPEARANCE_ROWS_N > ALL_ROWS_N ? APPEARANCE_ROWS_N : ALL_ROWS_N;
+static_assert(sizeof(ALERT_ROWS)/sizeof(ALERT_ROWS[0]) <= LIST_MAX_N, "alert list capacity");
+static_assert(sizeof(FUN_ROWS)/sizeof(FUN_ROWS[0]) <= LIST_MAX_N, "games list capacity");
 static_assert(SYSTEM_ROWS_N <= LIST_MAX_N, "the display list is sized off LIST_MAX_N");
 static_assert(DESK_ROWS_N <= LIST_MAX_N, "the display list is sized off LIST_MAX_N");
 // Kept as a thin shim over s_page so nothing that reads it has to change.
@@ -151,16 +152,25 @@ static bool isSquachyOnlyRow(SettingsRow r) {
            r == SettingsRow::PET || r == SettingsRow::TOP_HAT;
 }
 
-enum class RowGroupId : uint8_t { APPEARANCE, BEHAVIOR, SQUACHY, SYSTEM, DESK, SQUAD };
+enum class RowGroupId : uint8_t { APPEARANCE, BEHAVIOR, SQUACHY, SYSTEM, DESK, SQUAD, TOOLS, DISPLAY_OPTIONS, PLAY, HELP };
 
 static RowGroupId groupFor(SettingsRow r) {
-    // Appearance sits with the Squachy rows because that is where it was asked
-    // for and where a thumb opening this screen will not hit it by accident.
-    // Boring mode filters every OTHER row in that group, though, and a lone
-    // "APPEARANCE" under a SQUACHY heading in a mode with no Squachy reads as
-    // a leftover. It goes to SYSTEM there -- still reachable, which is the
-    // part that matters, since the display rows live behind it.
-    if (r == SettingsRow::APPEARANCE && Settings::boringMode()) return RowGroupId::SYSTEM;
+    if (s_page == SettingsPage::MAIN) {
+        switch (r) {
+            case SettingsRow::QUICK_MENU:
+            case SettingsRow::WATCH_TARGET: case SettingsRow::HUNT_TARGET:
+            case SettingsRow::ALERTS: case SettingsRow::FIELD_TOOLS: case SettingsRow::RESEARCH:
+                return RowGroupId::TOOLS;
+            case SettingsRow::APPEARANCE: case SettingsRow::ACCESSIBILITY:
+            case SettingsRow::LANGUAGE: case SettingsRow::DESK_MODE:
+                return RowGroupId::DISPLAY_OPTIONS;
+            case SettingsRow::FUN: case SettingsRow::SQUACHMESH: return RowGroupId::PLAY;
+            case SettingsRow::CARE: case SettingsRow::DNSP_GUIDE: return RowGroupId::HELP;
+            default: return RowGroupId::SYSTEM;
+        }
+    }
+    if (s_page == SettingsPage::ALERTS) return RowGroupId::BEHAVIOR;
+    if (s_page == SettingsPage::FUN) return RowGroupId::PLAY;
     switch (r) {
         // TIME ZONE sat on the SYSTEM page too, the same setting twice. Only
         // the clock reads it, so it lives with the clock.
@@ -194,6 +204,7 @@ static RowGroupId groupFor(SettingsRow r) {
         case SettingsRow::BANTER:
             return RowGroupId::APPEARANCE;
         case SettingsRow::BORING_MODE:
+        case SettingsRow::ALERT_DURATION:
         case SettingsRow::CONFIDENCE:
         case SettingsRow::AUTO_QUIET:
         case SettingsRow::DETECTION_FILTER:
@@ -217,7 +228,11 @@ static RowGroupId groupFor(SettingsRow r) {
 static const char* groupName(RowGroupId g) {
     switch (g) {
         case RowGroupId::APPEARANCE: return "APPEARANCE";
-        case RowGroupId::BEHAVIOR:   return "BEHAVIOR";
+        case RowGroupId::BEHAVIOR:   return "ALERTS & DETECTION";
+        case RowGroupId::TOOLS: return "DETECTION & FIELDWORK";
+        case RowGroupId::DISPLAY_OPTIONS: return "DISPLAY & LANGUAGE";
+        case RowGroupId::PLAY: return "GAMES & SQUACHY";
+        case RowGroupId::HELP: return "HELP & LEARNING";
         case RowGroupId::SQUACHY:    return "SQUACHY";
         case RowGroupId::DESK:       return "DESK";
         case RowGroupId::SQUAD:      return "SQUAD";
@@ -244,6 +259,8 @@ static uint16_t groupColor(RowGroupId g) {
 // dependent) so a header only ever appears above a group that
 // actually has visible rows in it. Shared by drawing and hit-testing
 // so a tap always lands on whatever's actually on screen.
+// A group heading can precede every row, including both dynamic tracking rows.
+// Six distinct groups does not mean at most six headings when groups repeat.
 struct DisplayItem {
     bool       isHeader;
     RowGroupId group;
@@ -258,6 +275,8 @@ static uint8_t buildDisplayList(DisplayItem* out) {
     if (s_page == SettingsPage::APPEARANCE) { src = APPEARANCE_ROWS; srcN = APPEARANCE_ROWS_N; }
     else if (s_page == SettingsPage::SYSTEM) { src = SYSTEM_ROWS;    srcN = SYSTEM_ROWS_N; }
     else if (s_page == SettingsPage::DESK)   { src = DESK_ROWS;      srcN = DESK_ROWS_N; }
+    else if (s_page == SettingsPage::ALERTS) { src = ALERT_ROWS; srcN = sizeof(ALERT_ROWS)/sizeof(ALERT_ROWS[0]); }
+    else if (s_page == SettingsPage::FUN) { src = FUN_ROWS; srcN = sizeof(FUN_ROWS)/sizeof(FUN_ROWS[0]); }
     // The tracking rows come first on the main page, and only when a target is
     // actually set -- the whole point is that a watch stops being invisible.
     if (s_page == SettingsPage::MAIN) {
@@ -384,6 +403,7 @@ static void computeGeom(TFT_eSPI& t, int screenH, int& top, int& bodyBottom,
     headerH = t.fontHeight() + 6;
     t.setTextSize(1);
     tallH   = t.fontHeight() + big + 7;
+    if(Field::config.large || Field::config.language){rowH=42; tallH=46;headerH=22;}
 }
 
 // Row height is decided in exactly one place, itemHeight() below, shared by
@@ -396,8 +416,11 @@ void uiSettingsInit(TFT_eSPI& t) {
     // visit -- carrying it across a fresh entry would drop you mid-list with
     // no idea why.
     s_page = SettingsPage::MAIN;
-    for (uint8_t i = 0; i < 4; i++) g_scrollFor[i] = 0;
-    for (uint8_t i = 0; i < 6; i++) s_folded[i] = false;
+    for (uint8_t i = 0; i < PAGE_COUNT; i++) {
+        g_scrollFor[i] = 0;
+        for (uint8_t j = 0; j < GROUP_COUNT; j++) s_foldedFor[i][j] = false;
+    }
+
     // Any pending question dies with the screen. Coming back to Settings and
     // finding a confirm panel still up from last time would be answering
     // something you no longer remember asking.
@@ -436,8 +459,8 @@ static const ConfirmText CONFIRMS[] = {
     // hides every Squachy row, so the first thing it does is take away the
     // OUTFIT row, and the way back is not obvious once it has.
     { SettingsRow::BORING_MODE, "BORING MODE?",
-      "Hides Squachy and his rows,",
-      "OUTFIT included. Same row undoes.", "TURN ON" },
+      "Turns off Squachy activities.",
+      "Turn this off to restore them.", "TURN ON" },
     { SettingsRow::REPLAY_INTRO, "REPLAY INTRO?",
       "Runs the first-boot walkthrough",
       "again, from the top.", "REPLAY" },
@@ -527,6 +550,7 @@ void uiSettingsScroll(int delta) {
 }
 
 void uiSettingsOpenPage(SettingsPage p) {
+    if ((uint8_t)p >= PAGE_COUNT) return;
     s_page = p;
     // Deliberately NOT resetting g_scroll: each page keeps its own position,
     // so coming back to a page puts you where you left it. That is the whole
@@ -599,7 +623,9 @@ static void drawHeader(TFT_eSPI& t, int w, int y, int hgt, RowGroupId g) {
     t.setTextSize(Theme::uiTextSize(t, 1));
     t.setTextColor(groupColor(g), Theme::BG);
     t.setCursor(8, y + (hgt - t.fontHeight()) / 2);
-    t.print(groupName(g));
+    t.print(s_folded[(uint8_t)g] ? "+ " : "- ");
+    if(Field::config.language)Lang::draw(t,groupName(g),26,y,w-38,hgt,Theme::CYAN);
+    else t.print(groupName(g));
 }
 
 // `compact` drops the row text from size 2 to size 1. Used in portrait,
@@ -654,6 +680,11 @@ static void rowPanel(TFT_eSPI& t, int w, int y, int hgt) {
 static void drawTwoLineRow(TFT_eSPI& t, int w, int y, int hgt, const char* label,
                            const char* value, uint16_t labelColor, bool cycles) {
     rowPanel(t, w, y, hgt);
+    if(Field::config.language){
+        Lang::draw(t,label,8,y+2,w-26,18,Theme::WHITE);
+        if(value)Lang::draw(t,value,8,y+20,w-26,18,Theme::CYAN);
+        return;
+    }
     t.setTextSize(1);
     t.setTextColor(labelColor, Theme::BG);
     t.setCursor(8, y + 2);
@@ -689,6 +720,11 @@ static void drawRow(TFT_eSPI& t, int w, int y, int hgt, const char* label,
     // backing below stays anyway: it costs nothing now and it is what keeps
     // text crisp if a row is ever drawn without a panel behind it.
     rowPanel(t, w, y, hgt);
+    if(Field::config.language){
+        Lang::draw(t,label,8,y+2,w-26,18,Theme::WHITE);
+        if(value)Lang::draw(t,value,8,y+20,w-26,18,Theme::CYAN);
+        return;
+    }
     t.setTextSize(compact ? 1 : Theme::uiMenuTextSize(t));
     t.setTextColor(danger ? Theme::RED : labelColor, Theme::BG);
     t.setCursor(8, y + (hgt - t.fontHeight()) / 2);
@@ -715,6 +751,13 @@ static void rowContent(SettingsRow r, const DetectionEngine& eng, char* valBuf, 
         case SettingsRow::THEME:
             label = "THEME"; value = Theme::kPalettes[Settings::paletteIndex()].name;
             break;
+        case SettingsRow::CARE: label = "HELP & RECOVERY"; value = ">"; break;
+        case SettingsRow::QUICK_MENU: label = "FOUR FAVORITES"; value = ">"; break;
+        case SettingsRow::ALERTS: label = "ALERTS & DETECTION"; value = ">"; break;
+        case SettingsRow::FUN: label = "GAMES & SQUACHY"; value = ">"; break;
+        case SettingsRow::LANGUAGE: label = "LANGUAGE"; value = ">"; break;
+        case SettingsRow::ACCESSIBILITY: label = "ACCESSIBILITY"; value = ">"; break;
+        case SettingsRow::ALERT_RULES: label = "EVIDENCE & MUTES"; value = ">"; break;
         case SettingsRow::SYSTEM:
             label = "SYSTEM"; value = OtaCore::availableVersion()[0] ? "UPDATE >" : ">";
             break;
@@ -778,6 +821,21 @@ static void rowContent(SettingsRow r, const DetectionEngine& eng, char* valBuf, 
             break;
         case SettingsRow::CONFIDENCE:
             label = "ALERT FILTER"; value = Settings::minConfidenceLabel();
+            break;
+        case SettingsRow::POWER_CONTROL:
+            label = "SHUTDOWN / REBOOT"; value = ">"; break;
+        case SettingsRow::BREAKOUT:
+            label = "BREAKOUT"; value = ">"; break;
+        case SettingsRow::FIELD_TOOLS:
+            label = "FIELD TOOLS"; value = ">"; break;
+        case SettingsRow::RESEARCH:
+            label = "RESEARCH LAB"; value = ">"; break;
+        case SettingsRow::DNSP_GUIDE:
+            label = "DNSP WALKTHROUGH"; value = ">"; break;
+        case SettingsRow::SD_STATUS:
+            label = "MICROSD STATUS"; value = ">"; break;
+        case SettingsRow::ALERT_DURATION:
+            label = "ALERT LENGTH"; value = Settings::alertSecondsLabel();
             break;
         case SettingsRow::AUTO_QUIET:
             label = "AUTO SNOOZE"; value = Settings::autoQuietLabel();
@@ -977,11 +1035,13 @@ switch (Settings::background()) {
     const char* pageTitle = ">> SETTINGS <<";
     if (s_page == SettingsPage::APPEARANCE) pageTitle = ">> APPEARANCE <<";
     else if (s_page == SettingsPage::SYSTEM) pageTitle = ">> SYSTEM <<";
+    else if (s_page == SettingsPage::ALERTS) pageTitle = ">> ALERTS <<";
+    else if (s_page == SettingsPage::FUN) pageTitle = ">> GAMES & SQUACHY <<";
     else if (s_page == SettingsPage::DESK)   pageTitle = ">> DESK MODE <<";
     Theme::drawTitleBar(t, pageTitle);
 
     // +6, not +4: four group headers plus the two tracking rows.
-    DisplayItem items[LIST_MAX_N + 6];
+    DisplayItem items[2 * (LIST_MAX_N + 2)];
     uint8_t n = buildDisplayList(items);
     // Clamped here rather than in uiSettingsScroll(): row heights come from
     // live font metrics, which that function has no display to ask.
@@ -1037,7 +1097,7 @@ bool uiSettingsTapHeader(TFT_eSPI& t, int x, int y, int screenW, int screenH) {
     int top, bodyBottom, rowH, headerH, tallH;
     computeGeom(t, screenH, top, bodyBottom, rowH, headerH, tallH);
 
-    DisplayItem items[LIST_MAX_N + 6];
+    DisplayItem items[2 * (LIST_MAX_N + 2)];
     uint8_t n = buildDisplayList(items);
     // Same clamp the draw applies, so a tap can never be tested against a
     // scroll position the screen is not actually showing.
@@ -1068,7 +1128,7 @@ SettingsRow uiSettingsHitTest(TFT_eSPI& t, int x, int y, int screenW, int screen
     int top, bodyBottom, rowH, headerH, tallH;
     computeGeom(t, screenH, top, bodyBottom, rowH, headerH, tallH);
 
-    DisplayItem items[LIST_MAX_N + 6];
+    DisplayItem items[2 * (LIST_MAX_N + 2)];
     uint8_t n = buildDisplayList(items);
     // Same clamp the draw applies, so a tap can never be tested against a
     // scroll position the screen is not actually showing.
@@ -1088,3 +1148,4 @@ SettingsRow uiSettingsHitTest(TFT_eSPI& t, int x, int y, int screenW, int screen
     }
     return SettingsRow::NONE;
 }
+

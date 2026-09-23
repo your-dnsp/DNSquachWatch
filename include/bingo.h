@@ -34,6 +34,7 @@ void begin(const DetectionEngine& eng);
 
 // From loop(): saves a mark that is waiting, and deals a new card when the
 // week turns over.
+void flush(); // commit pending progress before safe shutdown
 void tick(uint32_t now);
 
 // A sighting. Safe from the radio task: RAM only.
@@ -60,3 +61,4 @@ void newCard();
 Event takeEvent(DetectionType& type);
 
 }  // namespace Bingo
+

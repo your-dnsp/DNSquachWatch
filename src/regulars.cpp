@@ -98,10 +98,13 @@ void note(const uint8_t* mac, DetectionType type) {
     noteOnDay(mac, type, Clock::localDay());
 }
 
+void flush() {
+    if (!s_began || !s_dirty) return;
+    if(s_prefs.putBytes(KEY,s_t,sizeof s_t)==sizeof s_t)s_dirty=false;
+}
 void tick(uint32_t now) {
     if (!s_began || !s_dirty || now - s_changed < 10000u) return;
-    s_dirty = false;
-    s_prefs.putBytes(KEY, s_t, sizeof s_t);
+    flush();
 }
 
 const char* nameFor(const uint8_t* mac) {
@@ -136,3 +139,4 @@ void reset() {
 }
 
 }  // namespace Regulars
+

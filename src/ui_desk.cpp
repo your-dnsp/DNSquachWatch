@@ -35,7 +35,7 @@ uint32_t  s_alertAt     = 0;
 bool      s_alertOn     = false;   // rather than testing s_alertAt, which can be 0
 int       s_cardX = 0, s_cardY = 0, s_cardW = 98;
 constexpr int      CARD_W = 98, CARD_H = 40;
-constexpr uint32_t CARD_MS = 9000;
+
 constexpr uint32_t FOCUS_MS = 25u * 60u * 1000u;
 constexpr uint32_t BREAK_MS =  5u * 60u * 1000u;
 constexpr uint32_t CHIME_MS = 6000;
@@ -145,7 +145,7 @@ void uiDeskInit(TFT_eSPI& t) {
 bool uiDeskChime(uint32_t now) { return s_chimeAt && now - s_chimeAt < CHIME_MS; }
 
 void uiDeskAlert(const Detection& d, uint32_t now) { s_alert = d; s_alertAt = now; s_alertOn = true; }
-bool uiDeskAlertUp(uint32_t now) { return s_alertOn && now - s_alertAt < CARD_MS; }
+bool uiDeskAlertUp(uint32_t now) { return s_alertOn && now - s_alertAt < (uint32_t)Settings::alertSeconds() * 1000u; }
 const Detection* uiDeskAlertDetection() { return &s_alert; }
 bool uiDeskHitAlert(int x, int y, uint32_t now) {
     return uiDeskAlertUp(now) && x >= s_cardX - 4 && x <= s_cardX + s_cardW + 4 &&
@@ -757,3 +757,4 @@ bool uiDeskHitBack(int x, int y, int screenW, int screenH) {
     timerRects(screenW, screenH, tx, ty, tw, th, bx, bw);
     return x >= bx && x <= bx + bw && y >= ty && y <= ty + th;
 }
+

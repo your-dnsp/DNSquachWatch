@@ -42,6 +42,11 @@ struct SimDetectionProfile {
 // so those get a locally-administered prefix rather than one that would claim
 // to be a real registration.
 inline const SimDetectionProfile kSimProfiles[] = {
+    { DetectionType::AXON, {2,3,0x4d}, "Axon-equip", "", -60, false, "Experimental Axon equipment" },
+    { DetectionType::FLOCK, {2,9,0xc8}, "Flock-acc?", "", -60, false, "Experimental accessory" },
+    { DetectionType::FLOCK, {2,1,2}, "Flock-name?", "", -60, true, "Flock naming pattern" },
+    { DetectionType::META, {2,0xd,0x53}, "Glasses?", "", -60, false, "Possible glasses composite" },
+    { DetectionType::META, {2,0xfd,0x5f}, "Meta-radio", "", -60, false, "Generic Meta service" },
     // FLOCK -- the first is what `T FLOCK` gets
     { DetectionType::FLOCK,       {0x24, 0x0A, 0xC4}, "Flock-ESP32", "",               -68, true,  "ESP32 module (maybe Flock)" },
     { DetectionType::FLOCK,       {0xB4, 0x1E, 0x52}, "Flock-MA-L",  "",               -70, true,  "Flock camera (registered)" },
@@ -69,6 +74,7 @@ inline const SimDetectionProfile kSimProfiles[] = {
     { DetectionType::SKIMMER,     {0x02, 0xB7, 0x04}, "BLE",         "BT04-A",         -55, false, "BT04-A module" },
     { DetectionType::SKIMMER,     {0x20, 0x13, 0x00}, "Skim-Linvor", "linvor",         -51, false, "Linvor HC-06" },
     { DetectionType::SKIMMER,     {0x02, 0x11, 0x01}, "Skim-SPP",    "",               -53, false, "Bluetooth serial port" },
+    { DetectionType::FPV, {0x02,0x11,0x22}, "ELRS receiver setup", "ExpressLRS RX", -58, true, "FPV equipment clue" },
     // RAVEN, AIRTAG, DRONE
     { DetectionType::RAVEN,       {0x02, 0x31, 0x00}, "Raven",       "Gunshot Sensor", -79, false, "Raven gunshot sensor" },
     { DetectionType::AIRTAG,      {0x02, 0x00, 0x4C}, "Apple",       "AirTag",         -42, false, "Apple AirTag" },
@@ -166,3 +172,4 @@ inline const char* simProfileCatalog() {
     if (o < sizeof buf) snprintf(buf + o, sizeof buf - o, "]");
     return buf;
 }
+

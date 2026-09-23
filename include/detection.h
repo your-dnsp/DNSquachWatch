@@ -4,9 +4,11 @@
 #include "squachmesh.h"
 #endif
 #include "state.h"
+#include "alert_queue.h"
 #include "sd_log.h"
 #include "remote_id.h"
 #include <Preferences.h>
+#include <atomic>
 #include <cstring>   // memcmp, for the inline isWatched()/isHunted() below
 
 // A single unfiltered BLE sighting from the manual raw scanner (see
@@ -138,6 +140,8 @@ void     logDump();
 
 class DetectionEngine {
 public:
+    AlertQueue alerts;
+    uint32_t bleQueueDropped() { return _blePending.dropped(); }
     bool     init();
     void     loop();
     void     clearLog();
@@ -160,7 +164,7 @@ public:
     }
 
     // Settings-menu "reset stats" action: zeroes the persisted lifetime
-    // total and the live per-type counters. Does not touch the log
+    // total and lifetime per-type counters. Does not touch the live log
     // itself — that's clearLog()'s job.
     void resetLifetime();
 
@@ -246,6 +250,8 @@ public:
     // Bluetooth update mode (see ota_ble.h) gets the radio to itself: BLE
     // scanning, WiFi capture and mesh advertising all stop until
     // stopUpdateRadio(). Call startUpdateRadio() BEFORE OtaBle::begin().
+    void beginShutdown();
+    bool shutdownTick(); // one bounded pending storage write per pass; true once drained
     void     startUpdateRadio();
     void     stopUpdateRadio();
 
@@ -539,6 +545,28 @@ private:
     uint8_t        _ridMac[6] = {0, 0, 0, 0, 0, 0};
 
     // Detection log
+    bool appendLive(const Detection& d) {
+        if (d.type == DetectionType::UNKNOWN || (uint8_t)d.type >= (uint8_t)DetectionType::COUNT) return false;
+        if (_logCount == LOG_CAP && _log[_logHead].active) {
+            auto& n = _typeCounts[(uint8_t)_log[_logHead].type];
+            if (n) --n;
+        }
+        _log[_logHead] = d;
+        _log[_logHead].name[sizeof d.name - 1] = 0;
+        _log[_logHead].prevRssi = d.rssi;
+        _log[_logHead].prevAt = (uint8_t)(millis() >> 11);
+        _latest = &_log[_logHead];
+        _latestChangeMs = millis();
+        _logHead = (_logHead + 1) % LOG_CAP;
+        if (_logCount < LOG_CAP) ++_logCount;
+        if (d.active) ++_typeCounts[(uint8_t)d.type];
+        ++_lifetimeTotal;
+        ++_lifetimeByType[(uint8_t)d.type];
+        alerts.push(*_latest);
+        return true;
+    }
+    DetectionQueue<16> _blePending;
+    void recordObservation(Detection d);
     Detection  _log[LOG_CAP];
     uint8_t    _logCount = 0;            // number of valid entries (<= LOG_CAP)
     uint8_t    _logHead  = 0;            // next slot to write
@@ -549,6 +577,7 @@ private:
     // Live counters (one per DetectionType)
     uint16_t _typeCounts[(uint8_t)DetectionType::COUNT] = {0};
 
+    std::atomic<bool> _stopping{false};
     SdLog       _sd;
     Preferences _prefs;
     uint32_t    _lifetimeTotal = 0;
@@ -601,3 +630,4 @@ private:
     void hopChannel();
     void decayChannelActivity();
 };
+
