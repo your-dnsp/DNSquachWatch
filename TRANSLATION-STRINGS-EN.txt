@@ -1,0 +1,198 @@
+DNSquachWatch English translation catalog
+
+117 strings are currently included in the on-device translation catalog; v1.1 additions are listed below for human translation and later catalog integration.
+Keep punctuation, placeholders, URLs, and capitalization meaningful in each translation.
+
+001. A network name matched. Names can be changed or imitated.
+002. A radio pattern matched. Inspect the evidence; this does not prove wrongdoing.
+003. ACCESSIBILITY
+004. ALERT FILTER
+005. ALERT LENGTH
+006. ALERT RULES
+007. APPEARANCE
+008. AUTO SNOOZE
+009. An upstream update replaces DNSP firmware. Reinstall a DNSP image from your-dnsp.
+010. BACK
+011. BACKGROUND
+012. BANTER
+013. BEHAVIOR
+014. BORING MODE
+015. BRIGHT -  +
+016. Bluetooth fields matched a listed rule. Other devices can share or imitate these fields.
+017. Broadcast claims; identity not authenticated
+018. CALIBRATE TOUCH
+019. CANCEL
+020. CHECK COLORS
+021. CLEAR MUTES
+022. CLOCK BG
+023. CLOCK FONT
+024. CLOCK SIZE
+025. COLOR ORDER
+026. COMPOSITE ONLY
+027. CONNECT
+028. Choose channels together before powering video transmitters. This board does not measure 5.8 GHz.
+029. DESK MODE
+030. DIAGNOSTICS
+031. DISCONNECT
+032. DISCOVER
+033. DISPLAY
+034. DNSP WALKTHROUGH
+035. DONE
+036. DRONE READINGS
+037. EXPORT TO SD
+038. Experimental combined clues matched. This does not confirm a particular device or recording.
+039. FIELD TOOLS
+040. FORGET SENSOR
+041. FPV PIT BOARD
+042. FPV equipment clues do not prove a drone is flying.
+043. Finishing writes. Keep power connected.
+044. GOT IT
+045. HELP
+046. HIGH CONTRAST
+047. HOW MANY
+048. HUNTING
+049. IGNORED
+050. INVERT COLORS
+051. LANGUAGE
+052. LARGE CONTROLS
+053. LEFT HANDED
+054. LOCK BACKGROUND
+055. LOG
+056. Language preview. Translations need human review.
+057. MICROSD STATUS
+058. MORE INFO
+059. MUTE SELECTED
+060. MY SENSORS
+061. NAME
+062. NEXT
+063. NEXT PAGE
+064. NO DATA
+065. No detection does not mean no camera.
+066. OFF
+067. ON
+068. OPEN DESK
+069. OUTFIT
+070. OWN TELEMETRY
+071. PET
+072. PIN SENSOR
+073. POSSIBLE MATCH
+074. POWER SAVER
+075. Possible camera-related equipment. Radio clues do not confirm the model, owner or recording status.
+076. Possible tracking or proximity device. This does not establish its owner or intent.
+077. QUIET PREFIXES
+078. REBOOT
+079. REDUCED MOTION
+080. REPLAY INTRO
+081. RESEARCH LAB
+082. RESET STATS
+083. ROTATION LOCK
+084. Remote ID broadcasts received. Open Drone readings for individual records and freshness warnings.
+085. SAFE SHUTDOWN
+086. SAVE
+087. SCAN
+088. SECURITY
+089. SETTINGS
+090. SHADES COLOR
+091. SHOW OFF
+092. SHUTDOWN / REBOOT
+093. SIZE
+094. SKIP
+095. SQUACHY'S DIARY
+096. SQUAD ON DESK
+097. STALE
+098. STATUS LIGHT
+099. SYSTEM
+100. Safe to power off. microSD is unmounted.
+101. Shared manufacturer prefix. This does not confirm the device type.
+102. Signal strength is not distance or direction. Confidence describes the matching evidence.
+103. Stop recording and finish microSD writes before unplugging. This board cannot switch off its own power.
+104. Stopped. Some writes could not be confirmed. The card is unmounted.
+105. THEME
+106. TIME ZONE
+107. TYPE FILTER
+108. UPDATE CHECK
+109. UPDATE FIRMWARE
+110. Use Why this matched to inspect evidence. A possible match is not confirmation.
+111. Use microSD for exports. Raw research files can contain device identifiers.
+112. VISITOR
+113. Verify a camera visually before reporting it. Open deflock.org/report on your phone.
+114. WATCHING
+115. WHY THIS MATCHED
+116. WIFI NETWORKS
+117. Welcome. This device observes radio clues, not people or intent.
+
+v1.1 additions (English source; human translation pending)
+118. USER DEVICE LABEL
+119. CONFIRM OR EDIT ASSUMPTION
+120. EDIT USER LABEL
+121. CONFIRM DETECTED TAG
+122. EXPORT CURRENT AGAIN
+123. EDIT TAG / SUBTAG
+124. CHOOSE TAG
+125. OPTIONAL SUBTAG
+126. OTHER REQUIRES A SUBTAG
+127. T9 SUBTAG - UP TO 24 CHARACTERS
+128. REVIEW USER OBSERVATION
+129. SAVE + EXPORT TO microSD
+130. EXPORT DID NOT FINISH
+131. The label was not applied because its required microSD record could not be written. Check Storage & Recovery, then retry.
+132. RETRY EXPORT
+133. This records your observation; it does not prove device identity.
+134. SKETCHY ENVIRONMENT
+135. RECENT ALERTS
+136. EVIDENCE & MUTES
+137. RECENT RULE ALERTS
+138. ABOUT RULES
+139. RULE ALERT
+140. An ALPR clue and a deauthentication burst were observed in the same area near the same time. Use caution. This does not prove the events are related.
+141. Saved in Rules + microSD
+142. Saved in Rules; microSD export pending
+143. No Sketchy Environment rule alerts have been recorded.
+144. Rules combine separate observations into a secondary alert. Sketchy Environment watches for Flock, Axon or another ALPR clue and a deauthentication burst within 90 seconds. It is a caution signal, not proof the events are related. Custom rule creation is planned, but is not available in this version.
+145. CAMERA
+146. SENSOR
+147. GUNSHOT DETECTOR
+148. DOORBELL
+149. GLASSES
+150. TRACKER
+151. DRONE
+152. RADIO
+153. TYPE CUSTOM...
+154. NO SUBTAG
+155. Includes public preferences and current-log.csv with device identifiers. USB recovery needs a computer.
+156. Restore public preferences? Reboot afterwards. The LOG snapshot is informational and is not restored.
+157. Current LOG saved. Copying running app; scanning continues.
+158. STORED ALERT HISTORY
+159. SCAN HISTORY
+160. DEVICE & SYSTEM
+161. No stored scan events. Snoozed and popup-suppressed detections appear here once observed and stored.
+162. No stored device or system records are available.
+163. DETECTION PROFILE
+164. STATIONARY
+165. Longer channel listening for stationary research and intermittent signals.
+166. BALANCED
+167. Tested general-purpose balance of WiFi and Bluetooth reception.
+168. FAST SWEEP
+169. Revisits WiFi channels sooner while walking or changing areas.
+170. MAXIMUM
+171. Aggressive temporary radio schedule; not best for every signal.
+172. CUSTOM
+173. Choose bounded WiFi, Bluetooth and Maximum-duration controls.
+174. WIFI SWEEP
+175. BLUETOOTH SHARE
+176. UNTIL CHANGED
+177. Runs Stationary, Balanced, Fast Sweep and Maximum for 45 seconds each.
+178. Results describe this place and moment, not a permanent ranking.
+179. START 3-MINUTE COMPARISON
+180. RUN AGAIN
+181. READABLE LOG EXPORT
+182. REFRESH FILES
+183. EXPORT & ORGANIZE
+184. Refresh adds newly stored scan and system events without deleting older readable records.
+185. Export & Organize creates a numbered permanent snapshot.
+186. Full identifiers are included.
+187. Readable files refreshed. Duress PIN options are under Security.
+188. Organized snapshot complete. Duress PIN options are under Security.
+189. Complete readable history, settings, labels, rules and targets are included.
+190. PINs, Duress state and authentication secrets are never included.
+191. Settings, labels, rules and targets restored. Reboot only for hardware display changes.

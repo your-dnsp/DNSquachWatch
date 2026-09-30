@@ -1,37 +1,45 @@
-# DNSP v0.7 backup and recovery
+# DNSquachWatch v1.1.2 recovery
 
-This is a recovery procedure to test, not a claim that a physical recovery has already succeeded. Keep the matching DNSP release ZIP on a computer before installing any upstream update. Upstream firmware does not contain this DNSP backup UI.
+This release ships two targets: **ST7789 CYD at an initial 80 MHz display clock** and **ILI9341 CYD at an initial 80 MHz display clock**. Keep the entire matching release ZIP on a computer. Each contains the four files required to recover the board over USB. If the panel stays white, use the other 2.8-inch CYD display kit; do not mix files from the two kits.
 
-## Make a backup
+## On-device Safe Mode
 
-1. Boot DNSP and allow at least 30 seconds of responsive operation. This proves only that the main loop ran; it is not a radio/SD/endurance certification.
-2. Insert the card before boot. Open Settings → Help & Recovery → Backup & Recovery → Back up to microSD. Keep power connected. Capture continues, so busy environments may increase dropped observations during the copy.
-3. Firmware is copied in 1 KiB steps, then read back for a SHA-256 comparison. The whole running application slot is copied, including padding. Ten numbered directories are available, `/dnsp-backup-0` through `-9`. Existing directories are never overwritten, including incomplete attempts. A cancelled/timed-out/failed copy remains incomplete and consumes its slot until you remove it on a computer.
-4. Only a verified copy receives `COMPLETE.txt`. Copy the **whole directory** to a computer and keep the matching release kit. The backup includes build name, length, app hash and the hash of the current 4 KiB partition-table sector. Hashes detect corruption, not malicious replacement.
-5. Use Shutdown before removing the card or unplugging. Keep a separate copy away from the device; the same card is not disaster recovery.
+Put a finger anywhere on the display before applying power and keep holding until Recovery Safe Mode appears. It starts before normal radios and microSD logging. More than four short/failed boots inside 90 seconds also enters Safe Mode automatically; a deliberate Safe Shutdown does not count.
 
-`preferences.txt` contains 32 public display/alert/power/light preferences plus six language/accessibility values. It excludes PINs, WiFi credentials, mesh secrets/consent, remote-update permissions, history, device mutes, sensor IDs, favorites, touch calibration and progression. This is a public-preferences backup, **not a complete device clone**. Source code remains in the separate release source ZIP.
+The microSD tools are also available during normal use under **Settings → Storage & Recovery → microSD Recovery**:
 
-To restore those preferences while DNSP still runs: select the numbered slot, choose Restore Preferences, then Confirm Restore. The entire input is bounded, versioned and checksum/range checked before writing. Reboot afterwards to apply panel/rotation settings consistently. NVS values are multiple writes: interrupted restoration can be partial, so retain the file and reapply after a power interruption. Credentials are not restored. Never restore someone else's untrusted backup.
+1. **Find & Remount** retries card detection without rebooting.
+2. **Test Card** performs a bounded write/read/remove check.
+3. **Format microSD** requires the deliberate `3`, `2`, `1`, `FORMAT NOW` sequence and erases the card. Copy recoverable files to a computer first.
 
-## Recover with a computer and USB
+## Firmware backup
 
-The board here is the classic 4 MiB ESP32 CYD ST7789, build `cyd-fast`. Its display clock is 80 MHz; its **flash** clock remains 40 MHz. Do not substitute an ILI9341 or other target's kit. A backup from the second OTA slot still contains an application that may be installed into app0; its old source address does not dictate the new boot selection.
+Settings → Storage & Recovery → Backup & Restore copies the running application and recoverable user state to `/dnsp-backup-N`. Progress remains visible while readable logs are prepared, firmware is copied, and the copy is verified. A successful backup contains:
 
-Use esptool 4.5.1 (the version used in this project) and a data-capable USB cable. Determine the actual serial port; `PORT` below is a placeholder. If auto-reset cannot enter the ROM loader, use the board's documented BOOT/reset procedure. Do not use `--force` to override secure-boot/encryption or image safety checks.
+- `firmware.bin`
+- `preferences.txt`
+- `current-log.csv` — a readable snapshot of the active in-memory LOG when the backup began
+- `operational-state.bin` — detection options, Ignore entries, user labels, Rules state, scan profile, and active Watch/Hunt targets
+- readable stored scan, rule, and device/system history copied from `/DNSP Readable Logs/Current`
+- `DNSQUACHWATCH INSTALLATION.txt`
+- `COMPLETE.txt`
 
-Read the current partition sector before writing anything:
+Only a verified backup gets `COMPLETE.txt`. Copy the whole directory and the matching release kit to a computer. The readable files and operational state can contain MAC addresses, names, labels, Watch/Hunt targets, and other identifiers; treat the directory as private data. The current LOG CSV remains informational, while Restore User State reapplies supported settings, labels, Ignore entries, rules, profiles, and active targets. Files already on the same microSD are not duplicated. PINs, Duress state, Wi-Fi passwords, mesh/authentication secrets, and touch calibration are never included.
+
+## USB recovery
+
+Ordinary four-image flashing preserves NVS, BlackBox history, and the separate duress journal. It therefore does not exit Pixel Tide. For an ordinary reinstall, follow `DNSQUACHWATCH INSTALLATION.txt` from the matching release kit.
+
+To clear an active duress state or irreparably damaged saved configuration, erase the complete 4 MiB flash, then immediately flash the four release images:
 
 ```sh
-python3 -m esptool --chip esp32 --port PORT read_flash 0x8000 0x1000 device-partitions.bin
-python3 tools/verify_backup.py --backup /path/to/dnsp-backup-0 --kit /path/to/DNSquachWatch-v0.7-cyd-fast --device-layout device-partitions.bin
-python3 -m esptool --chip esp32 image_info /path/to/dnsp-backup-0/firmware.bin
+python3 -m esptool --chip esp32 --port PORT erase_flash
+python3 -m esptool --chip esp32 --port PORT write_flash \
+  --flash_mode dio --flash_freq 40m --flash_size 4MB \
+  0x1000 bootloader.bin \
+  0x8000 partitions.bin \
+  0xe000 boot_app0.bin \
+  0x10000 firmware.bin
 ```
 
-The checker reads local files only. It checks backup hashes, kit hashes, build name, lengths, allowed offsets and the actual device layout. If a layout differs, stop for a board-specific recovery review rather than guessing offsets. The checker prints a **manual** command only after the checks pass; it does not execute it. Inspect esptool's image checksum/hash result as well.
-
-For this verified layout, the command uses the matching kit's bootloader at `0x1000`, partition table at `0x8000`, OTA initialization image at `0xE000`, and the verified backup application at `0x10000`. The OTA initialization selects app0. It does not erase NVS, app1, the raw BlackBox region at `0x3D0000–0x3EFFFF`, or core-dump region. Firmware restoration therefore does **not** remove personal data. Do not run a blanket erase for routine recovery.
-
-After a deliberate recovery: confirm boot/version, touch calibration, panel colors/orientation, both radios, SD writes and Settings. Restore public preferences if desired, reboot and re-check. Keep the old kit until this drill succeeds on the real device. A stock release-kit installation is also a recovery route if an SD backup fails verification.
-
-Espressif documents application-slot/OTA-data selection in [ESP-IDF 4.4 OTA](https://docs.espressif.com/projects/esp-idf/en/v4.4.6/esp32/api-reference/system/ota.html) and USB read/write/image checks in [esptool v4 basic commands](https://docs.espressif.com/projects/esptool/en/release-v4/esp32/esptool/basic-commands.html). The procedure also follows this project's pinned SDK and generated partition table.
+This full erase destroys all internal settings and history. It does not erase a removable microSD card.

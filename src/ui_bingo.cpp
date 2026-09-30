@@ -286,3 +286,4 @@ BingoTap uiBingoHitTest(TFT_eSPI& t, int x, int y, int screenW, int screenH) {
     }
     return BingoTap::NONE;
 }
+

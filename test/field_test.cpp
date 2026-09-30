@@ -194,6 +194,20 @@ int main() {
     ck("position decoded",
        decodeMavlink(packet.data(), packet.size(), 1, 700, t) && t.position && t.alt == 120);
     ck("location freshness separate", t.batteryAt == 600 && t.positionAt == 700);
+    suite("Cross-radio identity association preserves sources");
+    wipePrivate();
+    auto paired=beacon();
+    uint8_t ridAd[31]={30,0x16,0xfa,0xff,0x0d,0};
+    memcpy(ridAd+6,paired.data()+46,25);
+    uint8_t otherMac[6]={3,3,3,3,3,3};
+    observeWifi(paired.data(),paired.size(),1000);tick();
+    observeBle(otherMac,ridAd,sizeof ridAd,1000);tick();
+    ck("matching claimed IDs associated",associatedAircraft(0,1100)==1);
+    ck("raw transports preserved",aircraft(0).wifi&&!aircraft(1).wifi);
+    ck("fresh consistent claims",!identityConflict(0,1100));
+    ck("stale IDs not joined",associatedAircraft(0,17000)==-1);
+    ridAd[7]=0x13;observeBle(otherMac,ridAd,sizeof ridAd,1200);tick();
+    ck("conflicting aircraft types flagged",identityConflict(0,1300));
     suite("Malformed radio corpus");
     uint32_t seed = 42;
     uint8_t bytes[512];

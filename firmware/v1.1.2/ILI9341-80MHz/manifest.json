@@ -1,0 +1,39 @@
+{
+  "firmware": "DNSquachWatch v1.1.2",
+  "base": "SquachWatch v1.25.0",
+  "target": "cyd-ili9341-fast",
+  "board": "2.8-inch classic ESP32 CYD",
+  "display": "ILI9341",
+  "display_clock_default_mhz": 80,
+  "runtime_display_clock_mhz": [
+    40,
+    80
+  ],
+  "flash_clock_mhz": 40,
+  "files": [
+    {
+      "file": "bootloader.bin",
+      "offset": "0x1000",
+      "bytes": 17536,
+      "sha256": "0f65515a7e0dfe9cc4bc78c01bef79c941af1b2deb34d01ddd500ee3d465eedf"
+    },
+    {
+      "file": "partitions.bin",
+      "offset": "0x8000",
+      "bytes": 3072,
+      "sha256": "d2f7657d9ee0763e4fd0c67fd6657fb3e419f1a4eeab2a73fdea30c08e1a9697"
+    },
+    {
+      "file": "boot_app0.bin",
+      "offset": "0xe000",
+      "bytes": 8192,
+      "sha256": "f94c5d786a7a8fab06ac5d10e33bf37711a6697636dc037559ea19cc410a17f0"
+    },
+    {
+      "file": "firmware.bin",
+      "offset": "0x10000",
+      "bytes": 1918608,
+      "sha256": "a83ba6e4246b4bbcc74c60da7c1db93e179bd8ab9ac3eea167fb4c29fdad51bd"
+    }
+  ]
+}

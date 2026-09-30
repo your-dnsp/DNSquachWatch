@@ -67,6 +67,11 @@ int main() {
     ck("legacy history does not invent evidence",strstr(DetectionInfo::why(d),"not saved"));
     d.evidence=MatchEvidence::BLE_SERVICE;d.signature=0xFD5F;
     ck("exact service ID accompanies explanation",strstr(DetectionInfo::why(d),"FD5F"));
+    d.evidence=MatchEvidence::DEAUTH_BURST;d.hits=6;d.firstSeen=0xFFFFFF00u;d.lastSeen=0x000000F4u;
+    d.evidenceBits=3|DEAUTH_META_REASON_VALID|DEAUTH_META_UNPROTECTED_SEEN|DEAUTH_META_SAME_BSSID|DEAUTH_META_BSSID_VALID;
+    d.signature=7;strcpy(d.name,"06:00:00:00:00:09");why=DetectionInfo::why(d);
+    ck("deauth evidence names count, targets, BSSID and spoofing limit",strstr(why,"6 deauth")&&strstr(why,"3 targets")&&strstr(why,"reason 7")&&strstr(why,"can be spoofed"));
+    ck("deauth duration remains correct across millis rollover",strstr(why,"500ms"));
     ck("RSSI is not presented as distance",strstr(DetectionInfo::rssiConfidencePrimer(),"not distance"));
     return report();
 }

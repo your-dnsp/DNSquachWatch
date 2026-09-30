@@ -142,5 +142,16 @@ int main() {
         ck("every changed row is inside a span, every span is sound", bad == 0);
     }
 
+    suite("Coherent large updates");
+    {
+        FramePush::RowSpan spans[9];
+        for(int i=0;i<9;i++)spans[i]={i*20,i*20+2};
+        ck("small updates retain separate spans",FramePush::coalesceSpans(spans,2,4,240)==2);
+        ck("empty update stays empty",FramePush::coalesceSpans(spans,0,0,240)==0);
+        ck("fragmented update is one bounded sweep",FramePush::coalesceSpans(spans,9,18,240)==1 && spans[0].r0==0 && spans[0].r1==162);
+        spans[0]={10,60};spans[1]={70,110};
+        ck("large update coalesces",FramePush::coalesceSpans(spans,2,90,240)==1 && spans[0].r0==10 && spans[0].r1==110);
+    }
     return report();
 }
+

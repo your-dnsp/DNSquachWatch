@@ -30,3 +30,4 @@ void           uiSquadUpdateSent(bool ok, uint32_t now);
 // A board reported in. Duplicates by name are folded.
 void           uiSquadUpdateReported(const char* name);
 #endif
+

@@ -237,3 +237,4 @@ WifiAddHit uiWifiAddHit(TFT_eSPI& t, int x, int y, const DetectionEngine& eng, i
     if (in(x, y, b.x[1], b.y[1], b.w, BTN_H)) return WifiAddHit::BACK;
     return WifiAddHit::NONE;
 }
+

@@ -53,3 +53,4 @@ void        uiPhonePinPrompt(const char* prompt);
 void        uiPhonePinAllowForgot(bool allow);
 bool        uiPhonePinForgot();
 #endif
+

@@ -44,6 +44,34 @@ const OuiEntry kOuiTable[] = {
     {{0xD8, 0xF3, 0xBC}, "Flock",        DetectionType::FLOCK,      Confidence::LOW_CONF},
     {{0xB8, 0x35, 0x32}, "Flock",        DetectionType::FLOCK,      Confidence::LOW_CONF},
     {{0x82, 0x6B, 0xF2}, "Flock-DeFlk",  DetectionType::FLOCK,      Confidence::LOW_CONF},
+    // From Flock-You (github.com/colonelpanichacks/flock-you, MIT), issue
+    // #15: the community field list (@NitekryDPaul / DeFlockJoplin, 2026-07-16)
+    // and a Flock camera firmware dump (2026-09-16). Every one is a module
+    // vendor's block -- Liteon, USI, Silicon Labs, Espressif, Atheros -- so
+    // LOW, like the rows above. Left out: 48:27:EA, which the registry gives
+    // to Samsung Electronics and would call every Samsung TV a Flock.
+    {{0x74, 0x4C, 0xA1}, "Flock-Liteo", DetectionType::FLOCK,      Confidence::LOW_CONF},
+    {{0x9C, 0x2F, 0x9D}, "Flock-Liteo", DetectionType::FLOCK,      Confidence::LOW_CONF},
+    {{0xC0, 0x35, 0x32}, "Flock-Liteo", DetectionType::FLOCK,      Confidence::LOW_CONF},
+    {{0x94, 0x08, 0x53}, "Flock-Liteo", DetectionType::FLOCK,      Confidence::LOW_CONF},
+    {{0xE4, 0xAA, 0xEA}, "Flock-Liteo", DetectionType::FLOCK,      Confidence::LOW_CONF},
+    {{0xF4, 0x6A, 0xDD}, "Flock-Liteo", DetectionType::FLOCK,      Confidence::LOW_CONF},
+    {{0xE8, 0xD0, 0xFC}, "Flock-Liteo", DetectionType::FLOCK,      Confidence::LOW_CONF},
+    {{0xB8, 0x1E, 0xA4}, "Flock-Liteo", DetectionType::FLOCK,      Confidence::LOW_CONF},
+    {{0x70, 0x08, 0x94}, "Flock-Liteo", DetectionType::FLOCK,      Confidence::LOW_CONF},
+    {{0x58, 0x00, 0xE3}, "Flock-Liteo", DetectionType::FLOCK,      Confidence::LOW_CONF},
+    {{0x5C, 0x93, 0xA2}, "Flock-Liteo", DetectionType::FLOCK,      Confidence::LOW_CONF},
+    {{0x64, 0x6E, 0x69}, "Flock-Liteo", DetectionType::FLOCK,      Confidence::LOW_CONF},
+    {{0x14, 0xB5, 0xCD}, "Flock-Liteo", DetectionType::FLOCK,      Confidence::LOW_CONF},
+    {{0x08, 0x3A, 0x88}, "Flock-UGSI",  DetectionType::FLOCK,      Confidence::LOW_CONF},
+    {{0xE0, 0x4F, 0x43}, "Flock-UGSI",  DetectionType::FLOCK,      Confidence::LOW_CONF},
+    {{0x58, 0x8E, 0x81}, "Flock-SiLab", DetectionType::FLOCK,      Confidence::LOW_CONF},
+    {{0xEC, 0x1B, 0xBD}, "Flock-SiLab", DetectionType::FLOCK,      Confidence::LOW_CONF},
+    {{0x90, 0x35, 0xEA}, "Flock-SiLab", DetectionType::FLOCK,      Confidence::LOW_CONF},
+    {{0x3C, 0x71, 0xBF}, "Flock-ESP32", DetectionType::FLOCK,      Confidence::LOW_CONF},
+    // Atheros's own default: the camera's QCA9377 ships 00:03:7F:50:00:01
+    // in its calibration blobs, and a unit nobody reprogrammed keeps it.
+    {{0x00, 0x03, 0x7F}, "Flock-QCA",     DetectionType::FLOCK,      Confidence::LOW_CONF},
     // Labelled as Sierra Wireless, the LTE modem in a Flock camera. The
     // registry says SPECTRA - TEK, which is neither Sierra nor Flock. The
     // prefix may still turn up on Flock hardware, so it stays -- as the
@@ -298,6 +326,12 @@ DetectionType lookupUuid(uint16_t uuid16) {
     return DetectionType::UNKNOWN;
 }
 
+bool isBareSerialName(const char* name) {
+    if (!name) return false;
+    for (int i = 0; i < 10; i++) if (name[i] < '0' || name[i] > '9') return false;
+    return name[10] == '\0';
+}
+
 DetectionType lookupBtName(const char* name) {
     if (!name) return DetectionType::UNKNOWN;
     for (uint16_t i = 0; i < kBtClassicCount; i++) {
@@ -309,6 +343,9 @@ DetectionType lookupBtName(const char* name) {
     if (strcasestr(name, "Flock"))    return DetectionType::FLOCK;
     if (strcasestr(name, "Penguin"))  return DetectionType::FLOCK;
     if (strcasestr(name, "Pigvision"))return DetectionType::FLOCK;
+    // A Penguin battery pack on its other firmware names itself by its bare
+    // ten-digit serial (Flock-You). Graded LOW where it is used.
+    if (isBareSerialName(name))       return DetectionType::FLOCK;
     if (strcasestr(name, "Axon"))     return DetectionType::AXON;
     // A Flipper advertises "Flipper " followed by the unit's name. The
     // owner can change it, which is exactly why a name match is graded
@@ -321,6 +358,9 @@ DetectionType lookupBtName(const char* name) {
 
 DetectionType lookupSsid(const char* ssid) {
     if (!ssid) return DetectionType::UNKNOWN;
+    // A provisioned camera's bare "Flock" (Flock-You's firmware dump). Exact,
+    // not a prefix: "Flock" as a prefix would take "Flockhart Family WiFi".
+    if (strcasecmp(ssid, "Flock") == 0) return DetectionType::FLOCK;
     for (uint16_t i = 0; i < kSsidCount; i++) {
         size_t n = strlen(kSsidPrefixes[i].prefix);
         if (strncasecmp(ssid, kSsidPrefixes[i].prefix, n) == 0) {

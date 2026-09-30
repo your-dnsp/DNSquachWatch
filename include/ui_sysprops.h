@@ -9,8 +9,8 @@
 // Three tabs, each backed by something the board actually knows -- a tab
 // with nothing behind it would be decoration:
 //   UPDATE  what is running, what is out, where it was heard, and the button
-//   NOTES   the release's own lines, when the site's manifest carried them
 //   BOARD   the build, both slots, uptime and heap -- DIAGNOSTICS in brief
+//   CREDITS DNSP authorship, upstream attribution and original firmware link
 #pragma once
 #include <TFT_eSPI.h>
 #include <stdint.h>
@@ -23,9 +23,14 @@ enum class SysPropsHit : uint8_t {
     CLOSE       // LATER, the close box, or a tap outside the window
 };
 
+void        uiSysPropsShowBoard();
+void        uiSysPropsShowCredits();
 void        uiSysPropsInit(TFT_eSPI& t);
 // `advance` is false on the second of the 3.5"'s two band passes -- the
 // same frame drawn again -- so anything that steps by the call rather
 // than by the clock must sit still for it. Other boards draw once.
 void        uiSysPropsTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool advance = true);
 SysPropsHit uiSysPropsTouch(TFT_eSPI& t, int x, int y);
+
+
+void uiSysPropsScroll(int rows);

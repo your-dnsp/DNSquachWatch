@@ -17,3 +17,4 @@ namespace Notices {
 const char* idleLine(const DetectionEngine& eng);
 
 }  // namespace Notices
+

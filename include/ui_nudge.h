@@ -20,3 +20,4 @@ void     uiNudgeTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng);
 NudgeHit uiNudgeHit(TFT_eSPI& t, int x, int y);
 int      uiNudgeSecondsLeft(uint32_t now);
 #endif
+

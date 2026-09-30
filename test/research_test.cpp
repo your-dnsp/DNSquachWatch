@@ -12,6 +12,12 @@ static void join(std::vector<uint8_t>& a,const std::vector<uint8_t>& b){a.insert
 static Match match(const std::vector<uint8_t>& v){return matchBle(v.data(),v.size());}
 static const uint8_t mac[]={0xb4,0x1e,0x52,1,2,3};
 static void observeOne(uint32_t now=1001){const uint8_t p[]={3,0xff,0x4d,3};observe(0,mac,0,-62,0,p,sizeof p,now,matchBle(p,sizeof p));}
+static void deauthFrame(uint8_t* f,bool protectedFrame=false){
+ memset(f,0,26);f[0]=0xc0;f[1]=protectedFrame?0x40:0;
+ const uint8_t dst[]={0x10,0x11,0x12,0x13,0x14,0x15};
+ const uint8_t bssid[]={0x20,0x21,0x22,0x23,0x24,0x25};
+ memcpy(f+4,dst,6);memcpy(f+10,mac,6);memcpy(f+16,bssid,6);f[24]=7;
+}
 int main(){
  suite("Composite evidence and negative controls");
  auto ax=ad(0xff,{0x4d,3});ck("Axon company is equipment clue, not confirmed camera",match(ax).type==DetectionType::AXON&&match(ax).conf==Confidence::LOW_CONF);
@@ -53,10 +59,20 @@ int main(){
  ck("invalid annotation ID refused",!annotate(999,Verdict::VISUAL,"",1003));coverage(100,true,true,6);stop();tick(1005);ck("coverage summary exported",json.find("channel_enabled_ms")!=std::string::npos);
  ck("new raw session",start(Profile::BLUETOOTH,true,60000,1000,8,true));observeOne();observe(1,mac,0,-50,6,nullptr,0,1001);tick(1002);ck("profile excludes other radio",stats().observed==1);ck("raw capture includes exact bytes",json.find("03ff4d03")!=std::string::npos);
  ck("time limit stops recording",(tick(61000),!active()));tick(61001);
+ uint8_t deauth[26];deauthFrame(deauth);
+ ck("WiFi research session for decoded DEAUTH evidence",start(Profile::WIFI,true,60000,1000,81,true));
+ observe(1,mac,0,-47,11,deauth,sizeof deauth,1001);tick(1002);noteDeauthBurst(3);
+ ck("RAW DEAUTH export names claimed source receiver BSSID reason and protection",json.find("\"deauth\":true")!=std::string::npos&&json.find("\"claimed_transmitter\":\"b41e52010203\"")!=std::string::npos&&json.find("\"receiver\":\"101112131415\"")!=std::string::npos&&json.find("\"bssid\":\"202122232425\"")!=std::string::npos&&json.find("\"deauth_reason\":7")!=std::string::npos&&json.find("\"protected_management\":false")!=std::string::npos);
+ ck("research summary distinguishes frames from coherent multi-target bursts",stats().deauthFrames==1&&stats().deauthBursts==1&&stats().deauthMultiTargetBursts==1&&stats().deauthReasonKnown==1&&stats().deauthUnprotected==1);
+ stop();tick(1003);
+ deauthFrame(deauth,true);
+ ck("redacted DEAUTH session",start(Profile::WIFI,false,60000,2000,82,true));observe(1,mac,0,-48,6,deauth,sizeof deauth,2001);tick(2002);
+ ck("redacted DEAUTH keeps frame facts but removes all three addresses and encrypted reason",json.find("\"deauth\":true")!=std::string::npos&&json.find("b41e52010203")==std::string::npos&&json.find("101112131415")==std::string::npos&&json.find("202122232425")==std::string::npos&&json.find("\"deauth_reason\":-1")!=std::string::npos&&json.find("\"protected_management\":true")!=std::string::npos);
+ ck("protected frame is counted without inventing plaintext reason",stats().deauthFrames==1&&stats().deauthProtected==1&&stats().deauthReasonKnown==0);stop();tick(2003);
  ck("wraparound start",start(Profile::BALANCED,false,60000,UINT32_MAX-100,9,true));tick(60000);ck("wraparound timeout",!active());tick(60001);
  ck("write failure session starts",start(Profile::BALANCED,false,60000,1000,10,true));observeOne();fail=true;tick(1002);ck("write error stops capture",!active()&&stats().errors==1);fail=false;
  discard();ck("discard removes pending and notes",!recent(0,r));
- char j[900],c[220];r=Record{};r.length=255;ck("invalid record length rejected",!encode(r,stats(),j,sizeof j,c,sizeof c));
+ char j[1100],c[320];r=Record{};r.length=255;ck("invalid record length rejected",!encode(r,stats(),j,sizeof j,c,sizeof c));
  r.length=0;ck("too-small export buffer rejected",!encode(r,stats(),j,8,c,sizeof c));
  suite("Storage ceiling and untrusted note encoding");
  ck("start bounded large session",start(Profile::BALANCED,true,900000,1000,11,true));
@@ -68,9 +84,10 @@ int main(){
  uint32_t seed=17;uint8_t bytes[160];for(int trial=0;trial<10000;trial++){for(auto& b:bytes){seed=seed*1664525+1013904223;b=seed>>24;}size_t n=seed%sizeof bytes;matchBle(bytes,n);matchManagement(bytes,n);importPack((const char*)bytes,n);}
  ck("ten thousand bounded packets and packs processed",true);
  suite("Readable field report preserves limitations and confidence");
- Stats rs;rs.session=42;rs.saved=7;rs.types[1][0]=6;rs.types[1][1]=1;rs.channels=1<<6;rs.channelMs[6]=1000;
+ Stats rs;rs.session=42;rs.saved=7;rs.types[1][0]=6;rs.types[1][1]=1;rs.channels=1<<6;rs.channelMs[6]=1000;rs.deauthFrames=8;rs.deauthBursts=1;rs.deauthMultiTargetBursts=1;
  char readable[3072];ck("bounded report",formatReport(rs,readable,sizeof readable));
  ck("qualitative counts and coverage",strstr(readable,"FLOCK: 6 / 1 / 0")&&strstr(readable,"6=1")&&strstr(readable,"not unique devices"));
+ ck("readable report includes DEAUTH frame and coherent-burst counts",strstr(readable,"DEAUTH frames saved: 8")&&strstr(readable,"coherent per-source bursts: 1"));
  ck("no clearance claim",strstr(readable,"No detection does not mean no camera")!=nullptr);
  ck("truncated output rejected",!formatReport(rs,readable,30));
  return report();

@@ -184,3 +184,4 @@ inline void targetFrac(int i, float& fx, float& fy) {
 }
 
 }  // namespace TouchFit
+

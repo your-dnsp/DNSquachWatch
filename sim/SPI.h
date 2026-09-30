@@ -17,3 +17,4 @@ public:
     uint8_t transfer(uint8_t v) { return v; }
 };
 inline SPIClass SPI;
+

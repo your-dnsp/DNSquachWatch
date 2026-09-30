@@ -90,3 +90,4 @@
 // hardware once PANEL_NEEDS_INVERSION (main.cpp) was corrected to its
 // actual value; trying BGR next.
 #define TFT_RGB_ORDER TFT_BGR
+

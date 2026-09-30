@@ -19,6 +19,8 @@ enum class SettingsRow : uint8_t {
     POWER_CONTROL,
     SD_STATUS,
     ALERT_DURATION,
+    SNOOZE_ALL,
+    SNOOZE_INBOX,
     CONFIDENCE,
     AUTO_QUIET,     // "AUTO SNOOZE": how often one device may interrupt
     DETECTION_FILTER,
@@ -28,6 +30,7 @@ enum class SettingsRow : uint8_t {
     CALIBRATE,
     CHECK_COLORS,
     DIAGNOSTICS,
+    SYSTEM_INFO,
     REPLAY_INTRO,
     SHOW_OFF,
     SHADES_COLOR,
@@ -60,15 +63,26 @@ enum class SettingsRow : uint8_t {
     CLOCK_FONT,      // on the DESK MODE page: segments or Bangers
     CLOCK_SIZE,      // on the DESK MODE page: small, medium, large
     CLOCK_BACKDROP,  // on the DESK MODE page: what plays inside the clock
+    WATCH_BATTERY,   // the T-Watch only: charge and voltage, under WATCH
+    WATCH_RADIO,     // the T-Watch only: the radio duty cycle, under WATCH
+    WATCH_BUZZ,      // the T-Watch only: buzz on an alert, under WATCH
     BACK,
     BREAKOUT,
     ALERTS,
     FUN,
     LANGUAGE,
     ACCESSIBILITY,
+    ALERT_HISTORY,
     ALERT_RULES,
+    DETECTION_PROFILE,
     CARE,
     QUICK_MENU,
+    DISPLAY_SPEED,
+    DNSP_MENU, DATA_MENU, ACCESS_MENU, STORAGE_MENU, FPV_PIT, DRONE_READINGS, DRONE_SEARCH, DRONE_DIAG, DRONE_CAPTURE, DRONE_LIMITS, TELEMETRY, SENSORS, BACKUP, PRACTICE, TROUBLESHOOT, GIFT_PREP, FIELD_REPORT, DEVICE_HEALTH,
+    AMBIENT_LIGHT, CREDITS, DEVICE_HELP, CRASH_REPORTS, MICROSD_RECOVERY,
+    GLITCH_EFFECTS,
+    SCREEN_LIGHT, RANDOMIZER, TIMER_COUNTER, POCKET_READER, RADIO_ACTIVITY,
+    READABLE_LOGS,
     COUNT,
     NONE = 255
 };
@@ -84,7 +98,7 @@ void uiSettingsScroll(int delta);     // positive = scroll down
 // Each page keeps its OWN scroll position, so leaving a page and coming back
 // puts you where you were instead of at the top -- the list is long enough
 // that losing your place was the most-felt annoyance on this screen.
-enum class SettingsPage : uint8_t { MAIN = 0, APPEARANCE = 1, SYSTEM = 2, DESK = 3, ALERTS = 4, FUN = 5, COUNT = 6 };
+enum class SettingsPage : uint8_t { MAIN = 0, APPEARANCE = 1, SYSTEM = 2, DESK = 3, ALERTS = 4, FUN = 5, DNSP, FPV, DATA, ACCESS, STORAGE, COUNT };
 void         uiSettingsOpenPage(SettingsPage p);
 SettingsPage uiSettingsCurrentPage();
 
@@ -95,8 +109,6 @@ void uiSettingsOpenAppearance(bool open);
 // four screens deep into a short menu. Returns true if (x,y) hit a heading and
 // the fold was toggled, in which case the tap is spent -- call this BEFORE
 // uiSettingsHitTest().
-bool uiSettingsTapHeader(TFT_eSPI& t, int x, int y, int screenW, int screenH);
-
 // True when a mode has switched this row off (boring mode, today). A tap on
 // one says why rather than silently doing nothing.
 bool        uiSettingsRowIsOff(SettingsRow r);
@@ -131,4 +143,3 @@ enum class SettingsConfirmTap { NONE, CONFIRM, CANCEL };
 void               uiSettingsSetConfirm(SettingsRow r);
 SettingsRow        uiSettingsConfirmRow();
 SettingsConfirmTap uiSettingsHitConfirm(int x, int y, int screenW, int screenH);
-

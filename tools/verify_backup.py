@@ -23,7 +23,8 @@ def check(backup, kit, layout):
     marker = backup / 'COMPLETE.txt'
     require(marker.is_file() and marker.stat().st_size <= 4096, 'Missing/oversized completion manifest')
     lines = marker.read_text(encoding='ascii').splitlines()
-    require(lines and lines[0] == 'DNSP_BACKUP_V1', 'Unsupported backup format')
+    require(lines and lines[0] in {'DNSP_BACKUP_V1', 'DNSP_BACKUP_V2'}, 'Unsupported backup format')
+    backup_format = lines[0]
     meta = {}
     for line in lines[1:]:
         if '=' in line:
@@ -31,7 +32,7 @@ def check(backup, kit, layout):
             require(key not in meta, 'Duplicate manifest field')
             meta[key] = value
     require(meta.get('app_only') == 'true', 'Not an application-only backup')
-    require(meta.get('firmware') == 'DNSquachWatch v0.7-draft', 'Use the matching backup-version recovery tool')
+    require(meta.get('firmware') in {'DNSquachWatch v0.10.2-draft', 'DNSquachWatch v0.10.3-draft', 'DNSquachWatch v0.10.4-draft', 'DNSquachWatch v1.0.0-rc1', 'DNSquachWatch v1.1.2'}, 'Use the matching backup-version recovery tool')
     require(meta.get('app_bytes') == str(0x1e0000), 'Unexpected application-slot size')
     require(meta.get('source_address') in ('0x10000', '0x1f0000'), 'Unexpected source slot')
     app = backup / 'firmware.bin'
@@ -45,6 +46,22 @@ def check(backup, kit, layout):
     body, separator, ending = text.rpartition(b'crc32=')
     require(separator and ending.endswith(b'\n') and ending[:-1].isdigit(), 'Malformed preferences checksum')
     require(zlib.crc32(body) == int(ending), 'Preferences checksum mismatch')
+    if meta.get('firmware') == 'DNSquachWatch v1.1.2':
+        require(meta.get('current_log') == 'current-log.csv', 'Missing current LOG snapshot declaration')
+        require(meta.get('current_log_rows', '').isdigit() and int(meta['current_log_rows']) <= 64,
+                'Invalid current LOG row count')
+        log = backup / 'current-log.csv'
+        require(log.is_file() and 0 < log.stat().st_size < 65536, 'Missing/oversized current LOG snapshot')
+        with log.open('rb') as stream:
+            require(stream.readline().startswith(b'row,type,mac,'), 'Malformed current LOG header')
+    if backup_format == 'DNSP_BACKUP_V2':
+        require(meta.get('operational_state') == 'operational-state.bin', 'Missing operational-state declaration')
+        require(meta.get('readable_history') == 'complete', 'Missing readable-history declaration')
+        state = backup / 'operational-state.bin'
+        require(state.is_file() and 64 < state.stat().st_size < 8192, 'Missing/oversized operational state')
+        for name in ('ALL-ALERTS.txt', 'SCAN-HISTORY.txt', 'SYSTEM-HISTORY.txt', 'EXPORT-SUMMARY.txt'):
+            path = backup / name
+            require(path.is_file() and path.stat().st_size < 4 * 1024 * 1024, 'Missing/oversized ' + name)
     manifest_path = kit / 'manifest.json'
     require(manifest_path.stat().st_size < 16384, 'Oversized release manifest')
     release = json.loads(manifest_path.read_text())

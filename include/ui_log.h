@@ -25,11 +25,13 @@ void uiLogInit(TFT_eSPI& t);
 // hands them through to Theme:: unchanged. Hit-testing its dismiss
 // button is Theme::infoPanelHitDismiss(), not owned here.
 // confirmWatched: see ui_rawscan.h's copy -- the panel's WATCH button becomes
-// UNWATCH when the device it is asking about is the one already being watched.
+// UNWATCH when the device it is asking about is the one already being watched,
+// and IGNORE becomes UN-IGNORE when it is on the ignore list.
 void uiLogTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng,
                int scrollOffset, bool confirmPending, const char* confirmLabel,
                bool infoPending, const char* infoTypeName, const char* infoText,
-               bool confirmWatched, bool confirmHunted);
+               bool confirmWatched, bool confirmHunted, bool confirmIgnored,
+               bool confirmUserLabeled);
 void uiLogScroll(int delta);          // positive = scroll down (older)
 
 // One row of the list, newest first, and how many rows there are. The first
@@ -50,5 +52,5 @@ int uiLogRowAt(TFT_eSPI& t, int x, int y, int screenW, int screenH);
 // Hit test for the confirm panel's WATCH/HUNT/INFO/CANCEL buttons --
 // only meaningful while uiLogTick() is being called with confirmPending
 // true; main.cpp owns that flag, not this module.
-enum class LogConfirmTap { NONE, WATCH, HUNT, INFO, IGNORE, CANCEL };
+enum class LogConfirmTap { NONE, WATCH, HUNT, INFO, IGNORE, LABEL, CANCEL };
 LogConfirmTap uiLogHitConfirm(int x, int y, int screenW, int screenH);

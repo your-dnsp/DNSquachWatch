@@ -1,5 +1,4 @@
-# DNSP v0.1 uses the reviewed upstream baseline for OTA/mesh version comparison.
-# The UI separately identifies the DNSP draft.
+# DNSquachWatch release-candidate version stamped throughout the image.
 Import("env")
 import os
 
@@ -11,7 +10,7 @@ def get_version():
     forced = os.environ.get("SQW_VERSION", "").strip()
     if forced:
         return forced
-    return "1.19.1"  # DNSP v0.1 baseline; do not inherit a parent directory's git tag
+    return "1.1.2"  # do not inherit a parent directory's git tag
 
 
 env.Append(BUILD_FLAGS=['-DFIRMWARE_VERSION=\\"%s\\"' % get_version()])
@@ -28,3 +27,38 @@ import runpy
 from pathlib import Path
 _project = Path(env.subst('$PROJECT_DIR'))
 runpy.run_path(str(_project / 'tools/check_flash_layout.py'))['check'](_project)
+
+# TFT_eSPI normally compiles its write clock into every transaction. Generate
+# a narrow adapter without editing the installed library or changing touch/read
+# clocks. Only these four pinned 2.8-inch CYD targets use it; DMA is not used here.
+if env['PIOENV'] in ('cyd', 'cyd-fast', 'cyd-ili9341', 'cyd-ili9341-fast'):
+    def runtime_display(env, node):
+        source = Path(node.srcnode().get_abspath())
+        header = source.parent / 'TFT_eSPI.h'
+        if '#define TFT_ESPI_VERSION "2.5.43"' not in header.read_text():
+            raise RuntimeError('Runtime display speed requires TFT_eSPI 2.5.43')
+        transform = runpy.run_path(str(_project/'tools/runtime_display.py'))['patch']
+        result = transform(source.read_text())
+        destination = Path(env.subst('$BUILD_DIR'))/'dnsp-runtime'/'TFT_eSPI.cpp'
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if not destination.exists() or destination.read_text() != result:
+            destination.write_text(result)
+        return env.File(str(destination))
+    env.AddBuildMiddleware(runtime_display, '*TFT_eSPI.cpp')
+
+# Receive-side checks must precede NimBLE's allocations, not merely guard
+# our callback after the device object/payload has already been allocated.
+if env['PIOENV'] in ('cyd', 'cyd-fast', 'cyd-ili9341', 'cyd-ili9341-fast'):
+    def runtime_ble(env, node):
+        source = Path(node.srcnode().get_abspath())
+        properties = source.parent.parent / 'library.properties'
+        if 'version=2.5.1' not in properties.read_text().splitlines():
+            raise RuntimeError('BLE receive guard requires NimBLE-Arduino 2.5.1')
+        transform = runpy.run_path(str(_project/'tools/runtime_ble.py'))['patch']
+        result = transform(source.read_text())
+        destination = Path(env.subst('$BUILD_DIR'))/'dnsp-runtime'/'NimBLEScan.cpp'
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if not destination.exists() or destination.read_text() != result:
+            destination.write_text(result)
+        return env.File(str(destination))
+    env.AddBuildMiddleware(runtime_ble, '*NimBLEScan.cpp')

@@ -31,3 +31,4 @@ void uiOutfitUnlockTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng);
 // the reveal animation is short, and letting a touch already in flight
 // when it opened close it immediately would look like it never appeared.
 bool uiOutfitUnlockDismissable(uint32_t now);
+

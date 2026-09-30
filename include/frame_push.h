@@ -32,7 +32,12 @@ class TFT_eSPI;
 // so the condition is simply "a board", and a new one inherits it: the push
 // is the library's own transaction with the waiting put to use, and it
 // declines any frame whose shape it does not recognise rather than guessing.
-#if defined(ARDUINO_ARCH_ESP32)
+// Not on an ESP32-S3 yet (SQW_S3: the T-Watch and the Freenove S3): the
+// overlapped push talks to the ESP32 SPI registers, and the S3 lays them out
+// differently -- the first frame through it came out white. pushSprite()
+// until it is ported. And not on the CrowPanel 7, which has no SPI display at
+// all: CrowBlit writes rows into its RGB framebuffer (crowpanel7_blit.h).
+#if defined(ARDUINO_ARCH_ESP32) && !defined(SQW_S3) && !defined(CROWPANEL7)
   #define SQW_FRAME_PUSH 1
 #else
   #define SQW_FRAME_PUSH 0
@@ -92,6 +97,17 @@ inline int frameSpans(const bool* changed, int32_t h, int32_t align, RowSpan* ou
     return n;
 }
 
+// A large/fragmented update (such as scrolling text) should reach the panel
+// in one sweep, rather than visibly separated horizontal strips. Small
+// isolated changes keep the existing low-bandwidth path. No extra buffer.
+inline int coalesceSpans(RowSpan* spans, int count, int changedRows, int height) {
+    if (count > 1 && (count > 8 || changedRows >= (height + 2) / 3)) {
+        spans[0].r1 = spans[count-1].r1;
+        return 1;
+    }
+    return count;
+}
+
 // Builds the lookup table. Once, in setup(), any time after the display is
 // up. Returns false on a board this is not built for, and push() then
 // declines every frame and the ordinary push carries on.
@@ -135,3 +151,4 @@ uint32_t wireUs();
 bool push(TFT_eSPI& tft, const uint8_t* src, int32_t w, int32_t h, int32_t x, int32_t y);
 
 }  // namespace FramePush
+

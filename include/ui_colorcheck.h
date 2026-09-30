@@ -13,3 +13,4 @@ void uiColorCheckTick(TFT_eSPI& t, uint32_t now);
 
 enum class ColorCheckTap { NONE, INVERT, ORDER, DONE };
 ColorCheckTap uiColorCheckHitTest(int x, int y, int screenW, int screenH);
+

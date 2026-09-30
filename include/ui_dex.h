@@ -23,3 +23,4 @@ DexTap uiDexHitTest(TFT_eSPI& t, int x, int y, int screenW, int screenH);
 
 // For the Settings row: "11/17".
 uint8_t uiDexCaught(const DetectionEngine& eng);
+

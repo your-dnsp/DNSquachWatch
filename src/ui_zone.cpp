@@ -74,3 +74,4 @@ ZoneHit uiZoneCardHit(int tx, int ty, int screenW, int screenH) {
     if (tx >= nx - 3)       return ZoneHit::NEXT;
     return ZoneHit::OK;
 }
+

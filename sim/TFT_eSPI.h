@@ -104,8 +104,8 @@ public:
         _rotation = r;
     }
     uint8_t getRotation() const { return _rotation; }
-    int16_t width()  const { return _w; }
-    int16_t height() const { return _h; }
+    virtual int16_t width()  const { return _w; }
+    virtual int16_t height() const { return _h; }
     void invertDisplay(bool) {}
     void fillScreen(uint32_t color) { fillRect(0, 0, _w, _h, color); }
 
@@ -534,8 +534,10 @@ public:
     // rotation visibly stops resizing here -- a loud failure, not a
     // silently wrong one.
     void setViewport(int32_t x, int32_t y, int32_t w, int32_t h, bool datum = true) override {
-        if (_created && x == 0 && y == 0 && w > 0 && h > 0 && (w != _w || h != _h)) {
-            _w = w; _h = h;
+        // Only resize when ResizableSprite actually changed the buffer fields.
+        // A viewport taller than the allocation must NOT silently grow it.
+        if (_created && (_dwidth != _w || _dheight != _h)) {
+            _w = _dwidth; _h = _dheight;
             _buf.assign((size_t)w * h, 0x0000);
             syncGeom();
             _vpActive = false;
@@ -543,6 +545,8 @@ public:
         }
         _vpX = x; _vpY = y; _vpW = w; _vpH = h; _vpActive = true; _vpDatum = datum;
     }
+    int16_t width() const override { return _vpActive && _vpDatum ? _vpW : _w; }
+    int16_t height() const override { return _vpActive && _vpDatum ? _vpH : _h; }
     void resetViewport() override { _vpActive = false; }
     int32_t getViewportX()      override { return _vpActive && _vpDatum ? _vpX : 0; }
     int32_t getViewportY()      override { return _vpActive && _vpDatum ? _vpY : 0; }
@@ -583,6 +587,7 @@ public:
             (_depth == 8) ? quantise332((uint16_t)color) : (uint16_t)color;
     }
     uint16_t readPixel(int32_t x, int32_t y) override {
+        if (_vpActive && _vpDatum) { x += _vpX; y += _vpY; }
         if (x < 0 || y < 0 || x >= _w || y >= _h) return 0;
         return _buf[(size_t)y * _w + x];
     }
@@ -612,3 +617,4 @@ private:
     bool    _vpDatum = true;
     bool _vpActive = false;
 };
+

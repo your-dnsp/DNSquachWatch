@@ -36,3 +36,4 @@ extern const uint8_t kDeviceCount;
 const Device* find(DetectionType t, const char* vendor, const char* name);
 
 }
+

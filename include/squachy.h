@@ -272,6 +272,12 @@ namespace Squachy {
     // Squachy knows who he is.
     void setNameTag(const char* name);
 
+    // A radio headset on his head -- band, ear cups and a mic -- for the
+    // watch alert's LOCKED ON screen. Drawn as part of his head, so it bobs,
+    // talks and scales with him. Same contract as the name tag: set it, draw,
+    // clear it.
+    void setHeadset(bool on);
+
     // A line from outside his own head, said once: the update notice. The
     // text must outlive the bubble -- a static buffer, not a stack one.
     void announce(const char* text);
@@ -285,6 +291,9 @@ namespace Squachy {
     // Hold his speech bubble off the screen (he still moves). Desk mode
     // uses it while a message box shares the screen with him.
     void holdBubble(bool held);
+    // Full-scene callers already erased last frame; don't erase over visitors
+    // drawn earlier in this frame. Restore false on leaving the draw scope.
+    void bubbleSceneRepainted(bool value);
 
 #if SQUACH_MESH
     // Which beat of a visit a line is wanted for. The pools live in
@@ -556,3 +565,4 @@ namespace Squachy {
                     bool listening = false, bool bubbleTail = false,
                     VisitPose pose = VisitPose::NONE);
 }
+

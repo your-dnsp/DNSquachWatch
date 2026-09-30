@@ -16,3 +16,14 @@ Use one expendable test card and keep real data/backups on a computer. Record bo
 Acceptance: no crashes or spontaneous resets; readable storage files; no false “verified” backup; correct alert/lock behavior; no progressive memory loss; no unexplained sustained detection loss versus baseline; usable touch and readable text in both orientations. No universal numeric minimum heap or drop threshold is claimed without a measured baseline. Record failures, reproduce them, and fix them before giving units away.
 
 Gift preparation is a checklist and introduction, not a secure erase. Inspect/review saved networks, PIN and squad credentials, history stores, telemetry configuration and card files. A fresh card plus a deliberate reviewed reset is preferable to assuming “clear visible log” sanitizes everything. PIN locking does not encrypt storage. Arm the hello only after preparation; run practice cards with the recipient.
+
+
+## v0.9 duress checks — expendable data only
+
+- Save a full flash backup and move wanted SD backups to the computer first.
+- On both ST7789 and ILI9341, check warning readability, PIN-disabled row hiding, ordinary PIN unlock and settings verification.
+- Populate sacrificial SD app folders, nested backups and unrelated photo folders; confirm the intended selection and unrelated-file preservation.
+- Read back NVS, BlackBox and coredump after duress; inspect the journal and verify decoy across power cycles.
+- Interrupt power during each stage; repeat with missing, full, corrupted and write-failing cards. Verify partial failures rather than assuming the visual means success.
+- Confirm the visual's touch mapping, responsiveness, display clock stability and absence of normal radio activity using an independent receiver.
+- Exercise documented USB recovery and then ordinary scanning, logs, research capture, backup, language and game menus.

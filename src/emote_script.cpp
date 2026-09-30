@@ -450,3 +450,4 @@ const char* sub(E e)  { return (uint8_t)e < (uint8_t)E::COUNT ? NAME[(uint8_t)e]
 
 } // namespace EmoteScript
 #endif // SQUACH_MESH
+

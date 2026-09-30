@@ -84,7 +84,9 @@ from your browser:
 **[https://squachwatch.com/](https://squachwatch.com/)**
 
 Works in Firefox, Chrome, Edge, or Brave on desktop. Pick your board (2.8" CYD,
-AWOK 2.4" or RL Phantom 2.4"), plug in, click Connect & Install, done.
+AWOK 2.4", RL Phantom 2.4", or the LilyGo T-Watch S3 in beta), plug in, click
+Connect & Install, done. A T-Watch has its clock set for it once the install
+finishes.
 
 ## Build
 
@@ -482,4 +484,3 @@ Verified on real hardware. There is also a PC emulator in `sim/` that
 compiles the actual `src/` against shims, and a host test suite in `test/`
 (`make -C test`) covering the decoders, the signature tables and the
 emulator's own fidelity to the display library.
-

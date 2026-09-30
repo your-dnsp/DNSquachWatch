@@ -94,9 +94,11 @@ inline void pinMode(uint8_t, uint8_t) {}
 inline void digitalWrite(uint8_t, uint8_t) {}
 inline int  digitalRead(uint8_t) { return 0; }
 inline int  analogRead(uint8_t) { return 0; }
-inline void ledcSetup(uint8_t, double, uint8_t) {}
-inline void ledcAttachPin(uint8_t, uint8_t) {}
-inline void ledcWrite(uint8_t, uint32_t) {}
+namespace SimPwm { inline int pins[16]={}; inline int bits[16]={}; inline uint32_t duty[16]={}; }
+inline void ledcSetup(uint8_t channel, double, uint8_t bits) {if(channel<16)SimPwm::bits[channel]=bits;}
+inline void ledcDetachPin(uint8_t) {}
+inline void ledcAttachPin(uint8_t pin, uint8_t channel) {if(channel<16)SimPwm::pins[channel]=pin;}
+inline void ledcWrite(uint8_t channel, uint32_t duty) {if(channel<16)SimPwm::duty[channel]=duty;}
 
 // Interrupt masking around the firmware's IRAM queues -- single-
 // threaded here, so there's nothing to mask.
@@ -124,6 +126,7 @@ struct EspClass {
     const char* getChipModel(){ return "ESP32-SIM"; }
     uint8_t  getChipRevision(){ return 1; }
     uint32_t getCpuFreqMHz()  { return 240; }
+    void restart() {} // recovery-screen action; the desktop process is not a board
 };
 inline EspClass ESP;
 inline bool psramFound() { return false; }

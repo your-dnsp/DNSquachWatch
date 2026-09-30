@@ -81,3 +81,4 @@
 // This ST7789 panel is normal (non-inverted) polarity; BGR order.
 #define TFT_INVERSION_OFF
 #define TFT_RGB_ORDER TFT_BGR
+

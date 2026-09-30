@@ -109,3 +109,4 @@ void uiDiaryTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
     t.setCursor((w - hw) / 2, top + 9 * rowH + 8);
     t.print(hint);
 }
+

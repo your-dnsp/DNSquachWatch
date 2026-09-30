@@ -120,14 +120,19 @@ int main() {
         const uint8_t mac[6] = { 1, 2, 3, 4, 5, 6 };
         IgnoreList::add(mac);
         Security::lock();
-        ck("entering it unlocks, as the real one would",
-           Security::check("999999", 80000) == Check::DURESS && !Security::locked());
-        ck("the message phrase is gone", !phraseStored());
-        ck("the ignore list is empty", !IgnoreList::contains(mac));
-        ck("the duress PIN is spent", !Security::hasDuress());
-        ck("the real PIN is untouched", Security::verify("123456"));
+        ck("duress recognition stays locked until durable intent",
+           Security::check("999999", 80000) == Check::DURESS && Security::locked());
+        ck("recognition alone leaves stored secrets intact", phraseStored() && IgnoreList::contains(mac));
+        ck("failed arming can retry",Security::hasDuress() && Security::check("999999",80000)==Check::DURESS);
+        ck("settings verification never accepts duress",!Security::verify("999999"));
+        ck("real PIN remains usable after failed arming",Security::check("123456",80000)==Check::OK);
+        ck("unlocked checks cannot trigger duress",Security::check("999999",80000)!=Check::DURESS);
+        Security::check("123456",80000);
+        Preferences old;old.begin("security",false);old.remove("dver");old.end();
         Security::begin();
-        ck("and a reboot finds no duress PIN either", !Security::hasDuress());
+        ck("old duress PIN is not silently upgraded",!Security::hasDuress());
+        Security::clearDuress();
+
     }
 
     suite("Ten wrong guesses wipe, when asked to");
@@ -175,3 +180,4 @@ int main() {
 
     return report();
 }
+

@@ -8,17 +8,38 @@
 // The 2.8" CYD's LED, and the RL Phantom's: same Sunton family, same three
 // pins, and nothing else on the Phantom's build uses 4, 16 or 17. The AWOK
 // and the 3.5" are unverified and get nothing -- see the header for why that
-// is a rule and not a shortcut.
-#if defined(ESP32) && !defined(CYD35) && !defined(AWOK)
+// is a rule and not a shortcut. Nor does the watch, which has no light.
+//
+// The Freenove S3 2.8" has one, but not three pins: a WS2812 on GPIO42, from
+// its schematic (and its 16 and 17 are the touch controller's SDA and
+// interrupt -- PWM on them would be dead touch). STATUS_LIGHT_HW 2 is that
+// kind: the same rules and levels, handed to the core's neopixelWrite().
+//
+// The CrowPanel 7 gets nothing either: its 4, 16 and 17 are the card slot's
+// data line, the touch clock and a panel data line (crowpanel7_board.h).
+#if defined(ESP32) && !defined(CYD35) && !defined(AWOK) && !defined(SQW_S3) && !defined(CROWPANEL7)
 #define STATUS_LIGHT_HW 1
+#elif defined(FREENOVE_S3)
+#define STATUS_LIGHT_HW 2
 #else
 #define STATUS_LIGHT_HW 0
 #endif
 
 namespace StatusLight {
 
+#if defined(FREENOVE32)
+// The Freenove 3.2": its schematic puts the RGB LED on 22, 16 and 17 (common
+// anode, lit low, like the Sunton's) and GPIO4 on the audio amplifier's
+// enable. Red on 4 would have switched the amp with every breath of the light.
+// Pins from PR #7 (DevOpsDAdams), checked against Freenove's schematic.
+static const int     PIN_R = 22, PIN_G = 16, PIN_B = 17;
+#else
 static const int     PIN_R = 4, PIN_G = 16, PIN_B = 17;
+#endif
 static const uint8_t CH_R  = 3, CH_G  = 4,  CH_B  = 5;
+#if STATUS_LIGHT_HW == 2
+static const uint8_t PIN_WS2812 = 42;
+#endif
 
 static const uint32_t TICK_MS        = 20;
 static const uint32_t BOOT_SWEEP_MS  = 600;
@@ -35,7 +56,7 @@ static const uint32_t VISIT_MS       = 300;
 // Twelve-bit PWM, not eight. At eight bits a purple at brightness 2 came out
 // as (0, 0, 1): the red and green rounded to nothing and only the blue was
 // left, which is what "blue, not purple" on the first Phantom flash was.
-static const uint16_t CAP[5] = { 160, 512, 1280, 2560, 4095 };
+static const uint16_t CAP[7] = { 16, 48, 160, 512, 1280, 2560, 4095 };
 static const uint8_t  PWM_BITS = 12;
 static const uint16_t PWM_MAX  = 4095;
 
@@ -85,8 +106,29 @@ static uint16_t s_outR = PWM_MAX, s_outG = PWM_MAX, s_outB = PWM_MAX;   // last 
 
 bool available() { return STATUS_LIGHT_HW != 0; }
 
+#if STATUS_LIGHT_HW == 2
+// Last 8-bit colour sent; 0xFFFF forces the first write through.
+static uint16_t s_pixR = 0xFFFF, s_pixG = 0xFFFF, s_pixB = 0xFFFF;
+// 12-bit duty to the WS2812's 8 bits, rounded -- but never to 0 from a lit
+// channel. At the default cap the idle breathe spans 1..8 on blue and 0..4
+// on red: rounding the small channels away turned purple into blue at the
+// bottom of every breath, and the steps read as a slow flicker (seen on the
+// first board). A lit channel keeps at least one count, so the hue holds.
+static inline uint8_t to8(uint16_t v) {
+    const uint32_t q = ((uint32_t)v * 255 + PWM_MAX / 2) / PWM_MAX;
+    return (uint8_t)(v && !q ? 1 : q);
+}
+#endif
+
 static void write(uint16_t r, uint16_t g, uint16_t b) {
-#if STATUS_LIGHT_HW
+#if STATUS_LIGHT_HW == 2
+    // One pixel over RMT (initialised on the first call). Same rule as the
+    // PWM path: only when the colour actually changes.
+    const uint8_t pr = to8(r), pg = to8(g), pb = to8(b);
+    if (pr == s_pixR && pg == s_pixG && pb == s_pixB) return;
+    neopixelWrite(PIN_WS2812, pr, pg, pb);
+    s_pixR = pr; s_pixG = pg; s_pixB = pb;
+#elif STATUS_LIGHT_HW
     // Common anode: full duty is off. Only touch the peripheral when a value
     // actually changes, which during a steady alert is never.
     const uint16_t ir = PWM_MAX - r, ig = PWM_MAX - g, ib = PWM_MAX - b;
@@ -99,7 +141,9 @@ static void write(uint16_t r, uint16_t g, uint16_t b) {
 }
 
 void begin() {
-#if STATUS_LIGHT_HW
+#if STATUS_LIGHT_HW == 2
+    write(0, 0, 0);
+#elif STATUS_LIGHT_HW
     ledcSetup(CH_R, 5000, PWM_BITS); ledcAttachPin(PIN_R, CH_R);
     ledcSetup(CH_G, 5000, PWM_BITS); ledcAttachPin(PIN_G, CH_G);
     ledcSetup(CH_B, 5000, PWM_BITS); ledcAttachPin(PIN_B, CH_B);
@@ -268,8 +312,15 @@ void tick(uint32_t now, const Context& cIn) {
     // curve and costs nothing), then the brightness cap, in twelve bits so
     // the small channels of a dim colour survive.
     uint8_t bi = Settings::lightBrightness();
-    if (bi < 1) bi = 1; else if (bi > 5) bi = 5;
+    if (bi < 1) bi = 1; else if (bi > 7) bi = 7;
+#if STATUS_LIGHT_HW == 2
+    // Twice the PWM LED's caps: eight bits leave the low ones only a handful
+    // of steps to breathe through. Still a glow at the default (about 16 of
+    // 255 at the peak), and the top rung stays at full.
+    uint32_t cap = CAP[bi - 1] * 2; if (cap > PWM_MAX) cap = PWM_MAX;
+#else
     const uint32_t cap = CAP[bi - 1];
+#endif
     auto chan = [&](uint8_t c) -> uint16_t {
         uint32_t v = (uint32_t)c * w.level / 255;      // 0..255
         v = (v * v) / 255;                              // gamma

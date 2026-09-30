@@ -153,3 +153,4 @@ const char* idleLine(const DetectionEngine& eng) {
 }
 
 }  // namespace Notices
+

@@ -164,6 +164,7 @@ static const SimDetectionProfile* parseProfile(const char* s) {
 static const uint32_t STEP_MS = 33;
 
 #include "dnsp_ui_checks.h"
+#include "banded_ui_checks.h"
 
 int main() {
     SimClock::virtualTime = true;
@@ -172,8 +173,11 @@ int main() {
     if (getenv("DNSP_UI_TEST")) {
         Preferences pref;pref.begin("squachy",false);pref.putBool("onboarded",true);pref.end();
     }
+    if(getenv("DNSP_DURESS_BOOT"))DuressDevice::arm();
     setup();
+    if(getenv("DNSP_DURESS_TEST"))return runDuressUiChecks(getenv("DNSP_DURESS_BOOT")!=nullptr);
     if (getenv("DNSP_UI_TEST")) return runDnspUiChecks();
+    if (getenv("DNSP_BAND_TEST")) return runBandedUiChecks();
 
     char line[128];
     while (fgets(line, sizeof(line), stdin)) {

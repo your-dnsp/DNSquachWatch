@@ -50,3 +50,4 @@ bool uiDeskHitMessage(int x, int y);
 // True for a few seconds after a focus block ends: main.cpp lights the LED
 // green off this, the same way HUNT's CAUGHT does.
 bool uiDeskChime(uint32_t now);
+

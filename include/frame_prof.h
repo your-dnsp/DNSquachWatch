@@ -38,3 +38,4 @@ void endFrame();     // folds this frame into the running averages
 void print();        // one [frame] line with every slot, in ms
 
 }  // namespace FrameProf
+

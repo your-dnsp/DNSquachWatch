@@ -182,3 +182,4 @@ EMSCRIPTEN_KEEPALIVE int sw_state()    { return (int)state; }
 EMSCRIPTEN_KEEPALIVE int sw_rotation() { return (int)screenRotation; }
 
 }  // extern "C"
+

@@ -69,6 +69,14 @@ static int indexOf(const uint8_t* mac) {
     if (!mac) return -1;
     for (uint8_t i = 0; i < s_count; i++)
         if (memcmp(&s_rec[(size_t)i * REC], mac, 6) == 0) return (int)i;
+    // BLE addresses saved before v1.25.0 used NimBLE's internal byte order.
+    // Preserve those ignore entries while new detections use printed order.
+    for (uint8_t i = 0; i < s_count; i++) {
+        const uint8_t* old = &s_rec[(size_t)i * REC];
+        bool same = true;
+        for (uint8_t b = 0; b < 6 && same; b++) same = old[b] == mac[5 - b];
+        if (same) return (int)i;
+    }
     return -1;
 }
 

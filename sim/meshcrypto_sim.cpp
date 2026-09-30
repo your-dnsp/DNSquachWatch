@@ -93,3 +93,4 @@ uint16_t MeshCrypto::dhCode(const uint8_t pubA[DH_LEN], const uint8_t pubB[DH_LE
 }
 // Nothing to test against: the golden frame is real AES-CCM and this is not.
 bool MeshCrypto::selfTest() { return true; }
+

@@ -51,6 +51,9 @@ static void rowContent(PowerRow r, char* valBuf, size_t valBufN,
             break;
         case PowerRow::SCREEN_TIMEOUT: {
             label = "SCREEN TIMEOUT";
+#if defined(TWATCH_S3)
+            dimmed = false;   // the watch times out whatever the master switch says
+#endif
             // Read the raw table, not the gated getter: this row has to show
             // what is configured even while the master switch is off.
             uint16_t sec = Settings::powerSaver() ? Settings::screenTimeoutSec()
@@ -90,6 +93,11 @@ static void rowContent(PowerRow r, char* valBuf, size_t valBufN,
         case PowerRow::WAKE_ON_ALERT:
             label = "WAKE ON ALERT"; value = Settings::wakeOnAlert() ? "ON" : "OFF";
             break;
+#if defined(TWATCH_S3)
+        case PowerRow::RADIO_DUTY:
+            label = "RADIO DUTY"; value = Settings::radioDutyName(Settings::radioDutyRaw());
+            break;
+#endif
         default:
             label = "?";
             break;
@@ -206,3 +214,4 @@ PowerRow uiPowerHitTest(TFT_eSPI& t, int x, int y, int screenW, int screenH) {
     }
     return PowerRow::NONE;
 }
+

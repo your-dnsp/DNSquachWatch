@@ -25,3 +25,4 @@ void          uiBeaconWarnInit(TFT_eSPI& t);
 // than by the clock must sit still for it. Other boards draw once.
 void          uiBeaconWarnTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool advance = true);
 BeaconWarnHit uiBeaconWarnHitTest(TFT_eSPI& t, int x, int y);
+

@@ -1,39 +1,25 @@
-# DNSquachWatch v0.7 — test report
+# DNSquachWatch v1.1.2 test report
 
-Local development draft for ESP32 CYD ST7789, experimental 80 MHz display. No GitHub push or device flashing was performed. No CYD serial port was available. Physical testing remains outstanding.
+Targets: 2.8-inch CYD, ST7789 and ILI9341, initial 80 MHz display clock (`cyd-fast` and `cyd-ili9341-fast`). Upstream base: SquachWatch v1.25.0.
 
-## Measured resources
+## Automated results
 
-| Measure | Result |
-|---|---:|
-| Actual cyd-fast application image | 1,845,376 bytes |
-| Increase over v0.6 | 19,744 bytes (19.3 KiB) |
-| Application slot size | 1,966,080 bytes |
-| Remaining application image space | 120,704 bytes (117.9 KiB) |
-| Static RAM | 102,864 bytes |
-| Static RAM increase over v0.6 | 816 bytes |
+- PlatformIO `cyd-fast` and `cyd-ili9341-fast` release builds: passed.
+- ST7789 firmware flash use: 1,912,213 / 1,966,080 bytes (97.3%); 53,867 bytes remain by the linker measurement. Its generated `firmware.bin` is 1,918,512 bytes, leaving 47,568 bytes of raw slot headroom.
+- ILI9341 firmware flash use: 1,912,313 / 1,966,080 bytes (97.3%); 53,767 bytes remain by the linker measurement. Its generated `firmware.bin` is 1,918,608 bytes, leaving 47,472 bytes of raw slot headroom.
+- Static RAM use for each target: 120,128 / 327,680 bytes (36.7%).
+- Installation-guide decode passed a byte-for-byte comparison with the printable source; the compact aquarium texture passed the full firmware build.
+- Complete host unit suite: passed, including Remote ID, malformed radio input, ALPR/signature matching, user-label validation and replacement, the 90-second Sketchy Environment rule, security, duress journal interruption, verified backup, spam flood, alert queue/snooze, settings persistence, crash reports, research exports, and game logic.
+- All 35 Python partition, display-target, duress-journal, recovery-tool, Bluetooth-runtime, and display-runtime tests passed.
+- Focused DEAUTH tests passed: same-source threshold, unrelated/split sources, independent per-source cooldowns, true sliding-window expiry, multiple receivers, BSSID/reason/protection evidence, malformed frames, rollover arithmetic, and deterministic table eviction. Research tests passed for decoded RAW evidence, address-free redaction, protected-body handling, and coherent-burst session counters.
+- Backup now refreshes only internal readable history instead of copying microSD files back onto the same card. Restore validates both records before applying them, journals the selected slot for deterministic retry, verifies restored state, and hands Watch/Hunt targets across one reboot. Hardware power-interruption verification remains required.
+- Banded-frame composition simulation passed in landscape and portrait, and the isolated duress simulation passed; the decoy path does not start normal detection services.
+- The broad UI integration harness still reports pre-existing failures in alert timing/snooze, several simulator preference-persistence checks, and Hebrew persistence. The same failures reproduce on the unmodified v1.1.0 simulator, while the v1.1.2 Research controls and all DEAUTH-specific tests pass. This release does not claim those unrelated harness failures were repaired.
 
-Both OTA slots and the raw BlackBox history reservation are preserved. Generated partition-table bytes match v0.6. Display speed remains 80 MHz; flash speed is 40 MHz. Static RAM is not a measurement of worst-case live heap or stack use.
+Compiler warnings remaining are simulator/library warnings for unavailable hardware paths and TFT_eSPI's built-in touch warning. The board uses the separate XPT2046 touch library, so TFT_eSPI's own touch API is intentionally disabled.
 
-## Passed checks
+## Physical checks still required
 
-- 33 native unit suites, including existing detection, security, research, language, menus, power and game checks.
-- Four focused suites under AddressSanitizer and UndefinedBehaviorSanitizer: public preferences/Care, verified copy, research and security.
-- Three full UI runs: landscape, portrait and reboot path.
-- Two full UI runs under AddressSanitizer and UndefinedBehaviorSanitizer, one per orientation.
-- A 12,000-loop accelerated mixed-screen simulator run. Virtual time advances do not represent hours of real hardware endurance.
-- Six flash-layout tests and eight computer recovery-checker tests.
-- Four firmware builds: cyd, cyd-ili9341, cyd-fast and awok. Only cyd-fast is packaged for this user's ST7789 target. The frozen 3.5-inch target was not tested.
-- ESP image checksum and validation hash passed. Release ZIP integrity and packaged binary checksums verified.
+The preceding images passed initial testing on the user's ST7789 board, including ordinary boot, display, microSD visibility, and the tested recovery paths reported during development. These exact v1.1.2 images have not yet been flashed, and the ILI9341 build has no physical-panel result yet. On each display, verify sustained boot with microSD inserted; touch and color calibration; a controlled DEAUTH RAW Research session and redacted export; label exports; the paired ALPR/deauth rule; scan/system history navigation; two ordinary Refresh runs without duplicates or removed history; an interrupted Refresh followed by successful retry; Export & Organize; Pocket Reader access; interrupted and successful backup/restore of settings, labels, Ignore entries, rules and Watch/Hunt targets; the one-reboot target handoff; all five scan-profile controls; the three-minute comparison; and unavailable/full/removed-card failures before wider distribution.
 
-New coverage includes preferences round-trip, truncation/corruption/extra fields, invalid values, excluded credentials, persisted favorites, next-boot greeting behavior, health counters, known SHA-256 vector, bounded copy and source/write/read-back/corruption/size failures. Research checks cover bounded readable reports, confidence and loss accounting. Recovery checks reject incomplete, corrupt, duplicate-field, wrong-board and mismatched-layout fixtures.
-
-UI checks cover Care navigation, four screen rotations, favorites editing/launch, simulated detection isolation, lock, missing-card errors, and existing alert/game interruptions and shutdown. Screenshots were inspected in both orientations. The simulator cannot emulate the physical microSD driver, RF coexistence, electrical timing or touch-panel characteristics.
-
-## Remaining release gates
-
-Complete ENDURANCE-CHECKLIST.md on the actual device: extended scanning with the 80 MHz screen, minimum heap/largest block under load, gameplay while scanning, full/removed/failing SD cards, interrupted writes/restores, safe shutdown and reboot. Then perform the USB recovery drill in RECOVERY.md with a real verified backup.
-
-The firmware backup copies the running application slot, not all flash. Preferences exclude credentials, history, calibration and progression. Public preference restore validates before writing but is not atomic across all NVS keys. Hashes establish integrity, not publisher identity. Experimental radio signatures need captured positive and negative examples; no new model is certified by these software tests.
-
-See RELEASE-REVIEW.md for implemented changes and remaining red flags, and FEATURE-STATUS.md for deferred or unimplemented features. Existing features were retained; approval of older roadmap ideas is not a claim that they have shipped.
+Avata 2 reception and human-reviewed translations remain separately deferred.

@@ -1,0 +1,20 @@
+DNSquachWatch v1.1.2
+Targets: 2.8-inch classic ESP32 CYD, ST7789 or ILI9341 display, initial 80 MHz display clock
+Build targets: cyd-fast and cyd-ili9341-fast
+Original SquachWatch base: v1.25.0
+
+This optimization-only update preserves v1.1.1 behavior while reducing the complete
+ST7789 firmware image by 6,896 bytes. The installation guide remains built in and is decoded
+byte-for-byte into microSD backups. The aquarium keeps its moving caustic-light effect
+with a smaller filtered texture. Static RAM use is unchanged.
+
+DEAUTH alerts require six frames from the same claimed transmitter within three seconds,
+with a separate 15-second cooldown for each tracked source. Research RAW exports decode
+claimed transmitter, receiver, BSSID, reason code, management protection, channel, and
+RSSI. Addresses can be spoofed, and channel hopping means observed counts are samples.
+
+Use the release folder matching the panel driver. If one produces a solid white screen,
+flash the other 2.8-inch CYD image. All four flash binaries are in each release folder;
+no files are read from the separate source archive. Read DNSQUACHWATCH INSTALLATION.txt before flashing. An ordinary
+four-image flash preserves settings and an active Duress / Pixel Tide state. Use the
+full erase procedure in RECOVERY.md only when deliberately removing internal state.

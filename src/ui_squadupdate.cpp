@@ -197,3 +197,4 @@ SquadUpdateHit uiSquadUpdateHit(TFT_eSPI& t, int x, int y) {
     return SquadUpdateHit::NONE;
 }
 #endif // SQUACH_MESH
+

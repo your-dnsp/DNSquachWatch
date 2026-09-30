@@ -29,3 +29,4 @@ namespace IdleEvents {
     // already skips Squachy::tick() for boring mode.
     void tick(TFT_eSPI& t, uint32_t now, int x0, int y0, int x1, int y1, bool advance);
 }
+

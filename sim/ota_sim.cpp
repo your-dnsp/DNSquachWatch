@@ -1,3 +1,4 @@
+#include <cstdlib>
 // SquachWatch-Sim — pretend firmware updates, so the UPDATE FIRMWARE screen
 // can be walked through in the emulator. No radio, no flash: each transport
 // plays a scripted run on a timer.
@@ -81,7 +82,10 @@ namespace OtaBle {
 static State    s_state = State::OFF;
 static uint32_t s_t0    = 0;
 
-bool available() { return true; }
+// SQUACHSIM_NO_BT: render as a CYD does, with no Bluetooth update server
+// compiled in (see nimble_flags_cyd in platformio.ini) -- the update screen
+// then has no Bluetooth button. Unset, the sim shows the watch's layout.
+bool available() { return getenv("SQUACHSIM_NO_BT") == nullptr; }
 bool begin() { s_state = State::WAITING; s_t0 = millis(); return true; }
 void end()   { s_state = State::OFF; }
 
@@ -216,3 +220,4 @@ uint8_t percent() {
 const char* failureText() { return OtaCore::failWords(OtaCore::Fail::WIFI_PASSWORD); }
 
 }  // namespace OtaWifi
+

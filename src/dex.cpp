@@ -91,11 +91,11 @@ const Entry ENTRY[] = {
       "Front doors. The whole street, one door at a time.",
       "Doorbell camera. I do not knock. I loom.",
       "On a front door. Has a button. Watches the street." },
-    { DetectionType::DEAUTH, Rarity::RARE, "DEAUTH", "ATTACK", "WIFI",
-      "Not a device: an attack. Somebody flooding the air with disconnect frames to knock devices off their WiFi. Cameras drop. Doorbells go blind. Nobody nearby means well.",
-      "Wherever somebody wants a camera to stop working for a minute.",
-      "Somebody is throwing everyone off the WiFi. Not me. I only sniff.",
-      "Not a thing you can hold. A flood of go-away frames." },
+    { DetectionType::DEAUTH, Rarity::RARE, "DEAUTH", "WIFI EVENT", "WIFI",
+      "Not a device identification: repeated disconnect frames from one claimed transmitter. This can be a flood, but addresses can be spoofed and the observation does not prove intent.",
+      "Busy WiFi, maintenance, testing, or deliberate disruption.",
+      "Go-away frames from one claimed address. Suspicious, not proof.",
+      "A burst of go-away frames. The source address may be disguised." },
     { DetectionType::EVILTWIN, Rarity::RARE, "TWIN", "ATTACK", "WIFI",
       "A network wearing another network's name from a second, different box. Phones join it because the name matches, and then everything they send goes through the imposter.",
       "Airports. Cafes. Anywhere a free network is expected.",
@@ -236,4 +236,3 @@ void reset() {
 }
 
 }  // namespace Dex
-

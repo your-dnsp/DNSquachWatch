@@ -81,3 +81,4 @@ bool uiOutfitTapArrow(int x, int y, int screenW, int screenH) {
     if (x > screenW - ARROW_ZONE_W) { Squachy::cycleOutfit(); return true; }
     return false;
 }
+

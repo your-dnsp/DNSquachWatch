@@ -9,8 +9,11 @@
 static const int TOP_MARGIN = 16;
 static int g_scroll = 0;
 
-static uint8_t rowCount() { return (uint8_t)SecurityRow::COUNT; }
-static SecurityRow rowAt(uint8_t i) { return (SecurityRow)i; }
+static uint8_t rowCount() { return (uint8_t)SecurityRow::COUNT - (Security::enabled() ? 0 : 1); }
+static SecurityRow rowAt(uint8_t i) {
+    if (!Security::enabled() && i >= (uint8_t)SecurityRow::DURESS_PIN) ++i;
+    return (SecurityRow)i;
+}
 
 static void computeGeom(TFT_eSPI& t, int screenH, int& top, int& bodyBottom, int& rowH) {
     top = TOP_MARGIN + Theme::LIST_HEADING_H;
@@ -160,3 +163,4 @@ SecurityRow uiSecurityHitTest(TFT_eSPI& t, int x, int y, int screenW, int screen
     }
     return SecurityRow::NONE;
 }
+

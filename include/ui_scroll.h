@@ -29,3 +29,4 @@ inline void uiClampScroll(int& scroll, int rows, int bodyH, int rowH, int slack 
     if (most < 0) most = 0;
     if (scroll > most) scroll = most;
 }
+

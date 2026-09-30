@@ -128,3 +128,4 @@ DetectionType uiDetFilterHitTest(TFT_eSPI& t, int x, int y, int screenW, int scr
     }
     return DetectionType::COUNT;
 }
+

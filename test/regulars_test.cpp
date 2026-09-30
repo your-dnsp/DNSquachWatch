@@ -49,3 +49,4 @@ int main() {
     ck("empty", Regulars::count() == 0 && Regulars::daysFor(tag) == 0);
     return report();
 }
+

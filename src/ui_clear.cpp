@@ -1,6 +1,8 @@
+#include "alert_snooze.h"
 // SquachWatch-CYD — clear (idle) screen implementation
 #include "ui_clear.h"
 #include "field_tools.h"
+#include "clock.h"      // the watch's corner clock
 #include "draw_band.h"
 #include "frame_prof.h"
 // Needed this early: the message helpers sit up with the visit machine,
@@ -1703,9 +1705,38 @@ static void drawSquadBadge(TFT_eSPI& t, int rightX, int bottomY, uint8_t count) 
 // Squachy, it is the state of a detection feature, and boring mode keeps all
 // of those.
 static bool    s_watchPillOn = false;
+
+// The watch's corner clock: 12-hour, cyan on a black tile like the icons, just
+// left of whichever right-hand icons are showing (the corner itself when
+// rotation is locked, the default). Only once the time is real -- a guessed or
+// unset clock draws nothing. Drawn straight after the background, BEFORE
+// Squachy, the visitor and every speech bubble, so a bubble that reaches the
+// top band covers the clock rather than the clock cutting a hole in the
+// bubble. Returns where the WATCH pill's free span must end, or -1.
+static int16_t s_cornerClockPillR = -1;
+#if defined(TWATCH_S3)
+static int16_t drawCornerClock(TFT_eSPI& t, int w) {
+    if (!Clock::trusted()) return -1;
+    char tm[8];
+    Clock::formatTime(tm, sizeof tm, true);
+    t.setTextSize(2);
+    const int icons = Theme::titleBarRightIconsX(w);
+    const int right = icons - (icons < w ? 2 : 4);
+    const int tw = t.textWidth(tm) - 2;   // no spacing column after the last glyph
+    const int x = right - tw;
+    t.fillRect(x - 3, 0, tw + 6, 20, TFT_BLACK);
+    t.setTextColor(Theme::CYAN, TFT_BLACK);
+    t.setCursor(x, 3);
+    t.print(tm);
+    return (int16_t)(x - 3 - 4);
+}
+#endif
 static int16_t s_wpX = 0, s_wpY = 0, s_wpW = 0, s_wpH = 0;
 
-static void drawWatchPill(TFT_eSPI& t, int screenW, bool watching, bool hunting) {
+// spanR: the right end of the free span. -1 keeps the old fixed reserve for
+// the rotate button and the padlock; the watch passes the corner clock's
+// left edge instead, which already sits left of both.
+static void drawWatchPill(TFT_eSPI& t, int screenW, bool watching, bool hunting, int spanR = -1) {
     // HUNT wins the label when both are set: it is the active, look-at-me mode.
     // The two are independent slots (see DetectionEngine), so both can be on.
     const char* txt = hunting ? "HUNT" : "WATCH";
@@ -1717,7 +1748,8 @@ static void drawWatchPill(TFT_eSPI& t, int screenW, bool watching, bool hunting)
     // Left edge of the free span, past the gear. The right limit is the rotate
     // icon (28) plus the lock (26) -- reserve both whether or not either is
     // showing, so the pill cannot move when a PIN is set or rotation locked.
-    const int spanL = 32, spanR = screenW - 54;
+    const int spanL = 32;
+    if (spanR < 0) spanR = screenW - 54;
     int x = spanL + ((spanR - spanL) - bw) / 2;
     if (x < spanL) x = spanL;
     const int y = (20 - bh) / 2;
@@ -2692,6 +2724,10 @@ bool uiMascotStep(uint32_t now, bool advance) {
 }
 
 void uiClearTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool advance, bool scanMenu) {
+    struct SpeechRedrawScope {
+        SpeechRedrawScope() { Squachy::bubbleSceneRepainted(true); }
+        ~SpeechRedrawScope() { Squachy::bubbleSceneRepainted(false); }
+    } speechRedrawScope;
     int w = t.width();
     int h = t.height();
     // This boot's only: the rows the black box brought back were last boot's.
@@ -2794,7 +2830,7 @@ void uiClearTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool adv
     // rows suggest. See the measurement in the commit that added this.
     const int squachyBottom = counterTextTop - 2;
 
-    const int titleBottom  = 16;
+    const int titleBottom  = 32;
 
     // Background animation, the whole screen top to bottom -- style picked
     // from the settings menu. It used to stop just above the button bar and
@@ -2821,6 +2857,10 @@ void uiClearTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool adv
     Theme::drawActiveBackground(t, now, 0, h, eng, advance);
     Theme::clearBackgroundFloor();
     FrameProf::lap(FrameProf::BG);
+#if defined(TWATCH_S3)
+    // Under everything that moves: see drawCornerClock().
+    if (DrawBand::has(0, titleBottom)) s_cornerClockPillR = drawCornerClock(t, w);
+#endif
     // Everything from here that moves by the call, not by the clock, moves
     // on the mascot's clock. See uiMascotStep().
     const bool step = uiMascotStep(now, advance);
@@ -2940,7 +2980,11 @@ void uiClearTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool adv
     Theme::drawBackgroundOverlay(t, now);
 
     // Title bar at the top
-    if (DrawBand::has(0, titleBottom)) Theme::drawTitleBar(t, ">> SQUACHWATCH <<  SCANNING");
+    if (DrawBand::has(0, titleBottom)) {
+        char heading[48];
+        if(AlertSnooze::active(now)){snprintf(heading,sizeof heading,"SCANNING | ALERTS SNOOZED %lum",(unsigned long)((AlertSnooze::remaining(now)+59999)/60000));Theme::drawTitleBar(t,heading);}
+        else Theme::drawTitleBar(t, ">> SQUACHWATCH <<  SCANNING");
+    }
 
     // The watch/hunt indicator, in the title bar's empty middle. AFTER the bar
     // itself, which repaints that whole band -- see drawWatchPill()'s comment
@@ -2954,7 +2998,9 @@ void uiClearTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool adv
         // pill the other pass had just drawn, and it would stop being tappable.
         if (DrawBand::has(0, titleBottom)) {
             s_watchPillOn = false;
-            if (watching || hunting) drawWatchPill(t, w, watching, hunting);
+            // Right of the pill: the watch's corner clock, drawn earlier (see
+            // drawCornerClock()); -1 elsewhere, the old fixed reserve.
+            if (watching || hunting) drawWatchPill(t, w, watching, hunting, s_cornerClockPillR);
         }
     }
 

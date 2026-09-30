@@ -18,3 +18,4 @@ namespace SimTouch {
     inline uint16_t rawX = 0;
     inline uint16_t rawY = 0;
 }
+

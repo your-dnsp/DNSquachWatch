@@ -15,3 +15,4 @@ void uiZoneCardDraw(TFT_eSPI& t, uint32_t now);
 
 enum class ZoneHit : uint8_t { NONE, CARD, PREV, NEXT, OK };   // CARD: on it, not on a button
 ZoneHit uiZoneCardHit(int x, int y, int screenW, int screenH);
+

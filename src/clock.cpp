@@ -1,8 +1,12 @@
 // SquachWatch-CYD — wall-clock time. See clock.h.
 #include "clock.h"
+#include "serial_flush.h"
 #include "security.h"   // a locked device takes no console commands
 #include "ota_wifi.h"    // the WIFI command lists the saved networks
-#include "detection.h"   // WINDOW N, for the bench
+#include "detection.h"   // WINDOW N, for the bench; RADIO
+#if defined(ARDUINO_ARCH_ESP32)
+#include <esp_phy_init.h> // RADIO FULLCAL
+#endif
 #include "flood_bench.h" // FLOOD N, for the bench (a no-op outside FLOOD_BENCH builds)
 #include "settings.h"
 #include "crowd_bench.h"
@@ -42,6 +46,20 @@ extern volatile bool g_benchPrimNow;
 extern volatile bool g_benchUpdateNow;
 extern volatile bool g_benchUpdateStop;
 #endif
+// INVERT and ROT: the colour-check toggles and the corner rotate button,
+// from the console, for bringing up a panel nobody can read yet.
+extern volatile bool g_consoleInvert;
+extern volatile bool g_consoleWatchTest;
+extern volatile bool g_consoleRotate;
+extern volatile bool g_consoleBatt;
+extern volatile bool g_consoleBattLog;
+extern volatile bool g_consoleRadioTest;
+extern volatile bool g_consolePmu;
+extern volatile bool g_consoleRtc;
+extern volatile bool g_consoleBuzz;
+extern volatile bool g_consoleMotion;
+extern volatile bool g_consoleXtal;
+extern volatile bool g_consoleHeal;
 
 namespace Clock {
 
@@ -86,15 +104,31 @@ static uint32_t rawNow() {
 // own. settimeofday puts it in the RTC domain, which keeps counting across
 // a software reset -- so a watchdog reboot, a panic, or the SD-card boot
 // loop does not take the time with it. A private static would.
+// A clock this far past the build is not set, it is stale: an ESP32-S3
+// keeps its system time across resets while the battery keeps it powered,
+// and the T-Watch arrived believing it was 2064 from whatever the factory
+// firmware left in the RTC. Trusted, that would have blocked every real
+// time offer (the mesh only corrects a clock that is NOT trusted). Six
+// years past the build date is the line.
+static uint32_t farFuture() {
+    static uint32_t limit = 0;
+    if (!limit) {
+        const char* d = __DATE__;          // "Sep 22 2026"
+        const int year = atoi(d + 7);
+        limit = (uint32_t)((year - 1970 + 6) * 365.25 * 86400.0);
+    }
+    return limit;
+}
 bool isSet() {
-    return rawNow() > kPlausible;
+    const uint32_t t = rawNow();
+    return t > kPlausible && t < farFuture();
 }
 bool trusted() { return isSet() && !s_guess; }
 bool guessed() { return isSet() && s_guess; }
 
 uint32_t nowEpoch() {
     const uint32_t t = rawNow();
-    return (t > kPlausible) ? t : 0u;
+    return (t > kPlausible && t < farFuture()) ? t : 0u;
 }
 
 // The first time this board knows the date, that date is kept: it is the
@@ -119,6 +153,9 @@ static void writeSystemClock(uint32_t epoch) {
 #endif
 }
 
+static void (*s_onSet)(uint32_t) = nullptr;
+void onSet(void (*fn)(uint32_t)) { s_onSet = fn; }
+
 bool setEpoch(uint32_t epoch) {
     if (epoch <= kPlausible) return false;
     // A real answer, from wherever: the guess is over, and the note is
@@ -127,6 +164,7 @@ bool setEpoch(uint32_t epoch) {
     writeSystemClock(epoch);
     noteKnown();
     if (s_begun) { s_prefs.putUInt("last", epoch); s_lastNote = millis(); }
+    if (s_onSet && isSet()) s_onSet(epoch);
     return true;
 }
 
@@ -267,11 +305,50 @@ static const Zone ZONES[] = {
     { "AUS EASTERN", "AEST-10AEDT,M10.1.0,M4.1.0/3" },
     { "AUS WESTERN", "AWST-8" },
     { "NEW ZEALAND", "NZST-12NZDT,M9.5.0,M4.1.0/3" },
+    // The rest came with issue #19. Appended, never inserted: a board keeps
+    // its zone as an index in NVS and sends it to the squad as one, so a
+    // zone that moved would put every board already set to it an hour or
+    // more out. ORDER below is where they show up.
+    { "MEXICO",      "CST6" },                            // no daylight saving since 2022
+    { "COLOMBIA",    "<-05>5" },                          // and Peru, Ecuador, Panama, Cancun
+    { "CHILE",       "<-04>4<-03>,M9.1.6/24,M4.1.6/24" },
+    { "ARGENTINA",   "<-03>3" },
+    { "W AFRICA",    "WAT-1" },                           // Nigeria, Algeria, Tunisia: no summer time
+    { "S AFRICA",    "SAST-2" },
+    { "E AFRICA",    "EAT-3" },
+    { "ISRAEL",      "IST-2IDT,M3.4.4/26,M10.5.0" },
+    { "TURKEY",      "<+03>-3" },
+    { "GULF",        "<+04>-4" },                         // Dubai, Oman, the Caucasus
+    { "PAKISTAN",    "PKT-5" },
+    { "BANGLADESH",  "<+06>-6" },
+    { "SE ASIA",     "<+07>-7" },                         // Thailand, Vietnam, Jakarta
+    { "SINGAPORE",   "<+08>-8" },                         // and Malaysia, the Philippines
+    { "KOREA",       "KST-9" },
+    { "QUEENSLAND",  "AEST-10" },                         // Brisbane: AUS EASTERN's hour, no summer time
+    { "AUS CENTRAL", "ACST-9:30ACDT,M10.1.0,M4.1.0/3" },
+    { "DARWIN",      "ACST-9:30" },
 };
 static const uint8_t ZONES_N = sizeof(ZONES) / sizeof(ZONES[0]);
 
+// The order PREV/NEXT and the settings row walk them: west to east from the
+// US, the way the list always started. Indexes into ZONES.
+static const uint8_t ORDER[] = {
+    0, 1, 2, 3, 4, 5, 6,                 // the US
+    21, 22, 23, 7, 8, 9, 24,             // Mexico to Argentina
+    10, 11, 25, 12, 26, 13, 28, 27,      // UTC, UK, Africa, Europe, Israel
+    29, 14, 30, 31, 15, 32, 33,          // Turkey to SE Asia
+    16, 34, 19, 35, 17,                  // China to Japan
+    38, 37, 36, 18, 20,                  // Australia, New Zealand
+};
+static_assert(sizeof(ORDER) == ZONES_N, "every zone once in ORDER");
+
 uint8_t     zoneCount()        { return ZONES_N; }
 const char* zoneName(uint8_t i){ return ZONES[i < ZONES_N ? i : 0].name; }
+uint8_t zoneStep(uint8_t i, int dir) {
+    uint8_t at = 0;
+    for (uint8_t k = 0; k < ZONES_N; k++) if (ORDER[k] == i) { at = k; break; }
+    return ORDER[(at + ZONES_N + (dir < 0 ? -1 : 1)) % ZONES_N];
+}
 void applyZone(uint8_t i) {
     setenv("TZ", ZONES[i < ZONES_N ? i : 0].rule, 1);
     tzset();
@@ -421,6 +498,14 @@ void pollSerial() {
             else Serial.println("[scan] unknown. One of: ACTIVE, PASSIVE, AUTO");
             continue;
         }
+        if (strncasecmp(line, "INTERVAL ", 9) == 0) {
+            unsigned ms = 0, win = 0;
+            if (sscanf(line + 9, "%u %u", &ms, &win) == 2) {
+                setScanInterval((uint16_t)ms, (uint8_t)win);
+                Serial.printf("[scan] interval %u ms, window %u ms from the next restart\n", ms, win);
+            }
+            continue;
+        }
         if (strncasecmp(line, "WINDOW ", 7) == 0) {
             setScanWindow((uint8_t)atoi(line + 7));
             continue;
@@ -445,6 +530,33 @@ void pollSerial() {
             OtaWifi::printSaved();
             continue;
         }
+        if (strcasecmp(line, "INVERT") == 0) { g_consoleInvert = true; continue; }
+        if (strcasecmp(line, "WATCHTEST") == 0) { g_consoleWatchTest = true; continue; }
+        if (strcasecmp(line, "ROT") == 0)    { g_consoleRotate = true; continue; }
+        if (strcasecmp(line, "BATT") == 0)    { g_consoleBatt = true; continue; }
+        if (strcasecmp(line, "BATTLOG") == 0) { g_consoleBattLog = true; continue; }
+        if (strcasecmp(line, "RADIO TEST") == 0) { g_consoleRadioTest = !g_consoleRadioTest; Serial.printf("[radio] bench test %s\n", g_consoleRadioTest ? "ON: cycling on the cable, screen or not" : "OFF"); continue; }
+        if (strcasecmp(line, "PMU") == 0)    { g_consolePmu = true; continue; }
+        if (strcasecmp(line, "RTC") == 0)    { g_consoleRtc = true; continue; }
+        if (strcasecmp(line, "BUZZ") == 0)   { g_consoleBuzz = true; continue; }
+        if (strcasecmp(line, "MOTION") == 0) { g_consoleMotion = true; continue; }
+        if (strcasecmp(line, "XTAL") == 0)   { g_consoleXtal = true; continue; }
+        if (strcasecmp(line, "RADIO DUTY") == 0) {
+            Settings::cycleRadioDuty();
+            Serial.printf("[radio] duty -> %s\n", Settings::radioDutyName(Settings::radioDutyRaw()));
+            continue;
+        }
+#if defined(ARDUINO_ARCH_ESP32)   // the radios themselves: nothing to ask in the emulator
+        if (strcasecmp(line, "RADIO HEAL") == 0) { g_consoleHeal = true; continue; }
+        if (strcasecmp(line, "RADIO FULLCAL") == 0) {
+            // Throw away the radio's saved tuning and restart: the next boot
+            // has nothing to load, so it calibrates from scratch.
+            Serial.printf("[radio] erasing saved RF calibration: err %d; restarting\n", (int)esp_phy_erase_cal_data_in_nvs());
+            delay(300);
+            ESP.restart();
+        }
+        if (strncasecmp(line, "RADIO", 5) == 0) { radioReport(strcasestr(line, "SCAN") != nullptr); continue; }
+#endif
         if (strncasecmp(line, "ZONE ", 5) == 0) {
             // ZONE US EASTERN, or ZONE 4: the flasher sends the name it
             // worked out from the browser's own zone.
@@ -599,7 +711,7 @@ void pollSerial() {
             // Bench builds only (-DBENCH_TOOLS=1): a deliberate panic, to
             // prove the crash history catches one.
             Serial.println("[bench] crashing on purpose");
-            Serial.flush();
+            serialFlush();
             volatile int* p = nullptr;
             *p = 1;
 #endif

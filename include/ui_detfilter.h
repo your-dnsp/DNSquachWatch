@@ -33,3 +33,4 @@ void uiDetFilterScroll(int delta);   // positive = scroll down
 // metrics -- same reasoning as every other row-list hit-test in this
 // codebase.
 DetectionType uiDetFilterHitTest(TFT_eSPI& t, int x, int y, int screenW, int screenH);
+

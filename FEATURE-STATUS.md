@@ -1,31 +1,37 @@
-# DNSP feature ledger — v0.7
+# DNSquachWatch v1.1.2 feature status
 
-Status describes delivered code, not a claim of real-device validation. Old proposal documents are historical plans, not release manifests.
+This file describes the current v1.1.2 ST7789 and ILI9341 80 MHz images. Older planning and measurement documents are retained as historical records and do not define this release.
 
-| Area | Implementation status | Remaining validation / work |
+| Area | Current status | Remaining validation or work |
 |---|---|---|
-| 15/30/45/60-second alerts; default 30; queue and X more | Implemented | Physical burst/field testing |
-| Why this matched; qualitative confidence | Implemented | Model-specific captured examples; never a numeric probability |
-| Flock/Raven/Axon/Meta and imported rules | Experimental implementation | False-positive controls and model validation; not confirmation |
-| ALPR Radar / DeFlock voluntary follow-up | URLs implemented | Physical usability; QR coverage incomplete |
-| Remote ID over BLE/Wi-Fi; ELRS setup clues | Implemented | Actual Air65/Air65 II/RadioMaster/FatShark models need testing; no ELRS flight-link or 5.8GHz receiver |
-| Research sessions, notes, signature packs, redacted/raw exports | Implemented | Device/card failure testing |
-| microSD status and error logging | Implemented | Volume label unavailable; physical full/removed/failing-card tests |
-| PIN, lock, existing history-wipe controls | Inherited/extended | Screen lock does not encrypt flash or the microSD |
-| Safe shutdown / reboot | Implemented | Real removal/power-loss tests |
-| Menu organization and language/accessibility shortcuts | Implemented v0.6 | Real thumb/long-session usability |
-| Language previews EN/ES/FR/DE/JA/ZH; hidden Hebrew | Implemented, partial translation | Native-speaker review; not full-system translation or general Hebrew shaping |
-| Breakout | Implemented | Theme improved in this release; real frame/radio performance |
-| 80 MHz display | Preserved experimental setting | Electrical stability unverified on user's board |
-| One firmware, no feature stripping | Preserved | Keep both OTA slots and raw BlackBox region intact |
-| Optional OSRS interface font | Planned, not delivered | Licensed readable glyphs and resource measurement |
-| Additional RS3/OSRS dialogue, quests, pets, unlocks | Planned beyond inherited content | Approved creative scope is not implemented just because it appears in a plan |
-| WiGLE | Deferred by user | Revisit when requested |
-| External 5.8GHz receiver | Deferred #36 | Hardware/pin feasibility |
-| Universal remote, WLED/HA/etc. | Research/design only | No implemented controls or pairing |
-| Firmware/public-preferences backup and USB recovery | Implemented v0.7 | Real recovery drill still required |
-| Feature checklist, endurance checks, demo, status help, favorites, gifting, field report | Implemented v0.7; hardware checks pending | See RELEASE-REVIEW.md for final results |
-| Whole-card duress wipe, anti-forensics, decoy application | Not implemented | Existing PIN/history wipe must not be described as this |
-| Beacon spam, Doom | Not implemented | Not added by this release |
+| 15/30/45/60-second alerts, default 30, queue, and Snooze All | Implemented | Physical burst testing |
+| Why This Matched and qualitative confidence | Implemented | Continue model-specific positive and negative samples |
+| Flock, Raven, Axon, Meta, ALPR, camera, and tracker signatures | Experimental detection support | Field validation; a match remains a clue |
+| Remote ID over BLE/Wi-Fi and focused DroneWatch | Implemented | Avata 2 retest deferred; no 5.8 GHz receiver |
+| ELRS/FPV equipment clues and pit tools | Implemented | Test named Air65, RadioMaster, and Fat Shark equipment |
+| Research sessions, notes, raw/redacted exports, DEAUTH evidence, and field report | Implemented | Card-removal, full-card, and field-capture testing |
+| Per-source Wi-Fi DEAUTH burst detection | Implemented: 6 frames / 3 seconds / 15-second per-source cooldown | Validate against controlled ordinary disconnects and controlled bursts |
+| Stored Alert History and boot/crash/system view | Implemented | Physical navigation and rollover testing |
+| Sketchy Environment ALPR + deauth rule | Implemented | Test both event orders and 90-second boundaries |
+| Readable Log Export and Pocket Reader | Implemented with stable IDs and retry journal | Interrupt power during refresh and confirm recovery |
+| Comprehensive microSD backup and restore | Implemented; security secrets excluded | Physical restore and interruption drill |
+| Watch/Hunt restore | Implemented with one-reboot handoff | Confirm target survives the first restart and is session-only afterward |
+| Stationary/Balanced/Fast/Maximum/Custom profiles | Implemented | Compare reception and stability on hardware |
+| microSD status, remount, test, format, and error logging | Implemented | Failing-card and full-card tests; volume label unavailable |
+| PIN, lock, Forgot confirmation, Wipe After 10 explanation | Implemented | Physical usability checks |
+| Duress PIN and persistent Pixel Tide | Implemented and host-tested | Destructive expendable-card test; no secure-erasure claim |
+| Safe Shutdown and Reboot | Implemented | Power-removal and interrupted-write checks |
+| Safe Mode and repeated-failed-boot recovery | Implemented | Manual and automatic hardware entry checks |
+| Menu organization and accessibility shortcuts | Implemented | Longer real-user usability pass |
+| Language previews: EN/ES/FR/DE/JA/ZH and hidden Hebrew | Partial translation framework | Human translation review deferred |
+| Breakout / Squach Snacks | Implemented | Long radio-plus-game performance test |
+| DNSP Screen Light, Morse, randomizers, timer/counter, Radio Activity | Implemented | Physical control/layout check |
+| 80 MHz ST7789 and ILI9341 displays | Implemented as selected experimental defaults; runtime 40 MHz fallback | ST7789 regression and ILI9341 physical-panel/long display-touch-card soak tests |
+| Wi-Fi firmware updating and USB recovery | Implemented | Matching-kit recovery drill |
+| Bluetooth firmware updating on this CYD | Removed | Wi-Fi and USB remain available |
+| WiGLE | Parser and policy groundwork only | External GPS hardware is deferred |
+| OSRS font | Planned | Licensed glyph/resource work |
+| Additional RuneScape dialogue, quests, pets, and unlocks | Backlog | Not implied by earlier planning notes |
+| Beacon spam and Doom | Not implemented | None planned for this release |
 
-Earlier numbered badge ideas remain tracked in DNSquachWatch-badgelife-ideas.md. Approval is not completion. Additional games/content, task-list concepts, pixel workshop, social experiments and other approved ideas without an implemented screen remain backlog. Features explicitly declined/deferred remain declined/deferred. This release does not reinterpret “do all eight” as approval to re-enable declined features.
+The firmware remains self-contained for boot, scanning, interface, recovery, and help. microSD content is optional and is not required to flash or start the device.

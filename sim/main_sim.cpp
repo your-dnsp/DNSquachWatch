@@ -49,6 +49,7 @@
 #include "meshmsg.h"
 #include "meshcrypto.h"
 #include "ui_watchalert.h"
+#include "ignore_list.h"
 #include "ui_colorcheck.h"
 #include "ui_diagnostics.h"
 #include "ui_desk.h"
@@ -600,7 +601,7 @@ int main(int argc, char** argv) {
             uiLogTick(frame, t, engine, 0, false, "", info,
                       info ? detectionTypeName(it) : nullptr,
                       info ? DetectionInfo::explainLive(it, engine) : "",
-                      false, false);   // no confirm panel in the sim: nothing watched, nothing hunted
+                      false, false, false, false);   // no confirm panel in the sim
         }
         else if (screen == "alert")    uiAlertTick(frame, t, engine, false, nullptr, "");
         else if (screen == "settings") uiSettingsTick(frame, t, engine);
@@ -613,7 +614,7 @@ int main(int argc, char** argv) {
         else if (screen == "desk")     uiDeskTick(frame, t, engine);
         else if (screen == "zonecard") { uiClearTick(frame, t, engine, true, false); uiZoneCardDraw(frame, t); }
         else if (screen == "hunt")     uiHuntTick(frame, t, engine);
-        else if (screen == "rawscan")  uiRawScanTick(frame, t, engine, true, true, false, "", false, false);
+        else if (screen == "rawscan")  uiRawScanTick(frame, t, engine, true, true, false, "", false, false, false, false);
         else if (screen == "phone")    uiPhoneTick(frame, t, engine);
         else if (screen == "bingo")    uiBingoTick(frame, t, engine);
         else if (screen == "dex")      uiDexTick(frame, t, engine);
@@ -721,8 +722,18 @@ int main(int argc, char** argv) {
     };
 
     // Per-screen init, where the screen has one.
-    if      (screen == "clear" || screen == "zonecard") uiClearInit(frame);
+    if      (screen == "clear" || screen == "zonecard") {
+        uiClearInit(frame);
+        // SQUACHSIM_ZONE=<index into Clock's table> shows the zone card on
+        // that zone, for rendering one of them.
+        if (const char* z = getenv("SQUACHSIM_ZONE")) Settings::setTimeZone((uint8_t)atoi(z));
+    }
     else if (screen == "log") {
+        // The second row ignored, so the screen shows its IGNORED tag. The
+        // sim's NVS is in memory unless SQUACHSIM_NVS says otherwise, so
+        // this does not follow any other render around.
+        IgnoreList::begin();
+        if (const Detection* d = engine.logAt(1)) IgnoreList::add(d->mac, d->type);
         // Three sightings in the black box, so the list shows the rows held
         // in RAM and then carries on into the ones kept in flash.
         BlackBox::begin();
@@ -753,7 +764,16 @@ int main(int argc, char** argv) {
         if (getenv("SQUACH_ALERT") && engine.logAt(0)) uiDeskAlert(*engine.logAt(0), now);
     }
     else if (screen == "rawscan")    uiRawScanInit(frame, true);
-    else if (screen == "watchalert") uiWatchAlertInit(frame);
+    else if (screen == "watchalert") {
+        // Watching the seeded AirTag, with a signal that has been climbing for
+        // the last twenty seconds -- so the screen has a name, a type and a
+        // trend to show.
+        const uint8_t tile[6] = { 0x10, 0x11, 0x12, 0x13, 0x14, 0x15 };
+        engine.watchBle(tile, "AirTag");
+        static const int8_t R[] = { -89, -86, -87, -83, -80, -81, -76, -73, -70, -67, -64, -61 };
+        for (int8_t r : R) engine.checkWatchBle(tile, r);
+        uiWatchAlertInit(frame);
+    }
     else if (screen == "diagnostics") uiDiagnosticsInit(frame);
     else if (screen == "colorcheck") uiColorCheckInit(frame);
     else if (screen == "icons")      {}
@@ -778,14 +798,13 @@ int main(int argc, char** argv) {
         // The real path: a version arrives, then the release's own lines if
         // it came from the site. --from makes it a squad member's hello,
         // which carries a number and no notes.
-        OtaCore::noteAvailable("1.19.1", heardFrom.c_str());
+        OtaCore::noteAvailable("1.24.1", heardFrom.c_str());
         if (heardFrom.empty()) {
-            static const char* const NEWS[3] = {
-                "WiFi updates finish again",
-                "He reads the version off the image",
-                "The shark suit survives a visit",
+            static const char* const NEWS[2] = {
+                "No more phantom Flock alerts",
+                "Nameless gadgets stay nameless",
             };
-            OtaCore::noteRelease("Crash Override", NEWS, 3);
+            OtaCore::noteRelease("Ghost Town", NEWS, 2);
         }
         uiSysPropsInit(frame);
         // The tab a tap would have opened, for rendering one of them.

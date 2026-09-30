@@ -21,3 +21,4 @@ public:
     int read() { return -1; }
 };
 inline TwoWire Wire;
+

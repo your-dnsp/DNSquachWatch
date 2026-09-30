@@ -14,3 +14,4 @@ typedef struct { // Data stored for FONT AS A WHOLE:
 	uint16_t  first, last; // ASCII extents
 	uint8_t   yAdvance;    // Newline distance (y axis)
 } GFXfont;
+

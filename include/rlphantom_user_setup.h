@@ -90,3 +90,4 @@
 // and CHECK COLORS in the SYSTEM menu is the screen to judge it on.
 #define TFT_INVERSION_OFF
 #define TFT_RGB_ORDER TFT_RGB
+

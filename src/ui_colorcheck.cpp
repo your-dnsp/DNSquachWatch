@@ -117,3 +117,4 @@ ColorCheckTap uiColorCheckHitTest(int x, int y, int screenW, int screenH) {
     if (x >= doneX && x <= doneX + doneW && y >= doneY && y <= doneY + doneH) return ColorCheckTap::DONE;
     return ColorCheckTap::NONE;
 }
+

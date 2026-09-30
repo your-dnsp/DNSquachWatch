@@ -42,6 +42,7 @@ static void reset(int8_t rssi) {
     e->alerts      = 0;
     e->quietBar    = 0;
     e->lastAlertMs = 0;
+    e->askedMin    = (uint16_t)(millis() / 60000u);
     e->rssi        = rssi;
 }
 
@@ -110,6 +111,31 @@ int main() {
     ck("after the decay window it is free again", eng.alertGate(MAC, 2, false) == Gate::ALLOW);
     ck("with a fresh allowance, not a spent one", entry()->alerts == 1);
 
+    suite("A still watch keeps a bobbing device quiet");
+    // The Ring camera on the nightstand night: it comes back every couple of
+    // minutes, all night. Half an hour since its last alert is not half an
+    // hour gone.
+    reset(-80);
+    ck("uses both", eng.alertGate(MAC, 2, false, true) == Gate::ALLOW &&
+                    eng.alertGate(MAC, 2, false, true) == Gate::ALLOW_LAST);
+    {
+        bool held = true;
+        for (int i = 0; i < 20; i++) {        // forty minutes of coming back
+            SimClock::nowMs += 2 * 60000;
+            if (eng.alertGate(MAC, 2, false, true) != Gate::HOLD) held = false;
+        }
+        ck("forty minutes of coming back, all held", held);
+    }
+    ck("the same on a moving watch gets its allowance back",
+       eng.alertGate(MAC, 2, false, false) == Gate::ALLOW);
+
+    suite("A still watch still hears a device that was really gone");
+    reset(-80);
+    ck("uses both", eng.alertGate(MAC, 2, false, true) == Gate::ALLOW &&
+                    eng.alertGate(MAC, 2, false, true) == Gate::ALLOW_LAST);
+    SimClock::nowMs += DetectionEngine::QUIET_DECAY_MS + 2 * 60000;
+    ck("gone over half an hour, it is free again", eng.alertGate(MAC, 2, false, true) == Gate::ALLOW);
+
     suite("A device nobody has logged");
     {
         const uint8_t other[6] = { 0x02, 0x99, 0x88, 0x77, 0x66, 0x55 };
@@ -119,3 +145,4 @@ int main() {
 
     return report();
 }
+

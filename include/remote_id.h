@@ -38,6 +38,16 @@ const char *uaTypeName(uint8_t t);
 // caller keeps one Info per aircraft and feeds every advert through it.
 bool merge(const uint8_t *payload, uint8_t len, Info &out, uint32_t now);
 
+// Presence-only check for the Bluetooth Legacy form. This deliberately
+// recognizes the Remote ID service envelope even when the message version or
+// message kind is newer than the fields this build can decode.
+bool present(const uint8_t *payload, uint8_t len);
+
+// Decode the ASD-STAN vendor element carried by WiFi beacon information
+// elements. `ies` begins at the first tagged parameter after the beacon's
+// fixed fields.
+bool mergeBeacon(const uint8_t *ies, uint16_t len, Info &out, uint32_t now);
+
 bool mergePack(const uint8_t *data, size_t len, Info &out, uint32_t now);
 // Raw management frame without FCS. Beacon and NAN service discovery.
 bool wifiPayload(const uint8_t *frame, size_t len, const uint8_t *&data, size_t &size);

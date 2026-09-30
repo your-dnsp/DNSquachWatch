@@ -1,4 +1,5 @@
 #include "research.h"
+#include "deauth_tracker.h"
 #include "field_tools.h"
 #include "signatures.h"
 #include <cstdio>
@@ -86,6 +87,12 @@ void observe(uint8_t radio,const uint8_t* mac,uint8_t addr,int8_t rssi,uint8_t c
     memcpy(r.mac,mac,6);r.original=(uint16_t)(len>65535?65535:len);r.length=(uint8_t)(len>PAYLOAD_CAP?PAYLOAD_CAP:len);
     if(r.length)memcpy(r.payload,data,r.length);enqueue(r);
 }
+void noteDeauthBurst(uint8_t distinctTargets){
+    Guard g;
+    if(!s.active||s.profile==Profile::BLUETOOTH)return;
+    inc(s.deauthBursts);
+    if(distinctTargets>1)inc(s.deauthMultiTargetBursts);
+}
 bool recent(uint8_t ix,Record& out){Guard g;if(ix>=hcount)return false;out=history[(hhead+8-1-ix)%8];return true;}
 bool select(uint8_t ix,Record& out){Guard g;if(ix>=hcount)return false;out=history[(hhead+8-1-ix)%8];pinned=out;pinnedValid=true;return true;}
 bool annotate(uint32_t id,Verdict v,const char* note,uint32_t now){
@@ -95,11 +102,18 @@ bool annotate(uint32_t id,Verdict v,const char* note,uint32_t now){
 bool encode(const Record& r,const Stats& s,char* json,size_t jc,char* csv,size_t cc){
     if(r.length>PAYLOAD_CAP||!json||!csv)return false;
     char mac[13],payload[PAYLOAD_CAP*2+1],note[49];safeNote(note,r.note);
+    DeauthFrameEvidence deauth{};
+    const bool isDeauth=r.radio==1&&parseDeauthFrame(r.payload,r.length,r.rssi,r.channel,deauth);
+    char receiver[13]="",bssid[13]="";
     if(s.raw){toHex(r.mac,6,mac);toHex(r.payload,r.length,payload);}else{strcpy(mac,"redacted");payload[0]=0;note[0]=0;}
+    if(isDeauth){
+        if(s.raw){toHex(deauth.destination,6,receiver);toHex(deauth.bssid,6,bssid);}
+        else{strcpy(receiver,"redacted");strcpy(bssid,"redacted");}
+    }
     // Redacted records deliberately contain no persistent device token, names, notes or payload.
-    int a=snprintf(json,jc,"{\"schema\":1,\"session\":%lu,\"id\":%lu,\"reference\":%lu,\"uptime_ms\":%lu,\"time_quality\":\"relative\",\"catalog\":%lu,\"radio\":%u,\"address_type\":%u,\"mac\":\"%s\",\"rssi\":%d,\"channel\":%u,\"type\":%u,\"confidence\":%u,\"evidence\":%u,\"rule\":%u,\"ie_fingerprint\":%lu,\"experimental\":true,\"original_bytes\":%u,\"captured_bytes\":%u,\"payload_hex\":\"%s\",\"verdict\":\"%s\",\"note\":\"%s\"}\n",
-        (unsigned long)s.session,(unsigned long)r.id,(unsigned long)r.reference,(unsigned long)r.at,(unsigned long)s.catalog,r.radio,r.addressType,mac,r.rssi,r.channel,(unsigned)r.match.type,(unsigned)r.match.conf,r.match.bits,r.match.rule,(unsigned long)(s.raw?r.match.fingerprint:0),r.original,s.raw?r.length:0,payload,verdictName(r.verdict),note);
-    int b=snprintf(csv,cc,"%lu,%lu,%lu,%lu,%lu,%u,%s,%d,%u,%u,%u,%u,%s,%u\n",(unsigned long)s.session,(unsigned long)r.id,(unsigned long)r.reference,(unsigned long)r.at,(unsigned long)s.catalog,r.radio,mac,r.rssi,r.channel,(unsigned)r.match.type,r.match.bits,r.match.rule,verdictName(r.verdict),(unsigned)r.match.conf);
+    int a=snprintf(json,jc,"{\"schema\":2,\"session\":%lu,\"id\":%lu,\"reference\":%lu,\"uptime_ms\":%lu,\"time_quality\":\"relative\",\"catalog\":%lu,\"radio\":%u,\"address_type\":%u,\"mac\":\"%s\",\"rssi\":%d,\"channel\":%u,\"type\":%u,\"confidence\":%u,\"evidence\":%u,\"rule\":%u,\"ie_fingerprint\":%lu,\"experimental\":true,\"wifi_subtype\":%d,\"deauth\":%s,\"claimed_transmitter\":\"%s\",\"receiver\":\"%s\",\"bssid\":\"%s\",\"deauth_reason\":%d,\"reason_known\":%s,\"protected_management\":%s,\"original_bytes\":%u,\"captured_bytes\":%u,\"payload_hex\":\"%s\",\"verdict\":\"%s\",\"note\":\"%s\"}\n",
+        (unsigned long)s.session,(unsigned long)r.id,(unsigned long)r.reference,(unsigned long)r.at,(unsigned long)s.catalog,r.radio,r.addressType,mac,r.rssi,r.channel,(unsigned)r.match.type,(unsigned)r.match.conf,r.match.bits,r.match.rule,(unsigned long)(s.raw?r.match.fingerprint:0),isDeauth?12:-1,isDeauth?"true":"false",isDeauth?mac:"",receiver,bssid,isDeauth&&deauth.reasonValid?deauth.reason:-1,isDeauth&&deauth.reasonValid?"true":"false",isDeauth&&deauth.protectedFrame?"true":"false",r.original,s.raw?r.length:0,payload,verdictName(r.verdict),note);
+    int b=snprintf(csv,cc,"%lu,%lu,%lu,%lu,%lu,%u,%s,%d,%u,%u,%u,%u,%s,%u,%s,%s,%s,%d,%s\n",(unsigned long)s.session,(unsigned long)r.id,(unsigned long)r.reference,(unsigned long)r.at,(unsigned long)s.catalog,r.radio,mac,r.rssi,r.channel,(unsigned)r.match.type,r.match.bits,r.match.rule,verdictName(r.verdict),(unsigned)r.match.conf,isDeauth?mac:"",receiver,bssid,isDeauth&&deauth.reasonValid?deauth.reason:-1,isDeauth&&deauth.protectedFrame?"protected":isDeauth?"unprotected":"");
     return a>=0&&size_t(a)<jc&&b>=0&&size_t(b)<cc;
 }
 void tick(uint32_t now){
@@ -108,20 +122,27 @@ void tick(uint32_t now){
     Stats finalStats;bool finish=false;
     {Guard g;if(!s.active&&!count&&summaryPending&&!s.errors){finalStats=s;summaryPending=false;finish=true;}}
     if(finish){
-        char line[700];int n=snprintf(line,sizeof line,"{\"kind\":\"summary\",\"session\":%lu,\"profile\":%u,\"raw\":%s,\"elapsed_ms\":%lu,\"observed\":%lu,\"saved\":%lu,\"omitted\":%lu,\"write_errors\":%lu,\"ble_enabled_ms\":%lu,\"wifi_enabled_ms\":%lu,\"channel_enabled_ms\":[",
-          (unsigned long)finalStats.session,(unsigned)finalStats.profile,finalStats.raw?"true":"false",(unsigned long)finalStats.elapsed,(unsigned long)finalStats.observed,(unsigned long)finalStats.saved,(unsigned long)finalStats.dropped,(unsigned long)finalStats.errors,(unsigned long)finalStats.bleMs,(unsigned long)finalStats.wifiMs);
+        char line[900];int n=snprintf(line,sizeof line,"{\"kind\":\"summary\",\"schema\":2,\"session\":%lu,\"profile\":%u,\"raw\":%s,\"elapsed_ms\":%lu,\"observed\":%lu,\"saved\":%lu,\"omitted\":%lu,\"write_errors\":%lu,\"deauth_frames\":%lu,\"deauth_coherent_bursts\":%lu,\"deauth_multi_target_bursts\":%lu,\"deauth_protected_frames\":%lu,\"deauth_unprotected_frames\":%lu,\"deauth_reason_known\":%lu,\"ble_enabled_ms\":%lu,\"wifi_enabled_ms\":%lu,\"channel_enabled_ms\":[",
+          (unsigned long)finalStats.session,(unsigned)finalStats.profile,finalStats.raw?"true":"false",(unsigned long)finalStats.elapsed,(unsigned long)finalStats.observed,(unsigned long)finalStats.saved,(unsigned long)finalStats.dropped,(unsigned long)finalStats.errors,(unsigned long)finalStats.deauthFrames,(unsigned long)finalStats.deauthBursts,(unsigned long)finalStats.deauthMultiTargetBursts,(unsigned long)finalStats.deauthProtected,(unsigned long)finalStats.deauthUnprotected,(unsigned long)finalStats.deauthReasonKnown,(unsigned long)finalStats.bleMs,(unsigned long)finalStats.wifiMs);
         for(int i=1;i<=13;i++)n+=snprintf(line+n,sizeof(line)-n,"%s%lu",i==1?"":",",(unsigned long)finalStats.channelMs[i]);
         snprintf(line+n,sizeof(line)-n,"]}\n");
         bool ok=sink&&sink(line,"",false);if(reportSink&&!reportSink(finalStats))ok=false;Guard g;if(ok)s.bytes+=strlen(line);else{inc(s.errors);strcpy(message,"Summary write failed");}return;
     }
     // One bounded write per loop. Stop accepting captures on storage failure.
     Record r;Stats snap;{Guard g;if(!count)return;r=queue[head];head=(head+1)%12;--count;snap=s;}
-    char json[900],csv[220];
+    char json[1100],csv[320];
     if(!encode(r,snap,json,sizeof json,csv,sizeof csv)){Guard g;inc(s.errors);s.active=false;s.dropped+=count+1;count=0;strcpy(message,"Record encoding failed");return;}
     const size_t bytes=strlen(json)+strlen(csv);
     if(snap.bytes+bytes>1024*1024-2048){Guard g;s.active=false;s.dropped+=count+1;count=0;strcpy(message,"1 MiB session limit reached");return;}
     if(!sink||!sink(json,csv,false)){Guard g;inc(s.errors);s.active=false;s.dropped+=count+1;count=0;strcpy(message,"microSD write failed; session stopped");return;}
-    Guard g;s.bytes+=bytes;inc(s.saved);if(!r.reference){if((unsigned)r.match.type<19&&(unsigned)r.match.conf<3)inc(s.types[(unsigned)r.match.type][(unsigned)r.match.conf]);history[hhead]=r;hhead=(hhead+1)%8;if(hcount<8)++hcount;}
+    Guard g;s.bytes+=bytes;inc(s.saved);if(!r.reference){
+        DeauthFrameEvidence deauth{};
+        if(r.radio==1&&parseDeauthFrame(r.payload,r.length,r.rssi,r.channel,deauth)){
+            inc(s.deauthFrames);
+            if(deauth.protectedFrame)inc(s.deauthProtected);else inc(s.deauthUnprotected);
+            if(deauth.reasonValid)inc(s.deauthReasonKnown);
+        }
+        if((unsigned)r.match.type<19&&(unsigned)r.match.conf<3)inc(s.types[(unsigned)r.match.type][(unsigned)r.match.conf]);history[hhead]=r;hhead=(hhead+1)%8;if(hcount<8)++hcount;}
 }
 Match matchBle(const uint8_t* p,size_t n){
     Fields f=fields(p,n);Match m;if(f.malformed){m.bits=MALFORMED;return m;}

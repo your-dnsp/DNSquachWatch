@@ -1,3 +1,6 @@
+# v0.9.0: reserve the final 4 KiB for a persistent duress journal.
+# App slots, NVS, otadata and BlackBox are unchanged. Coredump is now 60 KiB.
+# Install the full USB kit; an app-only update cannot create this partition.
 # SquachWatch-CYD — two-slot partition table, for over-the-air updates.
 #
 # WHY THIS EXISTS. Every release up to and including v1.6.0 shipped on Arduino's
@@ -16,7 +19,7 @@
 #   nvs      at 0x9000, 20 KB — settings, the PIN and its duress twin, mesh
 #            pairings, Squachy's stats. Same offset and same size as huge_app,
 #            which is what lets a board keep all of it across the migration.
-#   coredump at 0x3F0000, 64 KB — same place, so the crash summary still works.
+#   coredump starts at 0x3F0000; reduced to 60 KiB in v0.9.0.
 #
 # WHAT CHANGED:
 #   app0/app1  0x1E0000 (1,966,080 bytes) each. The firmware is ~1.42 MB today,
@@ -32,7 +35,8 @@
 #   0x010000   1.9 MB app0
 #   0x1F0000   1.9 MB app1
 #   0x3D0000  128 KB  BlackBox (raw)       deliberately unassigned, see below
-#   0x3F0000  64 KB   coredump
+#   0x3F0000  60 KB   coredump
+#   0x3FF000   4 KB   duress journal
 #
 # The unnamed 128 KiB region is USED by BlackBox at raw flash addresses.
 # Do not grow OTA slots into it: BlackBox would disable itself and subsequent
@@ -45,5 +49,6 @@ nvs,      data, nvs,     0x9000,   0x5000,
 otadata,  data, ota,     0xe000,   0x2000,
 app0,     app,  ota_0,   0x10000,  0x1E0000,
 app1,     app,  ota_1,   0x1F0000, 0x1E0000,
-coredump, data, coredump,0x3F0000, 0x10000,
+coredump, data, coredump,0x3F0000, 0xF000,
+duress,   data, 0x40,    0x3FF000, 0x1000,
 

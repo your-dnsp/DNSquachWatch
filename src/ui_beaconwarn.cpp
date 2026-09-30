@@ -105,3 +105,4 @@ BeaconWarnHit uiBeaconWarnHitTest(TFT_eSPI& t, int x, int y) {
     if (x >= mid && x >= offX - SLOP && x <= offX + BTN_W + SLOP) return BeaconWarnHit::KEEP_OFF;
     return BeaconWarnHit::NONE;
 }
+

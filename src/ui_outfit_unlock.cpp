@@ -266,3 +266,4 @@ void uiOutfitUnlockTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
 
     Theme::drawGlitchStatic(t, 6, panelY + 2, w - 6, panelY + panelH - 2);
 }
+

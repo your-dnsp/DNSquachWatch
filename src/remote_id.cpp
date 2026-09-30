@@ -17,9 +17,8 @@ static const uint8_t ODID_APP_CODE = 0x0D;
 static const uint8_t MSG_SIZE = 25;
 
 // Message types live in the TOP nibble of byte 0. The bottom nibble is the
-// protocol version, which we do not check: the field layouts this reads
-// have been stable across every published version, and refusing to decode
-// a drone because it advertised version 3 would be worse than decoding it.
+// protocol version. Only supported layouts (0..2) are decoded; newer
+// versions are reported by the diagnostic path rather than guessed.
 static const uint8_t MSG_BASIC_ID = 0x0;
 static const uint8_t MSG_LOCATION = 0x1;
 static const uint8_t MSG_SYSTEM = 0x4;
@@ -129,6 +128,8 @@ static bool mergeMessage(const uint8_t *m, Info &out, uint32_t now) {
         }
         if (la == 0 && lo == 0) {
             out.noFix = true;
+            out.haveLoc = false; // do not show an old fix as the current position
+            out.at = now;
             return true;
         }
         const float lat = (float)((double)la / LATLON_MULT),
@@ -217,6 +218,49 @@ bool merge(const uint8_t *payload, uint8_t len, Info &out, uint32_t now) {
             return false;
         }
         i = (uint8_t)(i + 1 + adLen);
+    }
+    return false;
+}
+
+bool present(const uint8_t *payload, uint8_t len) {
+    if (!payload || len < 4) return false;
+    for (uint8_t i = 0; i < len;) {
+        const uint8_t adLen = payload[i];
+        if (!adLen || (uint16_t)i + 1u + adLen > len) break;
+        const uint8_t adSize = (uint8_t)(adLen - 1);
+        if (payload[i + 1] == AD_SERVICE_DATA_16 && adSize >= 3 &&
+            rd16(payload + i + 2) == ODID_UUID && payload[i + 4] == ODID_APP_CODE)
+            return true;
+        i = (uint8_t)(i + 1u + adLen);
+    }
+    return false;
+}
+
+bool mergeBeacon(const uint8_t *ies, uint16_t len, Info &out, uint32_t now) {
+    if (!ies) return false;
+    for (uint16_t i = 0; (uint32_t)i + 2u <= len;) {
+        const uint8_t id = ies[i], ieLen = ies[i + 1];
+        if ((uint32_t)i + 2u + ieLen > len) return false;
+        const uint8_t *body = ies + i + 2;
+        // Vendor element: ASD-STAN OUI, application type, counter, then pack.
+        if (id == 221 && ieLen >= 8 && !memcmp(body, "\xFA\x0B\xBC", 3) &&
+            body[3] == ODID_APP_CODE) {
+            const uint8_t *pack = body + 5;
+            const size_t room = (size_t)ieLen - 5u;
+            if ((pack[0] >> 4) != 15 || (pack[0] & 15) > 2 || pack[1] != MSG_SIZE || !pack[2])
+                return false;
+            // Some transmitters have advertised the maximum count while
+            // sending fewer complete messages. Decode only complete bodies
+            // physically present in this bounded information element.
+            uint8_t count = pack[2] > 9 ? 9 : pack[2];
+            const uint8_t available = room > 3 ? (uint8_t)((room - 3) / MSG_SIZE) : 0;
+            if (count > available) count = available;
+            bool any = false;
+            for (uint8_t k = 0; k < count; ++k)
+                any = mergeMessage(pack + 3u + (size_t)k * MSG_SIZE, out, now) || any;
+            return any;
+        }
+        i = (uint16_t)(i + 2u + ieLen);
     }
     return false;
 }

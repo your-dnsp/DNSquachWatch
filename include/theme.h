@@ -119,6 +119,10 @@ namespace Theme {
     // button in the top-left corner, and the rotate button in the
     // top-right corner (unless hidden, see setRotateIconVisible()).
     void drawTitleBar(TFT_eSPI& t, const char* title);
+    // Where the title bar's right-hand icons begin: the rotate button
+    // and the padlock, whichever are showing right now. The screen width
+    // when neither is. The watch's corner clock stands just left of it.
+    int  titleBarRightIconsX(int w);
 
     // The chrome every list screen BELOW Settings shares, so they read as
     // one family with it: a small heading at the top in the colour of the
@@ -620,20 +624,11 @@ namespace Theme {
     // unconditionally every tick.
     void drawGlitchStatic(TFT_eSPI& t, int x0, int y0, int x1, int y1);
 
-    // Greedy word-wrap using the currently-set font's real measured
-    // widths (not an assumed char width), so it stays correct even if
-    // the font ever changes. No dynamic allocation -- lines[][48] is a
-    // caller-owned fixed buffer, fine for the short-to-medium strings
-    // this runs on (speech bubbles, the onboarding walkthrough, LOG's
-    // MORE INFO panel) -- a line is force-broken the moment it would
-    // fill that buffer, independent of maxW, so a generous maxW on a
-    // wide panel can't silently truncate a line mid-word. Returns how
-    // many of the up-to-maxLines rows it actually filled; text that
-    // doesn't fit even at maxLines is silently truncated rather than
-    // dropped entirely -- the last row just runs long instead of
-    // losing the rest of the sentence.
+    // Measured, allocation-free wrapping. Optional remaining points to the
+    // unconsumed text for pagination; otherwise overflow ends with ellipsis.
+    // Long words split at UTF-8 boundaries; caller owns lines[][48].
     uint8_t wrapText(TFT_eSPI& t, const char* text, int maxW,
-                     char lines[][48], uint8_t maxLines);
+                     char lines[][48], uint8_t maxLines, const char** remaining = nullptr);
 
     // Modal "MORE INFO" explanation panel -- shared by LOG's confirm
     // panel and ALERT's own MORE INFO button (the two screens are never
@@ -665,3 +660,4 @@ namespace Theme {
     // how he is built.
     static const int YETI_W = 36, YETI_H = 42;
 }
+

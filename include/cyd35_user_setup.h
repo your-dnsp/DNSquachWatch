@@ -90,3 +90,4 @@
 // this dead define instead of the real one.
 #define TFT_INVERSION_ON
 #define TFT_RGB_ORDER TFT_BGR
+

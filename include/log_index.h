@@ -36,3 +36,4 @@ void release();
 bool filtering();
 
 }  // namespace LogIndex
+

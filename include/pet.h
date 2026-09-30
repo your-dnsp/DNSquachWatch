@@ -27,3 +27,4 @@ namespace Pet {
     // screen that has been away for a minute.
     void reset();
 }
+

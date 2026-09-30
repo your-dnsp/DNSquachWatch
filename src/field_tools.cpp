@@ -328,6 +328,29 @@ void tick() {
         }
     }
 }
+int associatedAircraft(uint8_t index, uint32_t now) {
+    if (index >= 4) return -1;
+    const auto &a = planes[index];
+    if (!a.used || !a.info.haveBasic || !a.info.serial[0] || now-a.info.basicAt > 15000) return -1;
+    for (int j=0;j<4;j++) {
+        const auto &b=planes[j];
+        if (j!=index && b.used && a.wifi!=b.wifi && b.info.haveBasic &&
+            now-b.info.basicAt<=15000 && a.info.idType==b.info.idType &&
+            !strcmp(a.info.serial,b.info.serial)) return j;
+    }
+    return -1;
+}
+bool identityConflict(uint8_t index, uint32_t now) {
+    int j=associatedAircraft(index,now); if(j<0) return false;
+    const auto &a=planes[index].info; const auto &b=planes[j].info;
+    if(a.uaType!=b.uaType) return true;
+    if(!a.haveLoc || !b.haveLoc || now-a.locAt>3000 || now-b.locAt>3000) return false;
+    float dy=(a.lat-b.lat)*111320.0f, dl=a.lon-b.lon;
+    if(dl>180)dl-=360; if(dl< -180)dl+=360;
+    float dx=dl*111320.0f*cosf(a.lat*0.0174532925f);
+    // Association is only a display hint, never authentication. Allow flight movement.
+    return dx*dx+dy*dy > 1000.0f*1000.0f;
+}
 const Aircraft &aircraft(uint8_t i) {
     return planes[i < 4 ? i : 0];
 }

@@ -654,3 +654,4 @@ void InviteAssembly::clear() {
 
 } // namespace MeshMsg
 #endif // SQUACH_MESH
+

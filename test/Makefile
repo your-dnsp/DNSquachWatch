@@ -23,7 +23,9 @@ CXX      ?= g++
 CXXFLAGS := -std=c++17 -O1 -g -Wall -Wextra -Wno-unused-parameter \
             -I$(SIM) -I$(INC)
 
-research_test_SRCS := $(SRC)/research_report.cpp $(SRC)/research.cpp $(SRC)/signatures.cpp $(SRC)/field_tools.cpp $(SRC)/remote_id.cpp
+installation_guide_test_SRCS := $(SRC)/installation_guide.cpp
+
+research_test_SRCS := $(SRC)/research_report.cpp $(SRC)/research.cpp $(SRC)/deauth_tracker.cpp $(SRC)/signatures.cpp $(SRC)/field_tools.cpp $(SRC)/remote_id.cpp
 
 field_test_SRCS := $(SRC)/field_tools.cpp $(SRC)/remote_id.cpp
 
@@ -31,10 +33,20 @@ breakout_test_SRCS := $(SRC)/breakout.cpp
 
 care_test_SRCS := $(SRC)/care.cpp $(SRC)/field_tools.cpp $(SRC)/remote_id.cpp
 
-TESTS := care_test verified_copy_test breakout_test glyph_test field_test research_test dnsp_detection_test dnsp_csv_test dnsp_settings_test remote_id_test ibeacon_test signatures_test emitter_roundtrip_test ignore_list_test hacker_test pwnagotchi_test shim_fidelity_test squachmesh_test qwerty_test meshmsg_test device_info_test security_test emote_script_test blackbox_test bingo_test hunt_test bgretire_test autoquiet_test framepush_test touchfit_test logindex_test dex_test regulars_test
+drone_watch_test_SRCS := $(SRC)/drone_watch.cpp $(SRC)/remote_id.cpp
+
+duress_test_SRCS := $(SRC)/duress_core.cpp $(SRC)/pixel_tide.cpp
+
+alert_snooze_test_SRCS := $(SRC)/alert_snooze.cpp
+
+TESTS := installation_guide_test alert_snooze_test duress_test drone_watch_test care_test verified_copy_test breakout_test glyph_test field_test research_test deauth_tracker_test dnsp_detection_test dnsp_csv_test dnsp_settings_test remote_id_test ibeacon_test signatures_test emitter_roundtrip_test ignore_list_test hacker_test pwnagotchi_test shim_fidelity_test squachmesh_test qwerty_test meshmsg_test device_info_test security_test emote_script_test blackbox_test bingo_test hunt_test bgretire_test autoquiet_test framepush_test touchfit_test logindex_test dex_test regulars_test gnss_test user_labels_test sketchy_rule_test
 
 dnsp_detection_test_SRCS := $(SIM)/detection_sim.cpp $(SRC)/remote_id.cpp $(SRC)/detection_info.cpp $(SRC)/device_info.cpp $(SRC)/signatures.cpp
+deauth_tracker_test_SRCS := $(SRC)/deauth_tracker.cpp
 dnsp_settings_test_SRCS := $(SRC)/settings.cpp
+gnss_test_SRCS := $(SRC)/gnss.cpp
+user_labels_test_SRCS := $(SRC)/user_labels.cpp
+sketchy_rule_test_SRCS := $(SRC)/sketchy_rule.cpp $(SIM)/detection_sim.cpp $(SRC)/remote_id.cpp
 
 # Only the units under test get linked in. Pulling the whole firmware
 # would drag in TFT_eSPI, NimBLE and the UI, and a test that needs a
@@ -89,6 +101,9 @@ shim_fidelity_test_SRCS      :=
 # The touch mapping is plain arithmetic in touch_fit.h.
 touchfit_test_SRCS           :=
 
+TESTS += ble_advert_fields_test ambient_light_test crash_reports_test spam_test
+crash_reports_test_SRCS := $(SRC)/crash_reports.cpp
+
 .PHONY: all clean
 all: $(addprefix run-,$(TESTS))
 
@@ -108,4 +123,3 @@ $(foreach t,$(TESTS),$(eval $(call TEST_rule,$(t))))
 
 clean:
 	@rm -rf $(OUT)
-

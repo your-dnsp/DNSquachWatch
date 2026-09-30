@@ -27,7 +27,7 @@ static const char* const EXPLAIN_TEXT[] = {
     // AIRTAG
     "An Apple AirTag, riding Apple's Find My network. Legitimate for keys and luggage -- also a known method for tracking a person or vehicle without consent.",
     // DRONE
-    "Remote ID broadcast. This firmware receives legacy Bluetooth and 2.4 GHz WiFi Beacon/NAN messages. Broadcast identity and position are unauthenticated. FIELD TOOLS shows separate aircraft records, freshness and consistency warnings. Many FPV whoops emit no Remote ID. No video is received; Bluetooth 5 extended broadcasts are unsupported.",
+    "Remote ID broadcast. This firmware receives legacy Bluetooth and 2.4 GHz WiFi Beacon/NAN messages. Broadcast identity and position are unauthenticated. FPV & DRONES shows separate aircraft records, freshness and consistency warnings. Many FPV whoops emit no Remote ID. No video is received; Bluetooth 5 extended broadcasts are unsupported.",
     // ALPR
     "A manufacturer associated with some license-plate readers. A vendor prefix alone does not confirm ALPR. Model-specific support remains experimental; wired or cellular cameras may be invisible.",
     // CAMERA
@@ -41,14 +41,14 @@ static const char* const EXPLAIN_TEXT[] = {
     // RING
     "A Ring doorbell or camera, Amazon's video doorbell line. Often networked into neighborhood-wide sharing through the Neighbors app.",
     // DEAUTH
-    "Not a device -- a burst of WiFi deauthentication frames, the kind used to forcibly knock devices off a network. One frame is normal traffic; a flood like this usually isn't.",
+    "Not a hardware identification. This records a burst of WiFi deauthentication frames from one claimed transmitter address. One frame is normal traffic; repeated frames may be a flood, but source addresses can be spoofed and Squachy only samples each channel during its dwell time.",
     // EVILTWIN
     "Two different boxes are broadcasting the same network name, and they disagree about security -- one wants a password, the other is wide open. That's how a fake hotspot lures you on. A mesh system never argues with itself about encryption, which is what separates this from your own router.",
     // IBEACON
     "A proximity beacon, the kind bolted inside shops, stadiums and airports. It does not track you by itself -- it shouts an ID, and an app you already installed notices and reports where you are. The number shown is which deployment and which unit, so the same first half in two places is the same operator. This is the one detection that ships switched OFF, and about volume rather than importance: one shop can put more beacons in range than this device would otherwise see all week. Turn it on in DETECTION FILTER.",
     // HACKER
     "Wireless testing hardware: a Flipper Zero, a Pwnagotchi, a WiFi Pineapple or an ESP deauther. These are legitimate tools and most owners are hobbyists or people paid to break things -- but unlike everything else here, this is gear that transmits at other radios rather than just watching. A Pwnagotchi reports its own name and how many WiFi handshakes it has captured, because it is trying to be seen by others like it. Nothing here flags a bare ESP32 dev board: that would flag half the electronics in the room, and this detector too.",
-    "FPV equipment clue: an ExpressLRS setup or Backpack network name. It may belong to a receiver, controller or accessory. Names can be imitated. This does not confirm a flying drone. Many Air65 whoops do not advertise WiFi during flight. See FIELD TOOLS for the pit board and Remote ID readings.",
+    "FPV equipment clue: an ExpressLRS setup or Backpack network name. It may belong to a receiver, controller or accessory. Names can be imitated. This does not confirm a flying drone. Many Air65 whoops do not advertise WiFi during flight. See FPV & DRONES for the pit board and Remote ID readings.",
 };
 static const uint8_t EXPLAIN_TEXT_N = sizeof(EXPLAIN_TEXT) / sizeof(EXPLAIN_TEXT[0]);
 
@@ -125,6 +125,7 @@ const char* why(const Detection& d) {
                      d.evidenceBits & Research::FINGERPRINT ? " IE-shape" : "",
                      d.evidenceBits & Research::IMPORTED ? " imported-rule" : "", confidenceLabel(d.conf));
             return text;
+        case MatchEvidence::BLE_REMOTE_ID: reason = "A Remote ID message was decoded from Bluetooth service data. Broadcast identity and position are not authenticated."; break;
         case MatchEvidence::WIFI_REMOTE_ID: reason = "A structurally valid WiFi Remote ID message pack was received. Broadcast identity and position are not authenticated."; break;
         case MatchEvidence::SSID: reason = "The WiFi network name matches a known naming pattern. Names can be changed or imitated."; break;
         case MatchEvidence::BLE_COMPANY: reason = "Bluetooth company data matches a listed manufacturer. It does not prove a particular model."; break;
@@ -132,7 +133,25 @@ const char* why(const Detection& d) {
         case MatchEvidence::BLE_NAME: reason = "The Bluetooth name matches a listed pattern. Names can be changed or imitated."; break;
         case MatchEvidence::FIND_MY: reason = "The advert matches a Find My tag payload pattern. This cannot establish its owner or intent."; break;
         case MatchEvidence::IBEACON: reason = "The manufacturer payload has the iBeacon structure. This is a proximity beacon, not proof of a camera."; break;
-        case MatchEvidence::DEAUTH_BURST: reason = "A burst of WiFi disconnection frames crossed the detector threshold. This alone does not prove an attack."; break;
+        case MatchEvidence::DEAUTH_BURST: {
+            const unsigned targets = d.evidenceBits & DEAUTH_META_TARGET_MASK;
+            const unsigned long duration = (unsigned long)(d.lastSeen - d.firstSeen);
+            const char* protection = (d.evidenceBits & DEAUTH_META_PROTECTED_SEEN) &&
+                                     (d.evidenceBits & DEAUTH_META_UNPROTECTED_SEEN)
+                ? "mixed protected/unprotected"
+                : (d.evidenceBits & DEAUTH_META_PROTECTED_SEEN) ? "protected" : "unprotected";
+            char reasonPart[36] = "reason unavailable";
+            if (d.evidenceBits & DEAUTH_META_REASON_VALID)
+                snprintf(reasonPart, sizeof reasonPart, "reason %u", (unsigned)d.signature);
+            char bssidPart[52] = "BSSID varied";
+            if ((d.evidenceBits & DEAUTH_META_SAME_BSSID) && d.name[0])
+                snprintf(bssidPart, sizeof bssidPart, "BSSID %s", d.name);
+            snprintf(text, sizeof text,
+                     "%u deauth frames from one claimed transmitter in %lums; %u target%s, %s, %s, %s. Source MACs can be spoofed. Channel hopping means Squachy observed only part of the traffic. This does not prove an attack.",
+                     (unsigned)d.hits, duration, targets, targets == 1 ? "" : "s",
+                     bssidPart, reasonPart, protection);
+            return text;
+        }
         case MatchEvidence::EVIL_TWIN: reason = "One WiFi name appeared with different manufacturer prefixes and encryption. Legitimate networks can do this too."; break;
         case MatchEvidence::PWNAGOTCHI: reason = "A beacon contains Pwnagotchi-format data. Radio identity can be imitated."; break;
         default: break;
@@ -153,4 +172,3 @@ const char* rssiConfidencePrimer() {
 }
 
 }
-

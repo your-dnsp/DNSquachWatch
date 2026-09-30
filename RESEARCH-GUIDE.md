@@ -1,6 +1,10 @@
-# DNSquachWatch v0.3 research guide
+## v1.1.2 session controls
 
-This local draft implements proposals 25–32 as an experimental research layer. It keeps the user-selected CYD ST7789 **80 MHz display** target (`cyd-fast`). No firmware has been pushed or flashed. Physical-board validation is still required.
+CURRENT MODE states the selected Redacted/RAW setting; SWITCH TO names the next action. RAW requires confirmation. REC mm:ss | N saved indicates an active session; SAVING means pending writes remain. Controls cannot change session mode mid-recording or while saving.
+
+# DNSquachWatch v1.1.2 research guide
+
+This release includes an experimental research layer on the user-selected CYD ST7789 **80 MHz display** target (`cyd-fast`). This exact v1.1.2 build has not yet completed its physical-board validation.
 
 ## Start a research session
 
@@ -14,13 +18,17 @@ Coverage reports **enabled time**, channels visited, observations, saved rows, q
 
 ## What gets recorded
 
-JSONL records include schema and catalog versions, session and observation IDs, relative uptime, radio/address type, RSSI, channel, classification, supporting-field bits, rule ID and a separate human verdict. There is no GPS or UTC claim. The final JSONL summary records per-channel enabled milliseconds and losses.
+JSONL schema 2 records include schema and catalog versions, session and observation IDs, relative uptime, radio/address type, RSSI, channel, classification, supporting-field bits, rule ID and a separate human verdict. There is no GPS or UTC claim. The final JSONL summary records per-channel enabled milliseconds, losses, saved DEAUTH frames, and coherent per-source DEAUTH bursts.
 
 RAW includes MAC addresses and the first **96 bytes** of the observed BLE AD stream or WiFi management frame, with original and captured lengths. WiFi data-frame contents are not recorded. The ESP-IDF FCS is removed before management-frame analysis. The Bluetooth bytes are the advertising data supplied by NimBLE, potentially including a scan response, not a complete over-the-air packet capture. These files are **not PCAP**.
 
 Redacted research exports omit MACs, payloads, probe fingerprints and note text; they retain relative timing and classification. This choice only controls the research export. Existing normal firmware history/logging is separate and may still contain identifiers. The previous research session may also be RAW. History wipe includes the four research export files and clears queued research records; deletion is not forensic sanitization.
 
 CSV contains only generated numeric/enum values and a hexadecimal MAC or `redacted`, so radio names and arbitrary notes cannot become spreadsheet formulas. Notes are included only in RAW JSONL after bounded sanitization.
+
+For an observed 802.11 deauthentication management frame, both JSONL and CSV identify the frame as DEAUTH evidence and add the claimed transmitter, receiver, BSSID, reason code when readable, and Protected Management Frame bit. RAW mode includes those three addresses. Redacted mode replaces them with `redacted`, removes the packet bytes, and retains the non-identifying reason/protection/channel/signal facts. A protected frame body is not decoded as a plaintext reason code.
+
+The ordinary detector separately requires six frames from the same claimed transmitter inside a true sliding three-second window. Each source has its own 15-second alert cooldown. Research reports count a detector-confirmed threshold crossing as a coherent burst rather than treating every recorded frame as an alert. Transmitter addresses can be spoofed, protection status alone does not prove an attack, and the ESP32's channel hopping means these counts describe only frames observed during channel dwell periods.
 
 ## Field notebook
 
@@ -87,6 +95,6 @@ Research links were reviewed during this draft; upstream branches are mutable. T
 
 Verify actual microSD write/removal/full-card behavior, scanning transitions, receive-only behavior, antenna/radio coexistence, crowded captures, heap pressure, battery/power interruption and the experimental 80 MHz display. Collect positive and negative controls for each target family before claiming model validation. A quiet wired/cellular camera, an unadvertised BLE device or an unsupported radio mode can be missed.
 
-## v0.3 field observations
+## Current field observations
 
 Research exports now label ExpressLRS equipment clues (rule 105) and WiFi Remote ID (rule 106). These remain observations, not authenticated identities. See FIELD-GUIDE.md for per-aircraft freshness and quality warnings.

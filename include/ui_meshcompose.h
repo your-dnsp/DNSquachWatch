@@ -25,3 +25,4 @@ void        uiMeshComposeSetTyped(const char* text);
 // What the keyboard should start from ("" for a new message).
 const char* uiMeshComposeTyped();
 #endif
+

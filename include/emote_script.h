@@ -138,3 +138,4 @@ const char*    spokenName(uint8_t detectionType);
 
 } // namespace EmoteScript
 #endif
+

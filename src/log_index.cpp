@@ -130,3 +130,4 @@ bool position(uint16_t row, uint16_t& newestIdx) {
 }
 
 }  // namespace LogIndex
+

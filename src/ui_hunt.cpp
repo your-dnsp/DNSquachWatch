@@ -260,3 +260,4 @@ void uiHuntTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool adva
     stopButtonRect(w, h, bx, by, bw, bh);
     Theme::drawButton(t, bx, by, bw, bh, "[ STOP ]", false);
 }
+

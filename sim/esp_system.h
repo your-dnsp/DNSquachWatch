@@ -28,3 +28,4 @@ inline uint32_t esp_random() {
     s = s * 1664525u + 1013904223u;
     return s;
 }
+

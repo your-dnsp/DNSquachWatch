@@ -60,7 +60,7 @@ static void rowContent(LightRow r, char* valBuf, size_t valBufN,
             break;
         case LightRow::BRIGHTNESS:
             label = "BRIGHTNESS";
-            snprintf(valBuf, valBufN, "%u/5", (unsigned)Settings::lightBrightness());
+            snprintf(valBuf, valBufN, "%u/7", (unsigned)Settings::lightBrightness());
             value = valBuf;
             break;
         case LightRow::TEST:

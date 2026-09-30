@@ -350,3 +350,4 @@ void uiWifiPassClear() {
     memset(s_buf, 0, sizeof s_buf);
     s_len = 0;
 }
+

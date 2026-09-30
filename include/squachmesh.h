@@ -107,3 +107,4 @@ size_t encode(const Peer& p, uint8_t* out);
 bool decode(const uint8_t* in, size_t len, Peer& out);
 
 } // namespace SquachMesh
+

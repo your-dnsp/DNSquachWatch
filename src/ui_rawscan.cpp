@@ -4,6 +4,7 @@
 #include "theme.h"
 #include "squachy.h"
 #include "settings.h"
+#include "user_labels.h"
 #include <Arduino.h>
 
 static int g_scroll = 0;
@@ -71,21 +72,21 @@ static void confirmRects(int screenW, int screenH,
                           int& wX, int& wY, int& wW, int& wH,
                           int& huX, int& huY, int& huW, int& huH,
                           int& igX, int& igY, int& igW, int& igH,
+                          int& lbX, int& lbY, int& lbW, int& lbH,
                           int& cnX, int& cnY, int& cnW, int& cnH) {
     pw = screenW - 40;
     if (pw > 240) pw = 240;
     // Two rows of two rather than one row of four. A fourth button in the
     // single row would be ~40px wide on the narrowest portrait rotation,
     // which is below a reliable finger target.
-    ph = 124;
+    ph = 164;
     px = (screenW - pw) / 2;
     py = (screenH - ph) / 2;
     const int margin = 10, gap = 10, btnH = 26;
     int btnW = (pw - 2 * margin - gap) / 2;
-    igY = cnY = py + ph - btnH - margin;
-    igH = cnH = btnH;
-    igX = px + margin;        igW = btnW;
-    cnX = igX + btnW + gap;   cnW = btnW;
+    cnY = py + ph - btnH - margin;cnH=btnH;cnX=px+margin;cnW=pw-2*margin;
+    igY = lbY = cnY - gap - btnH;igH=lbH=btnH;
+    igX = px + margin;igW=btnW;lbX=igX+btnW+gap;lbW=btnW;
     wY = huY = igY - gap - btnH;
     wH = huH = btnH;
     wX  = px + margin;        wW  = btnW;
@@ -93,12 +94,13 @@ static void confirmRects(int screenW, int screenH,
 }
 
 RawScanConfirmTap uiRawScanHitConfirm(int x, int y, int screenW, int screenH) {
-    int px, py, pw, ph, wX, wY, wW, wH, huX, huY, huW, huH, igX, igY, igW, igH, cnX, cnY, cnW, cnH;
+    int px, py, pw, ph, wX, wY, wW, wH, huX, huY, huW, huH, igX, igY, igW, igH, lbX, lbY, lbW, lbH, cnX, cnY, cnW, cnH;
     confirmRects(screenW, screenH, px, py, pw, ph, wX, wY, wW, wH, huX, huY, huW, huH,
-                 igX, igY, igW, igH, cnX, cnY, cnW, cnH);
+                 igX, igY, igW, igH, lbX, lbY, lbW, lbH, cnX, cnY, cnW, cnH);
     if (x >= wX && x <= wX + wW && y >= wY && y <= wY + wH) return RawScanConfirmTap::WATCH;
     if (x >= huX && x <= huX + huW && y >= huY && y <= huY + huH) return RawScanConfirmTap::HUNT;
     if (x >= igX && x <= igX + igW && y >= igY && y <= igY + igH) return RawScanConfirmTap::IGNORE;
+    if (x >= lbX && x <= lbX + lbW && y >= lbY && y <= lbY + lbH) return RawScanConfirmTap::LABEL;
     if (x >= cnX && x <= cnX + cnW && y >= cnY && y <= cnY + cnH) return RawScanConfirmTap::CANCEL;
     return RawScanConfirmTap::NONE;
 }
@@ -107,10 +109,10 @@ RawScanConfirmTap uiRawScanHitConfirm(int x, int y, int screenW, int screenH) {
 // scanning state, the empty state, or the results list) -- called
 // right before every return point in uiRawScanTick() rather than
 // restructuring those into a single shared tail.
-static void drawConfirmPanel(TFT_eSPI& t, int w, int h, const char* label, bool watched, bool hunted) {
-    int px, py, pw, ph, wX, wY, wW, wH, huX, huY, huW, huH, igX, igY, igW, igH, cnX, cnY, cnW, cnH;
+static void drawConfirmPanel(TFT_eSPI& t, int w, int h, const char* label, bool watched, bool hunted, bool ignored, bool userLabeled) {
+    int px, py, pw, ph, wX, wY, wW, wH, huX, huY, huW, huH, igX, igY, igW, igH, lbX, lbY, lbW, lbH, cnX, cnY, cnW, cnH;
     confirmRects(w, h, px, py, pw, ph, wX, wY, wW, wH, huX, huY, huW, huH,
-                 igX, igY, igW, igH, cnX, cnY, cnW, cnH);
+                 igX, igY, igW, igH, lbX, lbY, lbW, lbH, cnX, cnY, cnW, cnH);
     t.fillRoundRect(px, py, pw, ph, 6, Theme::BG);
     t.drawRoundRect(px, py, pw, ph, 6, Theme::PURPLE);
 
@@ -135,7 +137,8 @@ static void drawConfirmPanel(TFT_eSPI& t, int w, int h, const char* label, bool 
     Theme::drawButton(t, wX, wY, wW, wH, watched ? "UNWATCH" : "WATCH", watched);
     // Toggles like WATCH beside it -- see that button's comment.
     Theme::drawButton(t, huX, huY, huW, huH, hunted ? "STOP HUNT" : "HUNT", hunted);
-    Theme::drawButton(t, igX, igY, igW, igH, "IGNORE", false);
+    Theme::drawButton(t, igX, igY, igW, igH, ignored ? "UN-IGNORE" : "IGNORE", ignored);
+    Theme::drawButton(t, lbX, lbY, lbW, lbH, userLabeled ? "EDIT TAG" : "ADD TAG", userLabeled);
     Theme::drawButton(t, cnX, cnY, cnW, cnH, "CANCEL", false);
 }
 
@@ -174,8 +177,8 @@ int uiRawScanRowAt(TFT_eSPI& t, int x, int y, int screenW, int screenH) {
 }
 
 void uiRawScanTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool isBle, bool done,
-                    bool confirmPending, const char* confirmLabel, bool confirmWatched,
-                    bool confirmHunted, bool advance) {
+                   bool confirmPending, const char* confirmLabel, bool confirmWatched,
+                   bool confirmHunted, bool confirmIgnored, bool confirmUserLabeled, bool advance) {
     int w = t.width();
     int h = t.height();
 
@@ -283,7 +286,7 @@ switch (Settings::background()) {
         }
 
         drawBottomBar(t, w, h, isBle);
-        if (confirmPending) drawConfirmPanel(t, w, h, confirmLabel, confirmWatched, confirmHunted);
+        if (confirmPending) drawConfirmPanel(t, w, h, confirmLabel, confirmWatched, confirmHunted, confirmIgnored, confirmUserLabeled);
         return;
     }
 
@@ -298,7 +301,7 @@ switch (Settings::background()) {
         t.print(msg);
 
         drawBottomBar(t, w, h, isBle);
-        if (confirmPending) drawConfirmPanel(t, w, h, confirmLabel, confirmWatched, confirmHunted);
+        if (confirmPending) drawConfirmPanel(t, w, h, confirmLabel, confirmWatched, confirmHunted, confirmIgnored, confirmUserLabeled);
         return;
     }
 
@@ -323,10 +326,15 @@ switch (Settings::background()) {
         if (isBle) {
             const RawBleResult* r = eng.rawBleAt(idx);
             if (!r) break;
+            UserLabels::Label ul{};
+            const bool labeled = UserLabels::lookup(r->mac, ul);
+            char heading[48];
+            if (labeled) snprintf(heading, sizeof heading, "%s: %s", UserLabels::typeName(ul.type), r->name[0] ? r->name : "unnamed");
+            else snprintf(heading, sizeof heading, "%s", r->name[0] ? r->name : "(unnamed)");
             t.setTextSize(2);
-            t.setTextColor(Theme::CYAN, Theme::BG);
+            t.setTextColor(labeled && ul.type != UserLabels::OTHER_TAG ? Theme::colorFor((DetectionType)ul.type) : Theme::CYAN, Theme::BG);
             t.setCursor(4, y + topPad);
-            t.print(r->name[0] ? r->name : "(unnamed)");
+            t.print(heading);
 
             t.setTextSize(1);
             t.setTextColor(Theme::WHITE, Theme::BG);
@@ -352,10 +360,16 @@ switch (Settings::background()) {
                 else if (d <= -4) t.fillTriangle(ax, ay, ax + 6, ay, ax + 3, ay + 6, Theme::RED);
             }
         } else {
+            const uint8_t* bssid = eng.rawWifiBssid(idx);
+            UserLabels::Label ul{};
+            const bool labeled = bssid && UserLabels::lookup(bssid, ul);
+            char heading[48];
+            if (labeled) snprintf(heading, sizeof heading, "%s: %s", UserLabels::typeName(ul.type), eng.rawWifiSsid(idx)[0] ? eng.rawWifiSsid(idx) : "hidden");
+            else snprintf(heading, sizeof heading, "%s", eng.rawWifiSsid(idx)[0] ? eng.rawWifiSsid(idx) : "(hidden)");
             t.setTextSize(2);
-            t.setTextColor(Theme::CYAN, Theme::BG);
+            t.setTextColor(labeled && ul.type != UserLabels::OTHER_TAG ? Theme::colorFor((DetectionType)ul.type) : Theme::CYAN, Theme::BG);
             t.setCursor(4, y + topPad);
-            t.print(eng.rawWifiSsid(idx));
+            t.print(heading);
 
             t.setTextSize(1);
             t.setTextColor(Theme::WHITE, Theme::BG);
@@ -379,5 +393,5 @@ switch (Settings::background()) {
     Theme::drawScrollbar(t, w - 4, bodyTop, bodyH, count, max, g_scroll);
 
     drawBottomBar(t, w, h, isBle);
-    if (confirmPending) drawConfirmPanel(t, w, h, confirmLabel, confirmWatched, confirmHunted);
+    if (confirmPending) drawConfirmPanel(t, w, h, confirmLabel, confirmWatched, confirmHunted, confirmIgnored, confirmUserLabeled);
 }

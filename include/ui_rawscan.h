@@ -23,7 +23,8 @@ void uiRawScanInit(TFT_eSPI& t, bool isBle);
 // panel's WATCH button into UNWATCH; see drawConfirmPanel().
 void uiRawScanTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng,
                     bool isBle, bool done, bool confirmPending, const char* confirmLabel,
-                    bool confirmWatched, bool confirmHunted,
+                    bool confirmWatched, bool confirmHunted, bool confirmIgnored,
+                    bool confirmUserLabeled,
                     // false on the second of the 3.5"'s band passes: the same
                     // frame again, so the mascot must not step twice.
                     bool advance = true);
@@ -51,5 +52,5 @@ int uiRawScanRowAt(TFT_eSPI& t, int x, int y, int screenW, int screenH);
 // WATCH_ALERT later, passively, whenever it's next seen); HUNT sets
 // the same target but goes straight into the live-tracking HUNT screen
 // instead.
-enum class RawScanConfirmTap { NONE, WATCH, HUNT, IGNORE, CANCEL };
+enum class RawScanConfirmTap { NONE, WATCH, HUNT, IGNORE, LABEL, CANCEL };
 RawScanConfirmTap uiRawScanHitConfirm(int x, int y, int screenW, int screenH);

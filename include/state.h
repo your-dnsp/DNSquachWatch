@@ -75,7 +75,7 @@ enum class Confidence : uint8_t { LOW_CONF, MED_CONF, HIGH_CONF };
 
 enum class MatchEvidence : uint8_t {
     UNKNOWN, OUI, SSID, BLE_COMPANY, BLE_SERVICE, BLE_NAME, FIND_MY, IBEACON,
-    DEAUTH_BURST, EVIL_TWIN, PWNAGOTCHI, RESEARCH_COMPOSITE, WIFI_REMOTE_ID
+    DEAUTH_BURST, EVIL_TWIN, PWNAGOTCHI, RESEARCH_COMPOSITE, WIFI_REMOTE_ID, BLE_REMOTE_ID
 };
 
 struct Detection {
@@ -129,6 +129,11 @@ struct Detection {
     uint16_t       signature; // matched BLE company/service ID, when applicable
     Confidence     conf;
     bool           active;
+    // When it last asked to interrupt, allowed or not, in minutes of uptime
+    // (wrapping after 45 days). A device that keeps coming back keeps asking,
+    // so the gap since the last ask is how long it was really gone. Sits in
+    // what was padding.
+    uint16_t       askedMin;
 };
 
 // A detection's vendor, safe to print. A record is zeroed before it is
@@ -202,6 +207,9 @@ enum class AppState : uint8_t {
     SAFE_OFF         = 42,
     BREAKOUT         = 43,
     CARE             = 44,
+    DEVICE_READER    = 45,
+    SAFE_MODE        = 46,
+    RULE_ALERT       = 47, // built-in multi-signal rule alert
     DEX              = 37  // the SQUACHY-DEX, from Settings' row. See ui_dex.h.
 };
 
@@ -211,4 +219,3 @@ enum class ButtonId : uint8_t {
     LOG   = 1,
     CLR   = 2
 };
-

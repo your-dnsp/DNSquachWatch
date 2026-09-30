@@ -22,3 +22,4 @@ bool uiHuntHitStop(int x, int y, int screenW, int screenH);
 // arm's-length strength for two samples running. The status light reads
 // it so the catch shows from the back of the board too.
 bool uiHuntCaught();
+

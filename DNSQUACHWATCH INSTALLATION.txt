@@ -1,0 +1,468 @@
+DNSQUACHWATCH FIRMWARE INSTALLATION
+Windows, macOS, and Linux
+
+These instructions will help you install or reinstall DNSquachWatch firmware on your device.
+
+WHAT YOU NEED
+
+- Your DNSquachWatch device
+- A USB data cable
+- The DNSquachWatch firmware folder
+- A Windows, Mac, or Linux computer
+- An internet connection for the initial setup
+
+The unzipped firmware folder should contain these four files:
+
+bootloader.bin
+partitions.bin
+boot_app0.bin
+firmware.bin
+
+CHOOSE THE DISPLAY FOLDER
+
+The same-looking 2.8-inch CYD can contain either an ST7789 or an older
+ILI9341 display controller. Start with DNSquachWatch-v1.1.2-ST7789-80MHz.
+If the screen stays solid white after flashing, use
+DNSquachWatch-v1.1.2-ILI9341-80MHz instead. A white screen with the wrong
+driver ordinarily does not mean the board is damaged.
+
+Keep all four .bin files from the same folder together. Do not mix display
+folders or files from different firmware versions.
+
+
+==================================================
+STEP 1: INSTALL PYTHON
+==================================================
+The current esptool requires Python 3.10+.
+DNSquachWatch uses a small program called "esptool" to install the firmware.
+
+## WINDOWS:
+
+1. Go to python.org and download Python 3.
+2. Run the installer.
+3. IMPORTANT: Check the box that says:
+
+   Add Python to PATH
+
+4. Finish the installation.
+
+## MAC:
+
+Most modern Macs can use Python 3 from Terminal.
+
+Open Terminal and type:
+
+python3 --version
+
+If you see a Python version number, continue to Step 2.
+
+If Python is not installed, install Python 3 from python.org.
+
+## LINUX:
+
+Python 3 is usually already installed.
+
+Open Terminal and type:
+
+python3 --version
+
+If you see a Python version number, continue to Step 2.
+
+
+==================================================
+STEP 2: INSTALL ESPTOOL
+==================================================
+
+Open a command window.
+
+## WINDOWS:
+
+Press the Windows key, type: cmd and press Enter.
+(open Command Prompt)
+
+python -m pip install esptool 
+
+## MAC:
+
+Open:
+
+Applications > Utilities > Terminal
+
+python3 -m pip install esptool
+
+## LINUX:
+
+Open your Terminal application.
+
+Then install esptool:
+python3 -m pip install --user esptool
+
+python3 -m pip install esptool
+
+
+You only need to install esptool once.
+
+
+==================================================
+STEP 3: CONNECT DNSQUACHWATCH
+==================================================
+
+Connect the DNSquachWatch device to your computer with a USB DATA cable.
+
+IMPORTANT:
+
+Some USB cables provide power but cannot transfer data.
+
+If the device powers on but your computer cannot find it, try another USB cable.
+
+If possible, disconnect other USB serial devices while doing this. This makes identifying DNSquachWatch much easier.
+
+
+==================================================
+STEP 4: FIND THE DEVICE
+==================================================
+
+The computer gives DNSquachWatch a "port" name.
+
+You need to find that name before installing the firmware.
+
+
+## WINDOWS:
+-------
+
+Open Command Prompt and type:
+
+python -m esptool --chip esp32 flash_id
+
+If esptool finds the device automatically, you can continue.
+
+If it shows more than one possible device, look in:
+
+Device Manager > Ports (COM & LPT)
+
+Look for a new COM port that appeared when DNSquachWatch was plugged in.
+
+It will look something like:
+
+COM3
+COM5
+COM8
+
+Remember that COM number.
+
+
+## MAC:
+---
+
+Open Terminal and type:
+
+ls /dev/cu.*
+
+Look for a name containing something similar to:
+
+usbserial
+
+For example:
+
+/dev/cu.usbserial-110
+/dev/cu.usbserial-140
+
+An easy trick:
+
+1. Unplug DNSquachWatch.
+2. Run:
+
+ls /dev/cu.*
+
+3. Plug DNSquachWatch back in.
+4. Run the command again.
+
+The new entry is probably DNSquachWatch.
+
+Remember the complete name.
+
+
+## LINUX:
+-----
+
+Open Terminal and type:
+
+ls /dev/ttyUSB* /dev/ttyACM* 2>/dev/null
+
+An easy trick:
+
+1. Unplug DNSquachWatch.
+2. Run the command.
+3. Plug DNSquachWatch back in.
+4. Run the command again.
+
+A new device should appear, usually something like:
+
+/dev/ttyUSB0
+
+or:
+
+/dev/ttyACM0
+
+Remember that name.
+
+
+==================================================
+STEP 5: TEST THE CONNECTION
+==================================================
+
+Before changing anything, make sure the computer can actually talk to DNSquachWatch.
+
+## WINDOWS:
+
+Replace COM5 below with the COM number you found:
+
+python -m esptool --chip esp32 --port COM5 flash_id
+
+
+## MAC:
+
+Replace the example port below with the one you found:
+
+python3 -m esptool --chip esp32 --port /dev/cu.usbserial-110 flash_id
+
+
+## LINUX:
+
+Replace the example port below with the one you found:
+
+python3 -m esptool --chip esp32 --port /dev/ttyUSB0 flash_id
+
+
+If this works, esptool should display information about the ESP32 and its flash memory.
+
+If you get an error saying it cannot connect:
+
+- Make sure the USB cable supports data.
+- Make sure you selected the correct port.
+- Close any other program that may be using the device.
+- Try unplugging and reconnecting DNSquachWatch.
+- Try another USB port or USB cable.
+
+
+==================================================
+STEP 6: OPTIONAL BUT RECOMMENDED - BACK UP THE DEVICE
+==================================================
+
+Before installing new firmware, you can save a complete copy of the device's existing flash memory.
+
+This gives you a "before" copy in case you ever need it.
+
+## WINDOWS:
+
+python -m esptool --chip esp32 --port COM5 read_flash 0 0x400000 before-dnsp.bin
+
+
+## MAC:
+
+python3 -m esptool --chip esp32 --port /dev/cu.usbserial-110 read_flash 0 0x400000 before-dnsp.bin
+
+
+## LINUX:
+
+python3 -m esptool --chip esp32 --port /dev/ttyUSB0 read_flash 0 0x400000 before-dnsp.bin
+
+
+IMPORTANT:
+
+Use YOUR port name instead of the examples above.
+
+The backup may take a little while.
+
+When it finishes, keep the file:
+
+before-dnsp.bin
+
+somewhere safe.
+
+
+==================================================
+STEP 7: OPEN THE FIRMWARE FOLDER
+==================================================
+
+Now you need to tell the command window where the DNSquachWatch firmware files are located.
+
+The easiest method is to type:
+
+cd
+
+followed by a space, then the location of the firmware folder.
+
+
+## WINDOWS EXAMPLE:
+
+cd "C:\Users\YourName\Downloads\DNSquachWatch-v1.1.2-ST7789-80MHz"
+
+For the older panel, substitute DNSquachWatch-v1.1.2-ILI9341-80MHz.
+
+
+## MAC EXAMPLE:
+
+cd "/Users/YourName/Desktop/DNSquachWatch/DNSquachWatch-v1.1.2-ST7789-80MHz"
+
+For the older panel, substitute DNSquachWatch-v1.1.2-ILI9341-80MHz.
+
+
+## LINUX EXAMPLE:
+
+cd "/home/YourName/Downloads/DNSquachWatch-v1.1.2-ST7789-80MHz"
+
+For the older panel, substitute DNSquachWatch-v1.1.2-ILI9341-80MHz.
+
+
+Your folder location will probably be different from these examples.
+
+-> TIP FOR MAC USERS:
+
+Type:
+
+cd
+
+then a space.
+
+You can then drag the firmware folder from Finder directly into the Terminal window. Terminal will automatically insert its location.
+
+Press Enter.
+
+
+==================================================
+STEP 8: MAKE SURE THE FILES ARE THERE
+==================================================
+
+## WINDOWS:
+
+dir
+
+
+## MAC OR  LINUX:
+
+ls
+
+
+You should see:
+
+bootloader.bin
+partitions.bin
+boot_app0.bin
+firmware.bin
+
+If you see those files, you are in the correct folder.
+
+
+==================================================
+STEP 9: INSTALL DNSQUACHWATCH
+==================================================
+
+IMPORTANT:
+
+Do not unplug the device while the firmware is being installed.
+
+
+## WINDOWS:
+
+Replace COM5 with your actual COM port.
+
+python -m esptool --chip esp32 --port COM5 write_flash --flash_mode dio --flash_freq 40m --flash_size 4MB 0x1000 bootloader.bin 0x8000 partitions.bin 0xe000 boot_app0.bin 0x10000 firmware.bin
+
+
+## MAC:
+
+Replace /dev/cu.usbserial-110 with your actual device name.
+
+python3 -m esptool --chip esp32 --port /dev/cu.usbserial-110 write_flash --flash_mode dio --flash_freq 40m --flash_size 4MB 0x1000 bootloader.bin 0x8000 partitions.bin 0xe000 boot_app0.bin 0x10000 firmware.bin
+
+
+## LINUX:
+
+Replace /dev/ttyUSB0 with your actual device name.
+
+python3 -m esptool --chip esp32 --port /dev/ttyUSB0 write_flash --flash_mode dio --flash_freq 40m --flash_size 4MB 0x1000 bootloader.bin 0x8000 partitions.bin 0xe000 boot_app0.bin 0x10000 firmware.bin
+
+
+==================================================
+STEP 10: WAIT FOR IT TO FINISH
+==================================================
+
+You will see progress information while the firmware is being written.
+
+Do not unplug DNSquachWatch during this process.
+
+When esptool reports that the operation has completed successfully, the firmware has been installed.
+
+If the device does not restart automatically:
+
+1. Unplug the USB cable.
+2. Wait a few seconds.
+3. Plug it back in.
+
+DNSquachWatch should now boot using the newly installed firmware.
+
+
+==================================================
+IF IT SAYS "FAILED TO CONNECT"
+==================================================
+
+Don't panic. This usually means the ESP32 did not enter programming mode.
+
+Try this:
+
+1. Leave the USB cable connected.
+2. Hold down the BOOT button on the device.
+3. Run the firmware command again.
+4. Keep holding BOOT while it begins connecting.
+5. Release BOOT once the installation starts.
+
+If that does not work, try holding BOOT and briefly pressing the RESET/EN button, then try again.
+
+
+==================================================
+LINUX ONLY: "PERMISSION DENIED"
+==================================================
+
+If Linux says you do not have permission to access the device, your user account may need permission to use serial devices.
+
+On many Linux distributions, run:
+
+sudo usermod -aG dialout $USER
+
+Then log out of your computer and log back in.
+
+Reconnect DNSquachWatch and try again.
+
+
+==================================================
+QUICK TROUBLESHOOTING
+==================================================
+
+DEVICE POWERS ON BUT IS NOT FOUND:
+
+Try another USB cable. Many USB cables are charging-only cables.
+
+THE PORT DISAPPEARED:
+
+Unplug DNSquachWatch, plug it back in, and find the port again.
+
+"NO SUCH FILE" OR "FILE NOT FOUND":
+
+You are probably not inside the correct firmware folder. Repeat Steps 7 and 8.
+
+"PORT DOES NOT EXIST":
+
+The port name may have changed after reconnecting the device. Repeat Step 4.
+
+"PORT IS BUSY" OR "ACCESS DENIED":
+
+Close programs that might be communicating with the device, then try again.
+
+"FAILED TO CONNECT":
+
+Try the BOOT-button procedure above.
+
+NOTHING WORKS:
+
+Disconnect the device, close the Terminal or Command Prompt, reconnect the device, open a new Terminal or Command Prompt, and start again at Step 4.

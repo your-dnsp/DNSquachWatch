@@ -39,3 +39,4 @@ uint16_t dhCode(const uint8_t pubA[DH_LEN], const uint8_t pubB[DH_LEN]);
 
 } // namespace MeshCrypto
 #endif
+

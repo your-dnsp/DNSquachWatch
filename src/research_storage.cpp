@@ -1,4 +1,5 @@
 #include "research.h"
+#include "drone_watch.h"
 #if defined(ARDUINO_ARCH_ESP32)
 #include <SD.h>
 #include <cstdlib>
@@ -10,7 +11,7 @@ bool append(const char* path,const char* line){File f=SD.open(path,FILE_APPEND);
 bool storageSink(const char* json,const char* csv,bool reset){
     if(reset){
         for(int i=0;i<2;i++){if(SD.exists(paths[i])){if(SD.exists(paths[i+2])&&!SD.remove(paths[i+2]))return false;if(!SD.rename(paths[i],paths[i+2]))return false;}}
-        return append(paths[0],"{\"kind\":\"session\",\"schema\":1,\"warning\":\"Experimental matches. Absence is not clearance. Raw mode includes identifiers.\"}\n")&&append(paths[1],"session,id,reference,uptime_ms,catalog,radio,mac,rssi,channel,type,evidence,rule,verdict,confidence\n");
+        return append(paths[0],"{\"kind\":\"session\",\"schema\":2,\"warning\":\"Experimental matches. Absence is not clearance. Raw mode includes identifiers. DEAUTH addresses are claimed frame values and may be spoofed.\"}\n")&&append(paths[1],"session,id,reference,uptime_ms,catalog,radio,mac,rssi,channel,type,evidence,rule,verdict,confidence,claimed_transmitter,receiver,bssid,deauth_reason,management_protection\n");
     }
     return append(paths[0],json)&&append(paths[1],csv);
 }
@@ -32,13 +33,13 @@ bool storageImport(){
     if(n!=want){free(data);stop("Signature file read failed");return false;}
     bool ok=importPack(data,n);free(data);return ok;
 }
-void storageWipe(){discard();stop("Research stopped for history wipe");for(const char* p:paths)SD.remove(p);SD.remove("/dnsp-field-report.txt");SD.remove("/dnsp-field-report.previous.txt");SD.remove("/dnsp-field-report.partial");}
+void storageWipe(){DroneWatch::wipe();discard();stop("Research stopped for history wipe");for(const char* p:paths)SD.remove(p);SD.remove("/dnsp-field-report.txt");SD.remove("/dnsp-field-report.previous.txt");SD.remove("/dnsp-field-report.partial");}
 }
 #else
 namespace Research {
 bool storageSink(const char*,const char*,bool){return false;}
 bool storageReport(const Stats&){return false;}
 bool storageImport(){stop("Emulator: use parser tests for SD imports");return false;}
-void storageWipe(){discard();stop("Research stopped for history wipe");}
+void storageWipe(){DroneWatch::wipe();discard();stop("Research stopped for history wipe");}
 }
 #endif

@@ -29,8 +29,8 @@ enum class AutoLock : uint8_t { OFF, ON_SLEEP, MIN_1, MIN_5, MIN_15, MIN_30 };
 // this is only how much of it is put on the glass to a stranger.
 enum class LockAlerts : uint8_t { FULL, TYPE_ONLY, NONE };
 
-// The result of trying a PIN. DURESS and the tenth wrong guess both wipe --
-// the caller finishes the parts NVS cannot reach (the RAM log, the SD files).
+// DURESS reports a lock-screen match without unlocking or deleting anything.
+// The caller persists wipe intent and restarts into the isolated wipe path.
 enum class Check : uint8_t { WRONG, OK, DURESS, WIPED };
 
 void begin();               // load from NVS; call once at boot
@@ -43,8 +43,7 @@ PinLen   pinLen();
 // lockAtBoot(), by the padlock icon, or by auto-lock.
 bool locked();
 void lock();
-// Only Check::OK / DURESS / WIPED from check() clear this; the UI never sets
-// it directly.
+// Only a correct ordinary PIN unlocks; a duress match remains locked.
 
 // ---- setup, all guarded by the UI behind the current PIN ----
 void setPinLength(PinLen n);        // only meaningful before a PIN is set
@@ -86,9 +85,7 @@ bool verify(const char* digits);
 // PIN flows use it so a new PIN can never be set equal to the duress one.
 bool isDuress(const char* digits);
 
-// After a duress wipe the board restarts, and comes back unlocked whatever
-// LOCK AT BOOT says: the unlock has to look like an unlock. main.cpp calls this
-// from setup() when the wipe left word in RTC memory that it should.
+// Forgotten-PIN recovery uses this after its separate legacy wipe/restart.
 void forceUnlock();
 
 // While this is non-zero the lock screen must refuse input and show the wait.
@@ -101,8 +98,9 @@ uint8_t  failCount();
 // the ignore list. Does NOT touch settings or Squachy. This is the LOGICAL wipe
 // -- NVS only marks an entry erased -- so on the device main.cpp follows it
 // with a physical erase of the whole store and a restart (performWipe()); the
-// RAM log and the SD files are the caller's too. Called for you by a duress
-// PIN and by the tenth-wrong-guess wipe; exposed for the test.
+// RAM log and the SD files are the caller's too. Called by the tenth-wrong-
+// guess path; the stronger duress flow uses its own full erase instead.
 void wipeSecrets();
 
 }
+

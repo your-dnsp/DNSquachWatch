@@ -52,6 +52,8 @@ inline const SimDetectionProfile kSimProfiles[] = {
     { DetectionType::FLOCK,       {0xB4, 0x1E, 0x52}, "Flock-MA-L",  "",               -70, true,  "Flock camera (registered)" },
     { DetectionType::FLOCK,       {0x24, 0xB2, 0xB9}, "Flock-Liteo", "",               -72, true,  "Liteon chip (maybe Flock)" },
     { DetectionType::FLOCK,       {0xD0, 0x39, 0x57}, "Flock",       "",               -74, true,  "Unverified Flock address" },
+    { DetectionType::FLOCK,       {0x58, 0x8E, 0x81}, "Flock-SiLab", "",               -73, true,  "WiFi module (maybe Flock)" },
+    { DetectionType::FLOCK,       {0x00, 0x03, 0x7F}, "Flock-QCA",   "",               -75, true,  "Qualcomm factory address" },
     { DetectionType::FLOCK,       {0x02, 0xF1, 0x0C}, "Flock-Setup", "",               -60, true,  "Flock setup network" },
     { DetectionType::FLOCK,       {0x02, 0xF1, 0x0B}, "Flock-BLE",   "FS Ext Battery", -66, false, "Flock external battery" },
     { DetectionType::FLOCK,       {0x02, 0x09, 0xC8}, "Flock-BLE",   "",               -71, false, "Flock Bluetooth (XUNTONG)" },

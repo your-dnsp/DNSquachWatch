@@ -12,6 +12,12 @@ struct Stats {
     bool active=false, raw=false; Profile profile=Profile::BALANCED;
     uint32_t session=0, start=0, elapsed=0, duration=300000, observed=0, saved=0, dropped=0, errors=0, bytes=0;
     uint32_t types[19][3]{}; // successfully saved observations by type/confidence; excludes annotations
+    // DEAUTH frame records are evidence, not individual alerts. A coherent
+    // burst is counted only when the main per-source detector crosses its
+    // threshold. These remain session-level counters; RAW records contain
+    // the per-frame addresses needed for field validation.
+    uint32_t deauthFrames=0, deauthBursts=0, deauthMultiTargetBursts=0;
+    uint32_t deauthProtected=0, deauthUnprotected=0, deauthReasonKnown=0;
     uint32_t bleMs=0, wifiMs=0, channelMs[14]{}; uint16_t channels=0; uint32_t catalog=BUILTIN_VERSION;
 };
 struct Record {
@@ -36,6 +42,9 @@ bool active(); Profile profile(); Stats stats(); const char* status();
 void coverage(uint32_t deltaMs, bool bleListening, bool wifiListening, uint8_t channel);
 void observe(uint8_t radio, const uint8_t* mac, uint8_t addressType, int8_t rssi, uint8_t channel,
              const uint8_t* payload, size_t length, uint32_t now, const Match& match=Match{});
+// Called from the normal processing task after per-source burst analysis.
+// It performs no storage I/O and deliberately records no address.
+void noteDeauthBurst(uint8_t distinctTargets);
 bool select(uint8_t index, Record& out);
 bool recent(uint8_t index, Record& out); // newest first, eight records retained
 bool annotate(uint32_t recordId, Verdict verdict, const char* note, uint32_t now);

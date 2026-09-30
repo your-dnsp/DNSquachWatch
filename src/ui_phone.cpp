@@ -97,7 +97,6 @@ bool        s_pinForgot   = false;     // FORGOT offered (the lock screen)
 uint8_t     s_forgotTaps  = 0;
 uint32_t    s_forgotAt    = 0;
 bool        s_pinForgotHit = false;
-const uint32_t FORGOT_ARM_MS = 5000;
 uint8_t  s_max    = Squachy::CUSTOM_NAME_MAX;
 bool     s_msgOk  = false;      // a message ended on OK, not BACK
 
@@ -348,7 +347,7 @@ void        uiPhonePinReject() { s_len = 0; s_buf[0] = '\0'; s_pinReady = false;
 void        uiPhonePinPrompt(const char* p) { s_pinPrompt = p ? p : ""; }
 void        uiPhonePinAllowForgot(bool a) { s_pinForgot = a; s_forgotTaps = 0; s_pinForgotHit = false; }
 bool        uiPhonePinForgot() { return s_pinForgotHit; }
-static bool forgotArmed(uint32_t now) { return s_pinForgot && s_forgotTaps == 1 && now - s_forgotAt < FORGOT_ARM_MS; }
+static bool forgotArmed(uint32_t) { return s_pinForgot && s_forgotTaps != 0; }
 void        uiPhonePinWait(const char* m) { s_pinWaitMsg = m; if (m) { s_len = 0; s_buf[0] = '\0'; } }
 
 // A tap on the PIN pad: digits fill the dots, DEL rubs one out, and the PIN
@@ -358,8 +357,14 @@ static void pinTouch(int x, int y, uint32_t now) {
     // FORGOT works during a lockout wait too: that is exactly when somebody
     // who has forgotten the PIN is standing there.
     if (s_pinForgot && x >= BX && x <= BX + BW_() && y >= s_backY && y <= s_backY + BH) {
-        if (forgotArmed(now)) { s_pinForgotHit = true; s_pinReady = false; s_done = true; }
-        else                  { s_forgotTaps = 1; s_forgotAt = now; }
+        if (s_forgotTaps == 0) {
+            s_forgotTaps = 1; s_forgotAt = now; s_len = 0; s_buf[0] = '\0';
+            s_pinWaitMsg = nullptr;
+        } else if (s_forgotTaps == 1) {
+            s_forgotTaps = 0; s_len = 0; s_buf[0] = '\0';
+        } else {
+            s_pinForgotHit = true; s_pinReady = false; s_done = true;
+        }
         return;
     }
     if (s_pinWaitMsg) return;
@@ -377,6 +382,14 @@ static void pinTouch(int x, int y, uint32_t now) {
         if (i <= 8)       d = (char)('1' + i);      // 1..9
         else if (i == 10) d = '0';                  // 0
         else return;                                // * / # unused
+        if (s_pinForgot && s_forgotTaps == 1) {
+            if (s_len < 3) { s_buf[s_len++] = d; s_buf[s_len] = '\0'; }
+            if (s_len == 3) {
+                if (strcmp(s_buf, "321") == 0) s_forgotTaps = 2;
+                else { s_len = 0; s_buf[0] = '\0'; s_pinShakeAt = now; }
+            }
+            return;
+        }
         if (s_len < s_pinLen) { s_buf[s_len++] = d; s_buf[s_len] = '\0'; }
         if (s_len == s_pinLen) { s_pinReady = true; s_done = true; }
         return;
@@ -400,9 +413,11 @@ static void drawPinPad(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bo
 
     // Prompt -- or, with FORGOT armed, what a second tap will do.
     const bool armed = forgotArmed(now);
-    const char* pr = armed ? "TAP AGAIN: WIPE + UNLOCK" : s_pinPrompt;
+    const char* pr = s_forgotTaps == 1 ? "RECOVERY: ENTER 3 2 1"
+                     : s_forgotTaps == 2 ? "321 OK - TAP ERASE"
+                     : s_pinPrompt;
     t.setTextSize(1);
-    t.setTextColor(armed ? Theme::RED : STEEL_LT);
+    t.setTextColor(armed ? Theme::RED : Theme::BLACK);
     t.setCursor(ux + (UW - t.textWidth(pr)) / 2, uy + 8);
     t.print(pr);
 
@@ -419,9 +434,10 @@ static void drawPinPad(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bo
     } else {
         int shake = 0;
         if (s_pinShakeAt && now - s_pinShakeAt < 300) shake = ((now / 40) % 2) ? 3 : -3;
-        const int gap = 18, tot = (s_pinLen - 1) * gap;
+        const uint8_t shownLen = (s_pinForgot && s_forgotTaps == 1) ? 3 : s_pinLen;
+        const int gap = 18, tot = (shownLen - 1) * gap;
         int cx = ux + UW / 2 - tot / 2 + shake, cy = dY + dH / 2;
-        for (uint8_t i = 0; i < s_pinLen; i++) {
+        for (uint8_t i = 0; i < shownLen; i++) {
             const bool filled = i < s_len;
             if (filled) t.fillCircle(cx + i * gap, cy, 4, Theme::GREEN);
             else        t.drawCircle(cx + i * gap, cy, 4, STEEL_LT);
@@ -444,8 +460,11 @@ static void drawPinPad(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bo
 
     if (s_pinBack)
         Theme::drawButton(t, BX, s_backY, BW_(), BH, "[ BACK ]", false);
-    else if (s_pinForgot)
-        Theme::drawButton(t, BX, s_backY, BW_(), BH, armed ? "[ WIPE? ]" : "[ FORGOT ]", armed);
+    else if (s_pinForgot) {
+        const char* lab = s_forgotTaps == 1 ? "[ CANCEL ]"
+                        : s_forgotTaps == 2 ? "[ ERASE PIN ]" : "[ FORGOT ]";
+        Theme::drawButton(t, BX, s_backY, BW_(), BH, lab, s_forgotTaps == 2);
+    }
 }
 
 void uiPhoneTouch(int x, int y, uint32_t now, PhoneTouch phase) {

@@ -26,3 +26,4 @@ void uiSecurityInit(TFT_eSPI& t);
 void uiSecurityTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng);
 void uiSecurityScroll(int delta);
 SecurityRow uiSecurityHitTest(TFT_eSPI& t, int x, int y, int screenW, int screenH);
+

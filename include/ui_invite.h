@@ -24,3 +24,4 @@ bool      uiInviteShowingPhrase();
 // and this name. Cleared by uiInviteInit().
 void      uiInviteDemo(MeshTalk::InviteState st, uint16_t code, const char* name, bool inviter);
 #endif
+

@@ -8,3 +8,4 @@ void uiDiaryInit(TFT_eSPI& t);
 // Tap anywhere to go back to CLEAR — no button bar, this is a simple
 // read-only info panel.
 void uiDiaryTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng);
+

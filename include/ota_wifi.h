@@ -121,3 +121,4 @@ uint32_t    bytesExpected();
 const char* failureText();
 
 }  // namespace OtaWifi
+

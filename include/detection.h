@@ -7,6 +7,8 @@
 #include "alert_queue.h"
 #include "sd_log.h"
 #include "remote_id.h"
+#include "spam_watch.h"
+#include "deauth_tracker.h"
 #include <Preferences.h>
 #include <atomic>
 #include <cstring>   // memcmp, for the inline isWatched()/isHunted() below
@@ -76,7 +78,7 @@ namespace Mesh {
     // The visitor, or nullptr. Goes stale on its own if the peer walks away.
     const SquachMesh::Peer* peer();
     const uint8_t*          peerMac();
-    // How many SquachWatches have been heard in the last twelve seconds --
+    // How many SquachWatches have been heard in the last twenty seconds (PEER_STALE_MS) --
     // the visitor and everybody else. For the small "+2" beside him.
     uint8_t                 squadCount(uint32_t now);
     // Every one of them, with what their advert said they look like -- for the
@@ -125,11 +127,27 @@ BootHeap bootHeap();
 bool     scanPassiveNow();   // the scan is passive right now (the room, or heap pressure)
 uint32_t advertRate();       // adverts/s the radio handed over in the last second
 uint32_t wifiFramesSeen();   // frames the WiFi sniffer has been handed since boot
+#if defined(TWATCH_S3)
+// Bluetooth addresses heard that were not heard in the last five to ten
+// minutes: something just arrived. The watch opens its WiFi window early on
+// one. bleArrivalsRoll() is called from loop() and ages the memory.
+uint32_t bleArrivals();
+void     bleArrivalsRoll(uint32_t now);
+#endif
+void     radioReport(bool withScan);   // the RADIO console command
+extern char g_bootRadioLine[192];     // how the radios started this boot
 uint32_t advertsSeen();      // adverts the radio has handed over since boot, seatbelt or not
 const volatile uint32_t* advertKinds();   // [ind, direct, scan, nonconn, other] since boot
 // The scan window, 1..100 of the 100 ms interval, changed live: WINDOW N on
 // the console. For pricing the WiFi/Bluetooth radio-time trade on the bench.
 void     setScanWindow(uint8_t w);
+// The window the scan runs at when nothing special is going on, and the
+// invite boost that lifts it to 99 for a while and puts it back. Two owners
+// (the watch's battery setting, the squad invite) with one arbiter, so the
+// invite ending never lands the watch back on a window it had moved off.
+void     setScanWindowBase(uint8_t w);
+void     setScanBoost(bool on);
+void     setScanInterval(uint16_t ms, uint8_t window);   // bench: INTERVAL ms window
 // SCAN ACTIVE / SCAN PASSIVE / SCAN AUTO on the console: pin the scan mode
 // for a bench flood, or hand it back to the room. 0 auto, 1 active, 2 passive.
 void     setScanPin(uint8_t pin);
@@ -141,13 +159,24 @@ void     logDump();
 class DetectionEngine {
 public:
     AlertQueue alerts;
-    uint32_t bleQueueDropped() { return _blePending.dropped(); }
+    uint32_t bleQueueDropped() const { return const_cast<decltype(_blePending)&>(_blePending).dropped(); }
+    uint32_t channelSweeps() const { return _channelSweeps; }
+    uint32_t storedEvents() const { return _storedEvents; }
     bool     init();
     void     loop();
     void     clearLog();
     uint8_t  logCount() const { return _logCount; }
     const Detection* logAt(uint8_t idx) const;     // 0 = newest
     const Detection* latest() const { return _latest; }
+    // Whether latest() is a row the log had never held, as opposed to a
+    // device that went stale and came back -- which the engine announces
+    // again (firstSeen is reset in the reactivation branches, so the alert
+    // card goes up for it too). A re-sighting is news to the screen, not to
+    // the room; the CrowPanel 7's buzzer reads this to tell the two apart.
+    // Nothing else can: hits climbs per frame on WiFi, and alerts only
+    // moves under AUTO SNOOZE. True to the RAM log only -- a device evicted
+    // from the ring and seen again reads as new, as the LOG screen shows it.
+    bool latestIsNew() const { return _latestNew; }
     uint16_t countByType(DetectionType t) const { return _typeCounts[(uint8_t)t]; }
 
     // Lifetime total across reboots (persisted to NVS), unlike the
@@ -181,16 +210,15 @@ public:
     // it came from is in the frame, and the frame is gone by then.
     void IRAM_ATTR postWiFi(const uint8_t* mac, int8_t rssi, uint8_t channel,
                             const char* ssid = nullptr, bool encrypted = false,
-                            bool pwnagotchi = false);
+                            bool pwnagotchi = false, bool drone = false);
 
     // Called from the promiscuous WiFi Rx callback (IRAM_ATTR context)
     // when a deauthentication management frame is seen. A single
     // frame is completely normal WiFi traffic (a phone disconnecting,
-    // an AP restarting) -- it's a BURST that indicates an actual
-    // attack, which processDeauthQ() (run from loop()) is what
-    // actually decides, via a rolling window + cooldown rather than
-    // firing per frame.
-    void IRAM_ATTR postDeauth(const uint8_t* mac, int8_t rssi, uint8_t channel);
+    // an AP restarting). A coherent BURST is worth reporting, without
+    // claiming it proves an attack. processDeauthQ() (run from loop())
+    // decides that via a per-source sliding window and cooldown.
+    void IRAM_ATTR postDeauth(const DeauthFrameEvidence& frame);
 
     // Called from the BLE scan callback when a hit is found.
     void postBle(Detection d);
@@ -254,6 +282,11 @@ public:
     bool shutdownTick(); // one bounded pending storage write per pass; true once drained
     void     startUpdateRadio();
     void     stopUpdateRadio();
+    // The watch's duty cycle: WiFi off (and BLE scanning too, if asked)
+    // until wakeRadios(). False when something else owns the radio.
+    bool     restRadios(bool bleToo);
+    void     wakeRadios();
+    bool     radiosResting();
 
     // ---- Watched target ("stalker tracker") --------------------------
     // Session-only (not persisted to NVS -- resets on reboot). One
@@ -273,6 +306,7 @@ public:
     void clearWatch();
     WatchKind watchKind() const { return _watchKind; }
     const char* watchLabel() const { return _watchLabel; }
+    const uint8_t* watchMac() const { return _watchMac; }
     // True when this exact address is the one currently being watched -- what
     // makes the confirm panel's WATCH button a toggle rather than a one-way
     // door, the same way IGNORE already reads IgnoreList::contains(). The kind
@@ -300,6 +334,12 @@ public:
     // everything is allowed through. `exempt` is for the devices that must
     // always get through whatever they have cost you -- the one you asked to
     // WATCH, above all.
+    //
+    // `still` is the watch sitting still (see twatchStill()). A device's
+    // allowance normally comes back half an hour after its last alert, which
+    // for a Ring camera bobbing in and out all night is five more alerts every
+    // half hour. On a still watch it comes back only when the device was
+    // really gone for half an hour. Boards with no motion sensor pass false.
     enum class AlertGate : uint8_t {
         ALLOW,        // let it interrupt
         ALLOW_LAST,   // let it interrupt, and this was its last free one
@@ -309,7 +349,11 @@ public:
     // (sim/detection_sim.cpp) and this is pure arithmetic over the log --
     // one copy here means the emulator gates alerts exactly as the board
     // does, instead of a second implementation drifting from this one.
-    AlertGate alertGate(const uint8_t* mac, uint8_t afterN, bool exempt) {
+    // The spam-flood watch: see spam_watch.h. The alert gate in main.cpp asks
+    // it; the engine feeds it from expireStale() and a once-a-minute count.
+    SpamWatch& spam() { return _spam; }
+
+    AlertGate alertGate(const uint8_t* mac, uint8_t afterN, bool exempt, bool still = false) {
     if (afterN == 0 || exempt) return AlertGate::ALLOW;
     const uint32_t now = millis();
     for (uint8_t i = 0; i < _logCount; i++) {
@@ -317,8 +361,12 @@ public:
         if (memcmp(_log[slot].mac, mac, 6) != 0) continue;
         Detection& d = _log[slot];
 
+        const uint16_t nowMin = (uint16_t)(now / 60000u);
+        const bool     gone   = (uint16_t)(nowMin - d.askedMin) > QUIET_DECAY_MS / 60000u;
+        d.askedMin = nowMin;
+
         // Gone long enough to have earned a clean slate.
-        if (d.alerts && (now - d.lastAlertMs) > QUIET_DECAY_MS) {
+        if (d.alerts && (gone || (!still && (now - d.lastAlertMs) > QUIET_DECAY_MS))) {
             d.alerts   = 0;
             d.quietBar = 0;
         }
@@ -367,6 +415,14 @@ public:
     // target that just sits nearby doesn't re-fire every single
     // advertisement/frame.
     bool watchHitPending();
+    // A hit on the current watch as though it had just been heard at this
+    // signal, cooldown and all -- for the console's WATCHTEST, which picks
+    // a device out of the log rather than waiting for one to be heard.
+    void forceWatchHit(int8_t rssi) {
+        recordWatchRssi(rssi);
+        _watchLastHitMs = millis();
+        _watchHitFlag   = true;
+    }
 
     // ---- Hunt target (HUNT MODE's live gauge) -------------------------
     // A second, completely independent slot from the watch target above
@@ -389,6 +445,7 @@ public:
     }
     WatchKind huntKind() const { return _huntKind; }
     const char* huntLabel() const { return _huntLabel; }
+    const uint8_t* huntMac() const { return _huntMac; }
     uint8_t huntRssiCount() const { return _huntRssiCount; }
     int8_t  huntRssiAt(uint8_t idx) const;
 
@@ -438,6 +495,7 @@ private:
         char    ssid[33];  // empty string if none (see postWiFi)
         bool    encrypted; // beacon Privacy bit; meaningless without an ssid
         bool    pwnagotchi;// ssid holds a pwnagotchi's name, not a network's
+        bool    drone;     // a Remote ID beacon; ssid holds its serial, or nothing
     };
 
     // WiFi mailbox (filled in IRAM, drained in loop)
@@ -447,16 +505,11 @@ private:
 
     // Deauth mailbox (filled in IRAM, drained in loop) -- see
     // postDeauth()/processDeauthQ(). Separate from _wifiQ above since
-    // this feeds a rolling burst-window counter, not the OUI/SSID
+    // this feeds bounded per-source burst tracking, not the OUI/SSID
     // signature matcher.
     static const uint8_t  DEAUTH_Q_CAP       = 8;
-    static const uint8_t  DEAUTH_THRESHOLD   = 6;      // frames within...
-    static const uint32_t DEAUTH_WINDOW_MS   = 3000;   // ...this window...
-    static const uint32_t DEAUTH_COOLDOWN_MS = 15000;  // ...then this long before re-firing.
     struct DeauthQEntry {
-        uint8_t mac[6];
-        int8_t  rssi;
-        uint8_t channel;
+        DeauthFrameEvidence frame;
     };
     // ---- Evil-twin / rogue-AP tracking --------------------------
     // First BSSID seen beaconing each SSID, with the security posture it
@@ -499,9 +552,7 @@ private:
     volatile DeauthQEntry _deauthQ[DEAUTH_Q_CAP];
     volatile uint8_t      _deauthQHead = 0;
     volatile uint8_t      _deauthQTail = 0;
-    uint8_t  _deauthWinCount   = 0;
-    uint32_t _deauthWinStart   = 0;
-    uint32_t _deauthLastFireMs = 0;
+    DeauthBurstTracker _deauthTracker;
 
     // Watched target -- see the public watchBle()/watchWifi() section
     // above.
@@ -571,6 +622,7 @@ private:
     uint8_t    _logCount = 0;            // number of valid entries (<= LOG_CAP)
     uint8_t    _logHead  = 0;            // next slot to write
     Detection* _latest   = nullptr;      // pointer into _log or null
+    bool       _latestNew = false;       // _latest is a fresh row, not a reactivation
     uint32_t   _latestChangeMs = 0;
     DetectionType _lastAlertType = DetectionType::UNKNOWN;
 
@@ -615,6 +667,11 @@ private:
     // transmitting on the other 12. See hopChannel().
     uint8_t     _wifiChannel = 1;
     uint32_t    _lastHopMs   = 0;
+    uint16_t    _dwellMs     = 300;   // how long this channel gets, set on arrival
+    uint32_t    _channelSweeps = 0;
+    uint32_t    _storedEvents = 0;
+    SpamWatch   _spam;
+    uint16_t    _newBle[SpamWatch::TYPES] = {0};   // new Bluetooth rows by type, counted in pushLog
 
     // Index 1..13; 0 is unused. Fed from every captured mgmt/data
     // frame in processWiFiQ() (not just ones that match a known
@@ -630,4 +687,3 @@ private:
     void hopChannel();
     void decayChannelActivity();
 };
-

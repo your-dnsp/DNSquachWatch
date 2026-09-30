@@ -31,6 +31,7 @@
 // The emulator's sprite is a different class with none of these members, so
 // there this is a plain pass-through and nothing changes.
 #pragma once
+#include "frame_config.h"
 #include <TFT_eSPI.h>
 
 class FastSprite : public TFT_eSprite {
@@ -44,7 +45,7 @@ public:
     // here or it reads straight off the end -- a LoadStoreError panic, found
     // on that board on 2026-09-20 and the reason FramePush::push() takes a
     // buffer and a size rather than a sprite.
-#if defined(CYD35)
+#if SQW_BANDED_FRAME && defined(ARDUINO_ARCH_ESP32)
     // The window-write guard. TFT_eSprite::setWindow() clamps the window it
     // is handed to width()/height(), and those report the VIEWPORT, not the
     // buffer -- so on a 480x160 buffer under a 480x320 viewport it will
@@ -130,3 +131,4 @@ private:
     static bool s_fast;
 #endif
 };
+

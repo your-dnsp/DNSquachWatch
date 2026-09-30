@@ -29,7 +29,7 @@ struct __attribute__((packed)) DetRecord {
     uint8_t  kind;          // internal: a sighting, or the mark a CLR leaves
     uint8_t  type;          // DetectionType
     uint8_t  conf;          // Confidence
-    uint8_t  flags;         // DET_AGAIN
+    uint8_t  flags;         // DET_AGAIN, DET_PRINTED
     uint8_t  mac[6];
     int8_t   rssi;
     uint8_t  channel;
@@ -43,6 +43,7 @@ struct __attribute__((packed)) DetRecord {
     uint8_t  crc;
 };
 static const uint8_t DET_AGAIN = 0x01;   // came back after going quiet
+static const uint8_t DET_PRINTED = 0x02; // v1.25+: MAC is conventional printed order
 
 // One boot. When it followed a crash, the crash is in here too, from the
 // breadcrumb and the core dump summary (see crashReportInit() in main.cpp).
@@ -63,6 +64,45 @@ struct __attribute__((packed)) BootRecord {
     char     task[15];      // 12 was a version cut off mid-word on the bench
     uint8_t  crc;
 };
+// A battery sample: the watch's power chip, read every ten minutes and at
+// the moments the slope changes (boot, USB in or out, screen asleep or
+// awake). Voltage as well as the chip's percentage, because the percentage
+// is a guess with big steps; the state bits say what the watch was doing,
+// which is what turns a slope into a cause. Watch only; the CYDs have no
+// gauge and no ring for it.
+struct __attribute__((packed)) BattRecord {
+    uint8_t  kind;
+    uint8_t  pct;           // the chip's gauge, 0..100
+    uint8_t  flags;         // BATT_*
+    uint8_t  why;           // BATT_WHY_*: what prompted the sample
+    uint16_t mv;            // battery voltage, millivolts
+    uint16_t boot;
+    uint32_t epoch;         // 0 when the clock was not set
+    uint32_t upSec;
+    uint8_t  cpuMhz10;      // CPU clock / 10
+    // What the radios had heard by then, and how warm the chip was: two
+    // samples with the same counts are a deaf spell, and these say when it
+    // started and what the watch was doing. Zero in older records.
+    int8_t   chipC;         // the chip's own sensor, degrees C
+    uint8_t  steady;        // 1 when STEADY POWER held DC1 in PWM
+    uint32_t adverts;       // Bluetooth adverts heard since boot
+    uint32_t frames;        // WiFi frames heard since boot
+    uint8_t  pad[36];
+    uint8_t  crc;
+};
+static const uint8_t BATT_USB       = 0x01;   // on the cable
+static const uint8_t BATT_CHARGING  = 0x02;
+static const uint8_t BATT_SCREEN_ON = 0x04;
+static const uint8_t BATT_RADIOS_ON = 0x08;
+static const uint8_t BATT_WHY_TIMER  = 0;
+static const uint8_t BATT_WHY_BOOT   = 1;
+static const uint8_t BATT_WHY_USB    = 2;     // the cable came or went
+static const uint8_t BATT_WHY_SCREEN = 3;     // the screen slept or woke
+static const uint8_t BATT_WHY_RESET  = 4;     // RADIO RESET tapped: the watch power cycles next
+static const uint8_t BATT_WHY_HEAL   = 5;     // the self-heal found Bluetooth deaf: power cycles next
+void noteBattery(BattRecord& r);
+void forEachBattery(bool (*fn)(const BattRecord& r, void* ctx), void* ctx);   // newest first
+
 static const uint8_t BOOT_CRUMB      = 0x01;
 static const uint8_t BOOT_DUMP       = 0x02;
 static const uint8_t BOOT_DUMP_OLDER = 0x04;
@@ -95,6 +135,8 @@ uint16_t readDetections(uint16_t from, uint16_t max, DetRecord* out);
 // this way.
 uint16_t readDetectionsAt(const uint16_t* at, uint16_t n, DetRecord* out);
 void forEachBoot(bool (*fn)(const BootRecord& r, void* ctx), void* ctx);
+uint16_t readBoots(uint16_t from, uint16_t max, BootRecord* out);
+uint16_t bootsKept();
 
 uint16_t detectionsKept();              // since the last CLR
 uint8_t  crashesKept();

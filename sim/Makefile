@@ -53,13 +53,14 @@ CXX      ?= g++
 # makes <TFT_eSPI.h>, <Arduino.h> and <Preferences.h> resolve to the
 # shims here rather than to an ESP32 core that isn't installed.
 EXTRA_CXXFLAGS ?=
-CXXFLAGS := -std=c++17 -O1 -g -Wall -Wno-unused-parameter $(EXTRA_CXXFLAGS) \
+CXXFLAGS := -std=c++17 -O1 -g -Wall -Wno-unused-parameter -DSQW_BANDED_FRAME=1 $(EXTRA_CXXFLAGS) \
             -I$(SIM_DIR) -I$(INC) -DSQUACH_MESH=1
 
-UI_SRCS  := $(SRC)/care.cpp $(SRC)/backup.cpp $(SRC)/ui_care.cpp $(SRC)/research_report.cpp $(SRC)/breakout.cpp $(SRC)/ui_breakout.cpp  $(SRC)/field_tools.cpp $(SRC)/field_storage.cpp $(SRC)/ui_field.cpp $(SRC)/language.cpp \
+UI_SRCS  := $(SRC)/crash_reports.cpp $(SRC)/ui_device.cpp $(SRC)/alert_snooze.cpp $(SRC)/duress_core.cpp $(SRC)/duress_device.cpp $(SRC)/pixel_tide.cpp $(SRC)/drone_watch.cpp $(SRC)/care.cpp $(SRC)/backup.cpp $(SRC)/readable_logs.cpp $(SRC)/scan_profile.cpp $(SRC)/ui_care.cpp $(SRC)/research_report.cpp $(SRC)/breakout.cpp $(SRC)/ui_breakout.cpp $(SRC)/user_labels.cpp $(SRC)/user_labels_storage.cpp $(SRC)/ui_labels.cpp $(SRC)/sketchy_rule.cpp $(SRC)/ui_rule_alert.cpp $(SRC)/field_tools.cpp $(SRC)/field_storage.cpp $(SRC)/ui_field.cpp $(SRC)/language.cpp \
             $(SRC)/research.cpp \
             $(SRC)/research_storage.cpp \
             $(SRC)/ui_research.cpp \
+            $(SRC)/draw_band.cpp \
             $(SRC)/theme.cpp \
             $(SRC)/squachy.cpp \
             $(SRC)/squachmesh.cpp \
@@ -264,4 +265,3 @@ clean:
 	rm -rf out .nvs $(WASM_DIR)/squachsim.js $(WASM_DIR)/squachsim.wasm
 
 .PHONY: all live wasm shots clean
-

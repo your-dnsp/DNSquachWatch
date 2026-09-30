@@ -68,3 +68,4 @@ namespace IgnoreList {
     // What every alert gate asks: ignored for good, or snoozed for now.
     bool silenced(const uint8_t* mac);
 }
+

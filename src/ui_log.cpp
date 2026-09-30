@@ -8,6 +8,8 @@
 #include "detection.h"
 #include "log_index.h"
 #include "regulars.h"
+#include "ignore_list.h"
+#include "user_labels.h"
 #include <Arduino.h>
 #include <ctype.h>
 #include <string.h>
@@ -152,6 +154,7 @@ static void confirmRects(int screenW, int screenH,
                           int& huX, int& huY, int& huW, int& huH,
                           int& infX, int& infY, int& infW, int& infH,
                           int& igX, int& igY, int& igW, int& igH,
+                          int& lbX, int& lbY, int& lbW, int& lbH,
                           int& cnX, int& cnY, int& cnW, int& cnH) {
     pw = screenW - 40;
     if (pw > 240) pw = 240;
@@ -159,7 +162,7 @@ static void confirmRects(int screenW, int screenH,
     // IGNORE/MORE INFO, then CANCEL alone across the bottom. CANCEL gets
     // the full width because it is the one button you hit by reflex and
     // the one that must never be mistaken for its neighbour.
-    ph = 164;
+    ph = 196;
     px = (screenW - pw) / 2;
     py = (screenH - ph) / 2;
     const int margin = 10, gap = 8, btnH = 24;
@@ -170,7 +173,8 @@ static void confirmRects(int screenW, int screenH,
     cnX = px + margin;
     cnW = pw - 2 * margin;
 
-    igY = infY = cnY - gap - btnH;
+    lbY = cnY - gap - btnH;lbH=btnH;lbX=px+margin;lbW=pw-2*margin;
+    igY = infY = lbY - gap - btnH;
     igH = infH = btnH;
     igX  = px + margin;       igW  = btnW;
     infX = igX + btnW + gap;  infW = btnW;
@@ -183,22 +187,23 @@ static void confirmRects(int screenW, int screenH,
 
 LogConfirmTap uiLogHitConfirm(int x, int y, int screenW, int screenH) {
     int px, py, pw, ph, wX, wY, wW, wH, huX, huY, huW, huH, infX, infY, infW, infH,
-        igX, igY, igW, igH, cnX, cnY, cnW, cnH;
+        igX, igY, igW, igH, lbX, lbY, lbW, lbH, cnX, cnY, cnW, cnH;
     confirmRects(screenW, screenH, px, py, pw, ph, wX, wY, wW, wH, huX, huY, huW, huH,
-                 infX, infY, infW, infH, igX, igY, igW, igH, cnX, cnY, cnW, cnH);
+                 infX, infY, infW, infH, igX, igY, igW, igH, lbX, lbY, lbW, lbH, cnX, cnY, cnW, cnH);
     if (x >= wX && x <= wX + wW && y >= wY && y <= wY + wH) return LogConfirmTap::WATCH;
     if (x >= huX && x <= huX + huW && y >= huY && y <= huY + huH) return LogConfirmTap::HUNT;
     if (x >= igX && x <= igX + igW && y >= igY && y <= igY + igH) return LogConfirmTap::IGNORE;
     if (x >= infX && x <= infX + infW && y >= infY && y <= infY + infH) return LogConfirmTap::INFO;
+    if (x >= lbX && x <= lbX + lbW && y >= lbY && y <= lbY + lbH) return LogConfirmTap::LABEL;
     if (x >= cnX && x <= cnX + cnW && y >= cnY && y <= cnY + cnH) return LogConfirmTap::CANCEL;
     return LogConfirmTap::NONE;
 }
 
-static void drawConfirmPanel(TFT_eSPI& t, int w, int h, const char* label, bool watched, bool hunted) {
+static void drawConfirmPanel(TFT_eSPI& t, int w, int h, const char* label, bool watched, bool hunted, bool ignored, bool userLabeled) {
     int px, py, pw, ph, wX, wY, wW, wH, huX, huY, huW, huH, infX, infY, infW, infH,
-        igX, igY, igW, igH, cnX, cnY, cnW, cnH;
+        igX, igY, igW, igH, lbX, lbY, lbW, lbH, cnX, cnY, cnW, cnH;
     confirmRects(w, h, px, py, pw, ph, wX, wY, wW, wH, huX, huY, huW, huH,
-                 infX, infY, infW, infH, igX, igY, igW, igH, cnX, cnY, cnW, cnH);
+                 infX, infY, infW, infH, igX, igY, igW, igH, lbX, lbY, lbW, lbH, cnX, cnY, cnW, cnH);
     t.fillRoundRect(px, py, pw, ph, 6, Theme::BG);
     t.drawRoundRect(px, py, pw, ph, 6, Theme::PURPLE);
 
@@ -231,8 +236,11 @@ static void drawConfirmPanel(TFT_eSPI& t, int w, int h, const char* label, bool 
     Theme::drawButton(t, wX, wY, wW, wH, watched ? "UNWATCH" : "WATCH", watched);
     // Toggles like WATCH beside it -- see that button's comment.
     Theme::drawButton(t, huX, huY, huW, huH, hunted ? "STOP HUNT" : "HUNT", hunted);
-    Theme::drawButton(t, igX, igY, igW, igH, "IGNORE", false);
+    // Toggles too (issue #18): the only way to tell a device was ignored used
+    // to be tapping IGNORE again and reading which toast came back.
+    Theme::drawButton(t, igX, igY, igW, igH, ignored ? "UN-IGNORE" : "IGNORE", ignored);
     Theme::drawButton(t, infX, infY, infW, infH, "MORE INFO", false);
+    Theme::drawButton(t, lbX, lbY, lbW, lbH, userLabeled ? "EDIT USER TAG" : "CONFIRM / EDIT TAG", userLabeled);
     Theme::drawButton(t, cnX, cnY, cnW, cnH, "CANCEL", false);
 }
 
@@ -266,7 +274,8 @@ int uiLogRowAt(TFT_eSPI& t, int x, int y, int screenW, int screenH) {
 void uiLogTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, int scrollOffset,
                bool confirmPending, const char* confirmLabel,
                bool infoPending, const char* infoTypeName, const char* infoText,
-               bool confirmWatched, bool confirmHunted) {
+               bool confirmWatched, bool confirmHunted, bool confirmIgnored,
+               bool confirmUserLabeled) {
     int w = t.width();
     int h = t.height();
 
@@ -336,7 +345,7 @@ switch (Settings::background()) {
 
         Theme::drawButtonBar(t, ButtonId::LOG, Theme::ButtonBarMode::LOG);
         if (infoPending)        Theme::drawInfoPanel(t, w, h, now, infoTypeName, infoText);
-        else if (confirmPending) drawConfirmPanel(t, w, h, confirmLabel, confirmWatched, confirmHunted);
+        else if (confirmPending) drawConfirmPanel(t, w, h, confirmLabel, confirmWatched, confirmHunted, confirmIgnored, confirmUserLabeled);
         return;
     }
 
@@ -378,10 +387,14 @@ switch (Settings::background()) {
 
         // Type label (colored)
         t.setTextSize(2);
-        t.setTextColor(kept ? dim : Theme::colorFor(d->type), Theme::BG);
+        UserLabels::Label userLabel{};const bool userLabeled=UserLabels::lookup(d->mac,userLabel);
+        const char* shownType=userLabeled?UserLabels::typeName(userLabel.type):detectionTypeName(d->type);
+        const DetectionType shownColorType = userLabeled && userLabel.type != UserLabels::OTHER_TAG
+                                             ? (DetectionType)userLabel.type : d->type;
+        t.setTextColor(kept ? dim : Theme::colorFor(shownColorType), Theme::BG);
         t.setCursor(8, y + topPad);
-        t.print(detectionTypeName(d->type));
-        const int labelEnd = 8 + t.textWidth(detectionTypeName(d->type));
+        t.print(shownType);
+        const int labelEnd = 8 + t.textWidth(shownType);
 
         // MAC + RSSI line
         t.setTextSize(1);
@@ -413,7 +426,32 @@ switch (Settings::background()) {
         // Hits
         t.setTextColor(kept ? dim : Theme::VAPOR_PURPLE, Theme::BG);
         t.setCursor(168, y + detailY);
-        t.printf("x%u", d->hits);
+        char hitsTxt[8];
+        snprintf(hitsTxt, sizeof hitsTxt, "x%u", d->hits);
+        t.print(hitsTxt);
+        const int hitsEnd = 168 + t.textWidth(hitsTxt);
+
+        // An ignored device says so on its row (issue #18): a grey tag at the
+        // end of the detail line, IGNORED where it fits and IGN where the
+        // screen is narrow. Grey, because an ignored device is one that has
+        // been told to be quiet.
+        {
+            const bool watched=eng.isWatched(d->mac,d->channel==0),hunted=eng.isHunted(d->mac,d->channel==0),ignored=IgnoreList::contains(d->mac);
+            char tags[28]="";auto add=[&](const char* s){if(tags[0])strncat(tags,"/",sizeof tags-strlen(tags)-1);strncat(tags,s,sizeof tags-strlen(tags)-1);};
+            if(watched)add("WATCH");if(hunted)add("HUNT");if(ignored)add("IGN");if(userLabeled)add("TAG");
+            if(tags[0]) {
+            const char* tag = tags;
+            if (w - 14 - t.textWidth(tag) - 4 < hitsEnd + 6) {tags[0]=0;if(watched)add("W");if(hunted)add("H");if(ignored)add("I");if(userLabeled)add("T");tag=tags;}
+            const int tw2 = t.textWidth(tag) + 4;
+            const int tx  = w - 14 - tw2;
+            if (tx >= hitsEnd + 6) {
+                t.fillRoundRect(tx, y + detailY - 1, tw2, detailH + 1, 2, Theme::W95_SHADOW);
+                t.setTextColor(Theme::WHITE, Theme::W95_SHADOW);
+                t.setCursor(tx + 2, y + detailY);
+                t.print(tag);
+            }
+        }
+        }
 
         // Timestamp (right edge)
         // Wall-clock once somebody has set it, minutes-since-boot until
@@ -475,6 +513,6 @@ switch (Settings::background()) {
     // Bottom soft buttons
     Theme::drawButtonBar(t, ButtonId::LOG, Theme::ButtonBarMode::LOG);
 
-    if (infoPending)        Theme::drawInfoPanel(t, w, h, now, infoTypeName, infoText);
-    else if (confirmPending) drawConfirmPanel(t, w, h, confirmLabel, confirmWatched, confirmHunted);
+        if (infoPending)        Theme::drawInfoPanel(t, w, h, now, infoTypeName, infoText);
+        else if (confirmPending) drawConfirmPanel(t, w, h, confirmLabel, confirmWatched, confirmHunted, confirmIgnored, confirmUserLabeled);
 }

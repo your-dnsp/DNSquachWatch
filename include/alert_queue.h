@@ -39,7 +39,7 @@ public:
             out = rows_[head_];
             head_ = (head_ + 1) % CAP;
             --count_;
-            if (now - out.lastSeen <= MAX_AGE_MS) { unlock(); return true; }
+            if ((int32_t)(now - out.lastSeen) <= (int32_t)MAX_AGE_MS) { unlock(); return true; }
         }
         unlock();
         return false;
@@ -49,7 +49,7 @@ public:
         uint8_t kept = 0;
         for (uint8_t i = 0; i < count_; ++i) {
             const Detection d = rows_[(head_ + i) % CAP];
-            if (now - d.lastSeen <= MAX_AGE_MS && keep(d))
+            if ((int32_t)(now - d.lastSeen) <= (int32_t)MAX_AGE_MS && keep(d))
                 rows_[(head_ + kept++) % CAP] = d;
         }
         count_ = kept;

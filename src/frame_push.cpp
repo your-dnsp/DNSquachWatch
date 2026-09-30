@@ -155,6 +155,7 @@ bool push(TFT_eSPI& tft, const uint8_t* src, int32_t w, int32_t h, int32_t x, in
         // on data after each window. 512 bits per kick, as the library does.
         static RowSpan spans[96];
         int n = frameSpans(changed, h, align, spans, 96);
+        n = coalesceSpans(spans, n, nChanged, h);
         // Belt and braces: a span that is not whole bursts (it cannot be,
         // for the sizes this is built for) becomes a full push.
         for (int i = 0; i < n; i++)
@@ -192,3 +193,4 @@ bool push(TFT_eSPI&, const uint8_t*, int32_t, int32_t, int32_t, int32_t) { retur
 #endif
 
 }  // namespace FramePush
+

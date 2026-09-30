@@ -254,3 +254,4 @@ int FastSprite::selfCheck(Print& out) {
 }
 
 #endif  // ARDUINO_ARCH_ESP32
+

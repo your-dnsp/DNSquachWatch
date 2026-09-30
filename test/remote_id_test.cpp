@@ -108,5 +108,44 @@ int main() {
     RemoteId::merge(adv, advLen, z, 1);
     ck("0,0 refused — it is a real place off Africa", !z.haveLoc);
 
+    suite("present(): the only place a real drone puts it");
+    // The standard advert: service data and nothing else, all 31 bytes.
+    uint8_t real[31];
+    real[0] = 30; real[1] = 0x16; real[2] = 0xFA; real[3] = 0xFF; real[4] = 0x0D; real[5] = 0x07;
+    memset(real + 6, 0, 25); real[6] = (uint8_t)(0x0 << 4) | 0x2;
+    ck("a bare Remote ID advert is Remote ID", RemoteId::present(real, 31));
+    ck("with a Flags structure first, too", RemoteId::present(adv, advLen));
+    uint8_t listOnly[4] = { 3, 0x03, 0xFA, 0xFF };        // 0xFFFA as a service UUID, no data
+    ck("a UUID list naming 0xFFFA is not", !RemoteId::present(listOnly, 4));
+    uint8_t other[8] = { 7, 0x16, 0x6F, 0xFD, 1, 2, 3, 4 }; // someone else's service data
+    ck("other service data is not", !RemoteId::present(other, 8));
+
+    suite("mergeBeacon(): the WiFi Beacon form");
+    // SSID element, then the vendor element: OUI FA:0B:BC, type 0x0D, a
+    // counter, and a pack of two messages (Basic ID and Location).
+    uint8_t ies[96]; uint16_t n = 0;
+    ies[n++] = 0; ies[n++] = 4; memcpy(ies + n, "RID1", 4); n += 4;
+    ies[n++] = 221; ies[n++] = (uint8_t)(3 + 1 + 1 + 3 + 2 * 25);
+    ies[n++] = 0xFA; ies[n++] = 0x0B; ies[n++] = 0xBC; ies[n++] = 0x0D; ies[n++] = 0x05;
+    ies[n++] = (uint8_t)(0xF << 4) | 0x2; ies[n++] = 25; ies[n++] = 2;
+    memset(ies + n, 0, 50);
+    ies[n] = (uint8_t)(0x0 << 4) | 0x2; ies[n + 1] = 0x12; memcpy(ies + n + 2, "BEACONDRONE-7", 13);
+    ies[n + 25] = (uint8_t)(0x1 << 4) | 0x2;
+    put32(ies + n + 25 + 5, (int32_t)(51.5 * 10000000.0)); put32(ies + n + 25 + 9, (int32_t)(-0.12 * 10000000.0));
+    n += 50;
+    RemoteId::Info b;
+    ck("found past the SSID element", RemoteId::mergeBeacon(ies, n, b, 1));
+    ck("serial from the pack's Basic ID", b.haveBasic && strcmp(b.serial, "BEACONDRONE-7") == 0);
+    ckf("location from the pack's second message", b.lat, 51.5f, 0.00002f);
+    RemoteId::Info c;
+    ck("a pack claiming nine messages reads only the two it holds",
+       (ies[8 + 7] = 9, RemoteId::mergeBeacon(ies, n, c, 1)) && c.haveBasic && c.haveLoc);
+    RemoteId::Info d2;
+    ck("an element cut short by the frame is refused", !RemoteId::mergeBeacon(ies, (uint16_t)(n - 10), d2, 1));
+    uint8_t wps[9] = { 221, 7, 0x00, 0x50, 0xF2, 0x04, 0x10, 0x4A, 0x00 };   // an ordinary WPS element
+    RemoteId::Info e2;
+    ck("another vendor's element is not", !RemoteId::mergeBeacon(wps, 9, e2, 1));
+
     return report();
 }
+

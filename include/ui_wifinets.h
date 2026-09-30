@@ -28,3 +28,4 @@ int         uiWifiNetsSelected();
 void        uiWifiAddInit(TFT_eSPI& t);
 void        uiWifiAddTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng);
 WifiAddHit  uiWifiAddHit(TFT_eSPI& t, int x, int y, const DetectionEngine& eng, int* row);
+

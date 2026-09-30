@@ -35,3 +35,4 @@ void     uiSquadInit(TFT_eSPI& t, bool roster = false);
 void     uiSquadTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool advance = true);
 SquadHit uiSquadTouch(int x, int y, uint32_t now);
 #endif
+

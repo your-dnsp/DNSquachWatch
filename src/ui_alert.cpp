@@ -16,7 +16,7 @@ static const char* targetLabel(DetectionType t) {
         case DetectionType::AIRTAG:  return "AIRTAG";
         case DetectionType::DRONE:   return "DRONE";
         case DetectionType::ALPR:    return "ALPR";
-        case DetectionType::CAMERA:  return "GAMERA";
+        case DetectionType::CAMERA:  return "CAMERA";
         case DetectionType::SAMSUNG_TAG: return "SAMSUNG TAG";
         case DetectionType::GOOGLE_TAG:  return "GOOGLE TAG";
         case DetectionType::TILE:        return "TILE";
@@ -150,12 +150,16 @@ void uiAlertSetPending(uint8_t count, uint32_t dropped) {
 void uiAlertSetFirst(bool first) { s_first = first; }
 void uiAlertSetNight(bool night) { s_night = night; }
 void uiAlertSetLastFree(bool lastFree) { s_lastFree = lastFree; }
+static bool     s_spam      = false;
+static uint16_t s_spamFakes = 0;
+void uiAlertSetSpam(bool spam, uint16_t fakes) { s_spam = spam; s_spamFakes = fakes; }
 
 void uiAlertInit(TFT_eSPI& t, const Detection& d) {
     s_last = d;
     s_first = false;
     s_night = false;
     s_lastFree = false;
+    s_spam     = false;
     s_touched = false;
     s_alertStart = millis();
     s_glitchStep = 0;
@@ -284,6 +288,9 @@ static void snoozeBtnRect(int screenW, int screenH, int& bx, int& by, int& bw, i
     by = screenH - bh - 4;
 }
 
+bool uiAlertHitSnoozeAll(int x,int y,int w,int h) {
+    return x>=w-114 && x<w-8 && y>=h-(wideAlert(w)?100:82) && y<h-(wideAlert(w)?72:54);
+}
 bool uiAlertHitSnooze(int x, int y, int screenW, int screenH) {
     int bx, by, bw, bh;
     snoozeBtnRect(screenW, screenH, bx, by, bw, bh);
@@ -303,7 +310,7 @@ bool uiAlertHitMoreInfo(int x, int y, int screenW, int screenH) {
 }
 
 void uiAlertTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng,
-                 bool infoPending, const char* infoTypeName, const char* infoText) {
+                 bool infoPending, const char* infoTypeName, const char* infoText, bool advance) {
     int w = t.width();
     int h = t.height();
 
@@ -313,7 +320,7 @@ void uiAlertTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng,
     // at which point it's already been holding at the loudest level
     // for a long time and one more (or zero more) re-trigger makes no
     // visible difference.
-    while (s_glitchStep < 200 && elapsed >= glitchStepOffsetMs(s_glitchStep)) {
+    while (advance && s_glitchStep < 200 && elapsed >= glitchStepOffsetMs(s_glitchStep)) {
         Theme::triggerGlitchBurst(glitchStepLevel(s_glitchStep));
         s_glitchStep++;
     }
@@ -333,7 +340,7 @@ void uiAlertTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng,
         // tunnel rings and planets especially) pack their own literals.
         // The scanline pass catches whatever the palette could not.
         Theme::Palette saved = Theme::dimPaletteForOverlay(ALERT_PALETTE_DIM);
-        Theme::drawActiveBackground(t, now, 0, h, eng);
+        Theme::drawActiveBackground(t, now, 0, h, eng, advance);
         Theme::restorePalette(saved);
         Theme::dimRegion(t, 0, 0, w, h, ALERT_BACKGROUND_DIM);
     } else {
@@ -517,7 +524,16 @@ void uiAlertTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng,
     t.print(info);
     // The first one of its kind, ever, on this board: a line in the gap
     // between the strip and the plate, in the strip's own colour.
-    if (s_first || s_night) {
+    if (s_spam) {
+        // A flood of fake tags, and this is its one alert. Beats FIRST and
+        // AT NIGHT: they are about one catch, and this is about the room.
+        char fl[32];
+        snprintf(fl, sizeof fl, "* SPAM: %u FAKE TAGS *", (unsigned)s_spamFakes);
+        t.setTextSize(1);
+        t.setTextColor(Theme::RED, Theme::BG);
+        t.setCursor(PLATE_X + (PLATE_W - t.textWidth(fl)) / 2, stripHOf(w) + 2);
+        t.print(fl);
+    } else if (s_first || s_night) {
         const char* fl = (s_first && s_night) ? "* FIRST, AND AT NIGHT *"
                        : s_first ? "* FIRST OF ITS KIND *" : "* AT NIGHT *";
         t.setTextSize(1);
@@ -666,15 +682,11 @@ void uiAlertTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng,
     // breaks up along with it stops reading as a frame at all.
     drawRgbBorder(t, w, h, now);
 
-    if (s_pending || s_queueDropped) {
-        char queued[48];
-        if (s_queueDropped) snprintf(queued, sizeof queued, "%u more | %lu omitted", s_pending, (unsigned long)s_queueDropped);
-        else snprintf(queued, sizeof queued, "%u more - tap card for next", s_pending);
-        t.setTextSize(1);
-        t.setTextColor(Theme::WHITE, Theme::BG);
-        t.setCursor((w - t.textWidth(queued)) / 2, h - 62);
-        t.print(queued);
-    }
+    t.setTextSize(1);t.setTextColor(Theme::WHITE,Theme::BG);
+    char queued[28];snprintf(queued,sizeof queued,"%u more",s_pending);
+    t.setCursor(8,h-(wideAlert(w)?92:74));t.print(queued);
+    if(s_queueDropped){t.setCursor(8,h-(wideAlert(w)?81:63));t.print("See LOG for history");}
+    Theme::drawButton(t,w-114,h-(wideAlert(w)?100:82),106,28,"SNOOZE ALL",false);
     // Info panel drawn last, opaquely on top of everything above
     // (including the static) -- same "modal drawn every tick on top of
     // a screen that keeps rendering underneath" pattern LOG's confirm/

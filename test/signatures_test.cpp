@@ -98,5 +98,19 @@ int main() {
     ck("00:0E:58 no longer matches anything",
        lookup(0x00, 0x0E, 0x58, &conf) == DetectionType::UNKNOWN);
 
+    suite("Flock-You's additions (issue #15)");
+    ck("a Liteon block from the field list is FLOCK", lookup(0x74, 0x4C, 0xA1, &conf) == DetectionType::FLOCK);
+    ck("...graded LOW", conf == Confidence::LOW_CONF);
+    ck("Atheros's firmware-default block is FLOCK", lookup(0x00, 0x03, 0x7F, &conf) == DetectionType::FLOCK);
+    ck("...graded LOW", conf == Confidence::LOW_CONF);
+    ck("Samsung's 48:27:EA is left out", lookup(0x48, 0x27, 0xEA, &conf) == DetectionType::UNKNOWN);
+    ck("a bare Flock network is FLOCK", lookupSsid("Flock") == DetectionType::FLOCK);
+    ck("...and not every network that starts with it", lookupSsid("Flockhart Family") == DetectionType::UNKNOWN);
+    ck("a ten-digit serial name is FLOCK", lookupBtName("4022019033") == DetectionType::FLOCK);
+    ck("eleven digits is not", !isBareSerialName("40220190331"));
+    ck("nine digits is not", !isBareSerialName("402201903"));
+    ck("digits with a letter is not", !isBareSerialName("40220A9033"));
+
     return report();
 }
+

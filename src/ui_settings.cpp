@@ -1,3 +1,4 @@
+#include "alert_snooze.h"
 // SquachWatch-CYD — settings screen implementation
 #include "ui_settings.h"
 #include "care.h"
@@ -38,10 +39,6 @@ static int g_scrollFor[PAGE_COUNT] = {};
 
 // Which groups are folded shut. Session-only on purpose: a fold is a "get this
 // out of my way for a minute", not a preference worth surviving a reboot.
-static constexpr uint8_t GROUP_COUNT = 10;
-static bool s_foldedFor[PAGE_COUNT][GROUP_COUNT] = {};
-#define s_folded (s_foldedFor[(uint8_t)s_page])
-
 // Whether a watch/hunt target exists. Set every tick from the engine, read by
 // buildDisplayList() -- which has no engine of its own, and is called by the
 // hit test as well as the draw. Same pattern ui_clear.cpp uses for its crowd.
@@ -58,50 +55,57 @@ static uint8_t s_dexCaught = 0;
 // has turned off) are filtered out by visibleRows() below rather than
 // removed here, so their SettingsRow values stay stable regardless of
 // which mode is active.
+#if defined(TWATCH_S3)
+void twatchBatteryLine(char* out, size_t n);
+#endif
 // Main menu contains destinations; detailed alert controls live on their own page.
 static const SettingsRow ALL_ROWS[] = {
-    SettingsRow::QUICK_MENU,
-    SettingsRow::ALERTS, SettingsRow::FIELD_TOOLS, SettingsRow::RESEARCH,
-    SettingsRow::APPEARANCE, SettingsRow::ACCESSIBILITY, SettingsRow::LANGUAGE,
-    SettingsRow::DESK_MODE, SettingsRow::FUN,
+#if defined(TWATCH_S3)
+    SettingsRow::WATCH_BATTERY, SettingsRow::WATCH_RADIO, SettingsRow::WATCH_BUZZ,
+#endif
+    SettingsRow::ALERTS, SettingsRow::DATA_MENU, SettingsRow::FIELD_TOOLS, SettingsRow::FUN,
 #if SQUACH_MESH
     SettingsRow::SQUACHMESH,
 #endif
-    SettingsRow::CARE, SettingsRow::DNSP_GUIDE,
-    SettingsRow::SD_STATUS, SettingsRow::POWER_SAVER, SettingsRow::SECURITY,
-    SettingsRow::SYSTEM, SettingsRow::POWER_CONTROL,
+    SettingsRow::DNSP_MENU, SettingsRow::DESK_MODE,
+    SettingsRow::APPEARANCE, SettingsRow::POWER_CONTROL, SettingsRow::SYSTEM,
+    SettingsRow::SECURITY, SettingsRow::STORAGE_MENU,
 };
 static const SettingsRow ALERT_ROWS[] = {
-    SettingsRow::ALERT_DURATION, SettingsRow::CONFIDENCE, SettingsRow::AUTO_QUIET,
-    SettingsRow::DETECTION_FILTER, SettingsRow::ALERT_RULES, SettingsRow::IGNORED_DEVICES,
+    SettingsRow::ALERT_DURATION, SettingsRow::SNOOZE_ALL, SettingsRow::SNOOZE_INBOX, SettingsRow::CONFIDENCE, SettingsRow::AUTO_QUIET,
+    SettingsRow::DETECTION_FILTER, SettingsRow::DETECTION_PROFILE, SettingsRow::ALERT_HISTORY, SettingsRow::ALERT_RULES, SettingsRow::IGNORED_DEVICES, SettingsRow::TROUBLESHOOT,
 };
 static const SettingsRow FUN_ROWS[] = {
-    SettingsRow::BREAKOUT, SettingsRow::BINGO, SettingsRow::DEX,
-    SettingsRow::VIEW_DIARY, SettingsRow::SHOW_OFF, SettingsRow::REPLAY_INTRO,
-    SettingsRow::BORING_MODE,
+    SettingsRow::SQUACHY_SIZE, SettingsRow::OUTFIT, SettingsRow::PET,
+    SettingsRow::SHADES_COLOR, SettingsRow::BANTER, SettingsRow::TOP_HAT,
+    SettingsRow::BINGO, SettingsRow::DEX, SettingsRow::VIEW_DIARY,
+    SettingsRow::SHOW_OFF, SettingsRow::REPLAY_INTRO, SettingsRow::BORING_MODE,
 };
+static const SettingsRow DNSP_ROWS[] = {SettingsRow::BREAKOUT, SettingsRow::SCREEN_LIGHT, SettingsRow::RANDOMIZER, SettingsRow::TIMER_COUNTER, SettingsRow::POCKET_READER, SettingsRow::READABLE_LOGS, SettingsRow::DNSP_GUIDE, SettingsRow::PRACTICE, SettingsRow::GIFT_PREP};
+static const SettingsRow FPV_ROWS[] = {SettingsRow::FPV_PIT, SettingsRow::DRONE_READINGS, SettingsRow::DRONE_SEARCH, SettingsRow::DRONE_DIAG, SettingsRow::DRONE_CAPTURE, SettingsRow::DRONE_LIMITS};
+static const SettingsRow DATA_ROWS[] = {SettingsRow::RESEARCH, SettingsRow::RADIO_ACTIVITY, SettingsRow::FIELD_REPORT, SettingsRow::TELEMETRY, SettingsRow::SENSORS};
+static const SettingsRow ACCESS_ROWS[] = {SettingsRow::ACCESSIBILITY, SettingsRow::LANGUAGE};
+static const SettingsRow STORAGE_ROWS[] = {SettingsRow::SD_STATUS, SettingsRow::BACKUP, SettingsRow::MICROSD_RECOVERY};
 static const uint8_t ALL_ROWS_N = sizeof(ALL_ROWS) / sizeof(ALL_ROWS[0]);
 
 // The APPEARANCE page: everything about how HE looks, then everything about
 // how the SCREEN looks. The Legend top hat only gets a row once he has a hat
 // to take off.
 static const SettingsRow APPEARANCE_ROWS[] = {
-    // How HE looks comes first -- these are the rows people open this page to
-    // change, and they were a scroll away on the main list. TOP HAT only
-    // appears once it has been earned; see buildDisplayList().
-    SettingsRow::SQUACHY_SIZE, SettingsRow::OUTFIT, SettingsRow::PET,
-    SettingsRow::SHADES_COLOR, SettingsRow::BANTER, SettingsRow::TOP_HAT,
-    // Then how the SCREEN looks.
-    SettingsRow::THEME, SettingsRow::BACKGROUND, SettingsRow::BACKGROUND_LOCK, SettingsRow::BRIGHTNESS,
-    SettingsRow::INVERT, SettingsRow::RGB_SWAP, SettingsRow::ROTATION_LOCK,
+    SettingsRow::THEME, SettingsRow::BACKGROUND, SettingsRow::BACKGROUND_LOCK, SettingsRow::BRIGHTNESS, SettingsRow::AMBIENT_LIGHT,
+    SettingsRow::GLITCH_EFFECTS, SettingsRow::INVERT, SettingsRow::RGB_SWAP, SettingsRow::ROTATION_LOCK,
     // And the one light that is not on the screen at all.
     SettingsRow::STATUS_LIGHT,
 };
 
 // The SYSTEM page: the rarely-needed machinery, off the main list.
 static const SettingsRow SYSTEM_ROWS[] = {
+#if defined(DNSP_RUNTIME_DISPLAY) || !defined(ARDUINO_ARCH_ESP32)
+    SettingsRow::DISPLAY_SPEED,
+#endif
     SettingsRow::CALIBRATE, SettingsRow::CHECK_COLORS,
-    SettingsRow::DIAGNOSTICS, SettingsRow::UPDATE_FIRMWARE, SettingsRow::UPDATE_CHECK, SettingsRow::WIFI_NETWORKS,
+    SettingsRow::LANGUAGE, SettingsRow::ACCESSIBILITY,
+    SettingsRow::SYSTEM_INFO, SettingsRow::CREDITS, SettingsRow::DEVICE_HELP, SettingsRow::CRASH_REPORTS, SettingsRow::DIAGNOSTICS, SettingsRow::DEVICE_HEALTH, SettingsRow::POWER_SAVER, SettingsRow::UPDATE_FIRMWARE, SettingsRow::UPDATE_CHECK, SettingsRow::WIFI_NETWORKS,
     SettingsRow::RESET_STATS,
 };
 static const uint8_t SYSTEM_ROWS_N = sizeof(SYSTEM_ROWS) / sizeof(SYSTEM_ROWS[0]);
@@ -122,11 +126,22 @@ static const uint8_t APPEARANCE_ROWS_N = sizeof(APPEARANCE_ROWS) / sizeof(APPEAR
 // DESK MODE page's is checked against it just below).
 // It used to be the main one, until that list lost its NICKNAME row and
 // the APPEARANCE page outgrew it.
-static const uint8_t LIST_MAX_N = APPEARANCE_ROWS_N > ALL_ROWS_N ? APPEARANCE_ROWS_N : ALL_ROWS_N;
-static_assert(sizeof(ALERT_ROWS)/sizeof(ALERT_ROWS[0]) <= LIST_MAX_N, "alert list capacity");
-static_assert(sizeof(FUN_ROWS)/sizeof(FUN_ROWS[0]) <= LIST_MAX_N, "games list capacity");
-static_assert(SYSTEM_ROWS_N <= LIST_MAX_N, "the display list is sized off LIST_MAX_N");
-static_assert(DESK_ROWS_N <= LIST_MAX_N, "the display list is sized off LIST_MAX_N");
+static constexpr uint8_t LIST_MAX_N = 20;
+struct MenuPage { const SettingsRow* rows; uint8_t count; const char* title; };
+#define MENU_PAGE(rows,title) { rows, uint8_t(sizeof(rows)/sizeof(rows[0])), title }
+static const MenuPage MENU_PAGES[] = {
+    MENU_PAGE(ALL_ROWS,"SETTINGS"), MENU_PAGE(APPEARANCE_ROWS,"DISPLAY & APPEARANCE"),
+    MENU_PAGE(SYSTEM_ROWS,"SYSTEM"), MENU_PAGE(DESK_ROWS,"DESK MODE"),
+    MENU_PAGE(ALERT_ROWS,"ALERTS & DETECTION"), MENU_PAGE(FUN_ROWS,"SQUACHY"),
+    MENU_PAGE(DNSP_ROWS,"DNSP'S TOOLS"), MENU_PAGE(FPV_ROWS,"FPV & DRONES"),
+    MENU_PAGE(DATA_ROWS,"RESEARCH & DATA"), MENU_PAGE(ACCESS_ROWS,"ACCESSIBILITY & LANGUAGE"),
+    MENU_PAGE(STORAGE_ROWS,"STORAGE & RECOVERY"),
+};
+#undef MENU_PAGE
+static_assert(sizeof(MENU_PAGES)/sizeof(MENU_PAGES[0]) == PAGE_COUNT,"menu page table");
+static_assert(sizeof(ALL_ROWS)/sizeof(ALL_ROWS[0])<=LIST_MAX_N,"main menu capacity");
+static_assert(sizeof(SYSTEM_ROWS)/sizeof(SYSTEM_ROWS[0])<=LIST_MAX_N,"system menu capacity");
+static_assert(sizeof(FUN_ROWS)/sizeof(FUN_ROWS[0])<=LIST_MAX_N,"squachy menu capacity");
 // Kept as a thin shim over s_page so nothing that reads it has to change.
 #define s_appearance (s_page == SettingsPage::APPEARANCE)
 
@@ -152,26 +167,22 @@ static bool isSquachyOnlyRow(SettingsRow r) {
            r == SettingsRow::PET || r == SettingsRow::TOP_HAT;
 }
 
-enum class RowGroupId : uint8_t { APPEARANCE, BEHAVIOR, SQUACHY, SYSTEM, DESK, SQUAD, TOOLS, DISPLAY_OPTIONS, PLAY, HELP };
+enum class RowGroupId : uint8_t { APPEARANCE, BEHAVIOR, SQUACHY, SYSTEM, DESK, SQUAD, TOOLS, DISPLAY_OPTIONS, PLAY, HELP, WATCH };
 
 static RowGroupId groupFor(SettingsRow r) {
     if (s_page == SettingsPage::MAIN) {
-        switch (r) {
-            case SettingsRow::QUICK_MENU:
-            case SettingsRow::WATCH_TARGET: case SettingsRow::HUNT_TARGET:
-            case SettingsRow::ALERTS: case SettingsRow::FIELD_TOOLS: case SettingsRow::RESEARCH:
-                return RowGroupId::TOOLS;
-            case SettingsRow::APPEARANCE: case SettingsRow::ACCESSIBILITY:
-            case SettingsRow::LANGUAGE: case SettingsRow::DESK_MODE:
-                return RowGroupId::DISPLAY_OPTIONS;
-            case SettingsRow::FUN: case SettingsRow::SQUACHMESH: return RowGroupId::PLAY;
-            case SettingsRow::CARE: case SettingsRow::DNSP_GUIDE: return RowGroupId::HELP;
-            default: return RowGroupId::SYSTEM;
-        }
+        if (r==SettingsRow::ALERTS || r==SettingsRow::DATA_MENU || r==SettingsRow::FIELD_TOOLS || r==SettingsRow::WATCH_TARGET || r==SettingsRow::HUNT_TARGET) return RowGroupId::TOOLS;
+        if (r==SettingsRow::FUN || r==SettingsRow::SQUACHMESH || r==SettingsRow::DNSP_MENU || r==SettingsRow::DESK_MODE) return RowGroupId::PLAY;
+        return RowGroupId::SYSTEM;
     }
+    if (s_page == SettingsPage::FUN) return RowGroupId::SQUACHY;
     if (s_page == SettingsPage::ALERTS) return RowGroupId::BEHAVIOR;
-    if (s_page == SettingsPage::FUN) return RowGroupId::PLAY;
+    if (s_page >= SettingsPage::DNSP) return RowGroupId::TOOLS;
     switch (r) {
+        case SettingsRow::WATCH_BATTERY:
+        case SettingsRow::WATCH_RADIO:
+        case SettingsRow::WATCH_BUZZ:
+            return RowGroupId::WATCH;
         // TIME ZONE sat on the SYSTEM page too, the same setting twice. Only
         // the clock reads it, so it lives with the clock.
         case SettingsRow::TIME_ZONE:
@@ -189,6 +200,8 @@ static RowGroupId groupFor(SettingsRow r) {
         case SettingsRow::BACKGROUND:
         case SettingsRow::BACKGROUND_LOCK:
         case SettingsRow::BRIGHTNESS:
+        case SettingsRow::AMBIENT_LIGHT:
+        case SettingsRow::GLITCH_EFFECTS:
         case SettingsRow::INVERT:
         case SettingsRow::RGB_SWAP:
         case SettingsRow::ROTATION_LOCK:
@@ -204,6 +217,7 @@ static RowGroupId groupFor(SettingsRow r) {
         case SettingsRow::BANTER:
             return RowGroupId::APPEARANCE;
         case SettingsRow::BORING_MODE:
+        case SettingsRow::SNOOZE_ALL:
         case SettingsRow::ALERT_DURATION:
         case SettingsRow::CONFIDENCE:
         case SettingsRow::AUTO_QUIET:
@@ -229,14 +243,15 @@ static const char* groupName(RowGroupId g) {
     switch (g) {
         case RowGroupId::APPEARANCE: return "APPEARANCE";
         case RowGroupId::BEHAVIOR:   return "ALERTS & DETECTION";
-        case RowGroupId::TOOLS: return "DETECTION & FIELDWORK";
+        case RowGroupId::TOOLS: return "DETECTION & RESEARCH";
         case RowGroupId::DISPLAY_OPTIONS: return "DISPLAY & LANGUAGE";
-        case RowGroupId::PLAY: return "GAMES & SQUACHY";
+        case RowGroupId::PLAY: return "SQUACH & FRIENDS";
         case RowGroupId::HELP: return "HELP & LEARNING";
         case RowGroupId::SQUACHY:    return "SQUACHY";
         case RowGroupId::DESK:       return "DESK";
         case RowGroupId::SQUAD:      return "SQUAD";
-        default:                     return "SYSTEM";
+        case RowGroupId::WATCH:      return "WATCH";
+        default:                     return s_page==SettingsPage::MAIN ? "DEVICE" : "SYSTEM";
     }
 }
 
@@ -250,6 +265,7 @@ static uint16_t groupColor(RowGroupId g) {
         case RowGroupId::SQUACHY:    return Theme::VAPOR_PINK;
         case RowGroupId::DESK:       return Theme::CYAN;
         case RowGroupId::SQUAD:      return Theme::GREEN;
+        case RowGroupId::WATCH:      return Theme::AMBER;
         default:                     return Theme::VAPOR_PURPLE;
     }
 }
@@ -270,13 +286,9 @@ struct DisplayItem {
 static uint8_t buildDisplayList(DisplayItem* out) {
     SettingsRow rows[LIST_MAX_N + 2];   // + the two tracking rows
     uint8_t n = 0;
-    const SettingsRow* src = ALL_ROWS;
-    uint8_t            srcN = ALL_ROWS_N;
-    if (s_page == SettingsPage::APPEARANCE) { src = APPEARANCE_ROWS; srcN = APPEARANCE_ROWS_N; }
-    else if (s_page == SettingsPage::SYSTEM) { src = SYSTEM_ROWS;    srcN = SYSTEM_ROWS_N; }
-    else if (s_page == SettingsPage::DESK)   { src = DESK_ROWS;      srcN = DESK_ROWS_N; }
-    else if (s_page == SettingsPage::ALERTS) { src = ALERT_ROWS; srcN = sizeof(ALERT_ROWS)/sizeof(ALERT_ROWS[0]); }
-    else if (s_page == SettingsPage::FUN) { src = FUN_ROWS; srcN = sizeof(FUN_ROWS)/sizeof(FUN_ROWS[0]); }
+    const MenuPage& menu = MENU_PAGES[(uint8_t)s_page];
+    const SettingsRow* src = menu.rows;
+    const uint8_t srcN = menu.count;
     // The tracking rows come first on the main page, and only when a target is
     // actually set -- the whole point is that a watch stops being invisible.
     if (s_page == SettingsPage::MAIN) {
@@ -310,7 +322,7 @@ static uint8_t buildDisplayList(DisplayItem* out) {
         // top of the list and read as a heading in its own right. It lives in
         // the SQUACHY cluster now, so that exemption would suppress the
         // SQUACHY header whenever APPEARANCE happened to come first in it.
-        const bool headerless = s_appearance && rows[i] == SettingsRow::BACK;
+        const bool headerless = s_page >= SettingsPage::DNSP || (s_appearance && rows[i] == SettingsRow::BACK);
         if (!headerless && (!haveLastGroup || g != lastGroup)) {
             out[count].isHeader = true;
             out[count].group = g;
@@ -318,9 +330,6 @@ static uint8_t buildDisplayList(DisplayItem* out) {
             lastGroup = g;
             haveLastGroup = true;
         }
-        // Folded: the heading is still drawn (that is what you tap to unfold),
-        // its rows are not.
-        if (s_folded[(uint8_t)g]) continue;
         out[count].isHeader = false;
         out[count].group = g;
         out[count].row = rows[i];
@@ -351,7 +360,7 @@ static uint8_t buildDisplayList(DisplayItem* out) {
 // later, which is why this beats shrinking the text or truncating it.
 static bool isTwoLineRow(SettingsRow r) {
     return r == SettingsRow::BACKGROUND || r == SettingsRow::DESK_BACKGROUND ||
-           r == SettingsRow::OUTFIT;
+           r == SettingsRow::OUTFIT || r == SettingsRow::DISPLAY_SPEED;
 }
 
 static int itemHeight(const DisplayItem& it, int rowH, int headerH, int tallH) {
@@ -411,15 +420,12 @@ static void computeGeom(TFT_eSPI& t, int screenH, int& top, int& bodyBottom,
 // row above the one you pressed.
 
 void uiSettingsInit(TFT_eSPI& t) {
-    // Arriving at Settings is arriving at its main page, at the top, with
-    // nothing folded. Scroll memory is for moving BETWEEN pages inside one
+    // Arriving at Settings is arriving at its main page, at the top. Scroll
+    // memory is for moving BETWEEN pages inside one
     // visit -- carrying it across a fresh entry would drop you mid-list with
     // no idea why.
     s_page = SettingsPage::MAIN;
-    for (uint8_t i = 0; i < PAGE_COUNT; i++) {
-        g_scrollFor[i] = 0;
-        for (uint8_t j = 0; j < GROUP_COUNT; j++) s_foldedFor[i][j] = false;
-    }
+    for (uint8_t i = 0; i < PAGE_COUNT; i++) g_scrollFor[i] = 0;
 
     // Any pending question dies with the screen. Coming back to Settings and
     // finding a confirm panel still up from last time would be answering
@@ -461,7 +467,7 @@ static const ConfirmText CONFIRMS[] = {
     { SettingsRow::BORING_MODE, "BORING MODE?",
       "Turns off Squachy activities.",
       "Turn this off to restore them.", "TURN ON" },
-    { SettingsRow::REPLAY_INTRO, "REPLAY INTRO?",
+    { SettingsRow::REPLAY_INTRO, "REPLAY ONBOARDING?",
       "Runs the first-boot walkthrough",
       "again, from the top.", "REPLAY" },
 };
@@ -623,8 +629,7 @@ static void drawHeader(TFT_eSPI& t, int w, int y, int hgt, RowGroupId g) {
     t.setTextSize(Theme::uiTextSize(t, 1));
     t.setTextColor(groupColor(g), Theme::BG);
     t.setCursor(8, y + (hgt - t.fontHeight()) / 2);
-    t.print(s_folded[(uint8_t)g] ? "+ " : "- ");
-    if(Field::config.language)Lang::draw(t,groupName(g),26,y,w-38,hgt,Theme::CYAN);
+    if(Field::config.language)Lang::draw(t,groupName(g),8,y,w-20,hgt,Theme::CYAN);
     else t.print(groupName(g));
 }
 
@@ -748,16 +753,42 @@ static void rowContent(SettingsRow r, const DetectionEngine& eng, char* valBuf, 
     danger = false;
     value  = nullptr;
     switch (r) {
+        case SettingsRow::DNSP_MENU: label="DNSP'S TOOLS"; value=">"; break;
+        case SettingsRow::DATA_MENU: label="RESEARCH & DATA"; value=">"; break;
+        case SettingsRow::ACCESS_MENU: label="ACCESSIBILITY & LANGUAGE"; value=">"; break;
+        case SettingsRow::STORAGE_MENU: label="STORAGE & RECOVERY"; value=">"; break;
+        case SettingsRow::FPV_PIT: label="FPV PIT BOARD"; value=">"; break;
+        case SettingsRow::DRONE_READINGS: label="DRONE READINGS"; value=">"; break;
+        case SettingsRow::DRONE_SEARCH: label="FOCUSED SEARCH"; value=">"; break;
+        case SettingsRow::DRONE_DIAG: label="RECEPTION DIAGNOSTICS"; value=">"; break;
+        case SettingsRow::DRONE_CAPTURE: label="DRONE CAPTURE TO SD"; value=">"; break;
+        case SettingsRow::DRONE_LIMITS: label="LIMITS & EQUIPMENT"; value=">"; break;
+        case SettingsRow::TELEMETRY: label="OWN TELEMETRY"; value=">"; break;
+        case SettingsRow::SENSORS: label="MY SENSORS"; value=">"; break;
+        case SettingsRow::BACKUP: label="BACKUP & RESTORE"; value=">"; break;
+        case SettingsRow::MICROSD_RECOVERY: label="MICROSD RECOVERY"; value=">"; break;
+        case SettingsRow::SCREEN_LIGHT: label="SCREEN LIGHT & MORSE"; value=">"; break;
+        case SettingsRow::RANDOMIZER: label="COIN & DOWSING ROD"; value=">"; break;
+        case SettingsRow::TIMER_COUNTER: label="TIMER & COUNTER"; value=">"; break;
+        case SettingsRow::POCKET_READER: label="POCKET READER"; value=">"; break;
+        case SettingsRow::READABLE_LOGS: label="READABLE LOG EXPORT"; value=">"; break;
+        case SettingsRow::RADIO_ACTIVITY: label="RADIO ACTIVITY MAP"; value=">"; break;
+        case SettingsRow::PRACTICE: label="PRACTICE DEMOS"; value=">"; break;
+        case SettingsRow::TROUBLESHOOT: label="WHY NO MATCH?"; value=">"; break;
+        case SettingsRow::GIFT_PREP: label="GIFT PREPARATION"; value=">"; break;
+        case SettingsRow::FIELD_REPORT: label="SESSION REPORT"; value=">"; break;
+        case SettingsRow::DEVICE_HEALTH: label="DEVICE HEALTH"; value=">"; break;
         case SettingsRow::THEME:
             label = "THEME"; value = Theme::kPalettes[Settings::paletteIndex()].name;
             break;
-        case SettingsRow::CARE: label = "HELP & RECOVERY"; value = ">"; break;
-        case SettingsRow::QUICK_MENU: label = "FOUR FAVORITES"; value = ">"; break;
+        case SettingsRow::SYSTEM_INFO: label="SYSTEM INFO";value=">";break;
         case SettingsRow::ALERTS: label = "ALERTS & DETECTION"; value = ">"; break;
-        case SettingsRow::FUN: label = "GAMES & SQUACHY"; value = ">"; break;
+        case SettingsRow::FUN: label = "SQUACHY"; value = ">"; break;
         case SettingsRow::LANGUAGE: label = "LANGUAGE"; value = ">"; break;
         case SettingsRow::ACCESSIBILITY: label = "ACCESSIBILITY"; value = ">"; break;
-        case SettingsRow::ALERT_RULES: label = "EVIDENCE & MUTES"; value = ">"; break;
+        case SettingsRow::ALERT_HISTORY: label = "STORED ALERT HISTORY"; value = ">"; break;
+        case SettingsRow::ALERT_RULES: label = "RULES"; value = ">"; break;
+        case SettingsRow::DETECTION_PROFILE: label = "DETECTION PROFILE"; value = ">"; break;
         case SettingsRow::SYSTEM:
             label = "SYSTEM"; value = OtaCore::availableVersion()[0] ? "UPDATE >" : ">";
             break;
@@ -802,8 +833,15 @@ static void rowContent(SettingsRow r, const DetectionEngine& eng, char* valBuf, 
         case SettingsRow::BACKGROUND_LOCK:
             label = "LOCK BACKGROUND"; value = Settings::backgroundLocked() ? "ON" : "OFF";
             break;
+        case SettingsRow::AMBIENT_LIGHT:
+            label="AUTO BRIGHTNESS"; value=Settings::ambientLight()?"ON":"OFF (200)"; break;
+        case SettingsRow::GLITCH_EFFECTS:
+            label="GLITCH EFFECTS"; value=Settings::glitchEffects()?"ON":"OFF"; break;
+        case SettingsRow::CREDITS: label="CREDITS"; value=">"; break;
+        case SettingsRow::DEVICE_HELP: label="TROUBLESHOOTING"; value=">"; break;
+        case SettingsRow::CRASH_REPORTS: label="CRASH REPORTS"; value=">"; break;
         case SettingsRow::BRIGHTNESS:
-            label = "BRIGHT -  +";
+            label = "BRIGHT MAX -  +";
             snprintf(valBuf, valBufN, "%u%%", (unsigned)(Settings::brightness() * 100 / 255));
             value = valBuf;
             break;
@@ -823,17 +861,24 @@ static void rowContent(SettingsRow r, const DetectionEngine& eng, char* valBuf, 
             label = "ALERT FILTER"; value = Settings::minConfidenceLabel();
             break;
         case SettingsRow::POWER_CONTROL:
-            label = "SHUTDOWN / REBOOT"; value = ">"; break;
+            label = "POWER"; value = ">"; break;
         case SettingsRow::BREAKOUT:
-            label = "BREAKOUT"; value = ">"; break;
+            label = "SQUACH SNACKS GAME"; value = ">"; break;
         case SettingsRow::FIELD_TOOLS:
-            label = "FIELD TOOLS"; value = ">"; break;
+            label = "FPV & DRONES"; value = ">"; break;
         case SettingsRow::RESEARCH:
             label = "RESEARCH LAB"; value = ">"; break;
         case SettingsRow::DNSP_GUIDE:
             label = "DNSP WALKTHROUGH"; value = ">"; break;
         case SettingsRow::SD_STATUS:
             label = "MICROSD STATUS"; value = ">"; break;
+        case SettingsRow::SNOOZE_ALL:
+            label=AlertSnooze::active(millis())?"RESUME ALL ALERTS":"SNOOZE ALL ALERTS";
+            if(AlertSnooze::active(millis())){snprintf(valBuf,valBufN,"%lum left",(unsigned long)((AlertSnooze::remaining(millis())+59999)/60000));value=valBuf;}
+            else value="10 MIN";
+            break;
+        case SettingsRow::SNOOZE_INBOX:
+            label="SNOOZE SUMMARY";snprintf(valBuf,valBufN,"%u >",(unsigned)AlertSnooze::total());value=valBuf;break;
         case SettingsRow::ALERT_DURATION:
             label = "ALERT LENGTH"; value = Settings::alertSecondsLabel();
             break;
@@ -861,6 +906,17 @@ static void rowContent(SettingsRow r, const DetectionEngine& eng, char* valBuf, 
             snprintf(valBuf, valBufN, "%u", (unsigned)IgnoreList::count());
             value = valBuf;
             break;
+#if defined(TWATCH_S3)
+        case SettingsRow::WATCH_BATTERY:
+            label = "BATTERY"; twatchBatteryLine(valBuf, valBufN); value = valBuf;
+            break;
+        case SettingsRow::WATCH_RADIO:
+            label = "RADIOS"; value = Settings::radioDutyName(Settings::radioDutyRaw());
+            break;
+        case SettingsRow::WATCH_BUZZ:
+            label = "BUZZ"; value = Settings::buzz() ? "ON" : "OFF";
+            break;
+#endif
         case SettingsRow::POWER_SAVER:
             label = "POWER SAVER"; value = Settings::powerSaver() ? "ON" : "OFF";
             break;
@@ -876,6 +932,8 @@ static void rowContent(SettingsRow r, const DetectionEngine& eng, char* valBuf, 
         case SettingsRow::CHECK_COLORS:
             label = "CHECK COLORS";
             break;
+        case SettingsRow::DISPLAY_SPEED:
+            label="DISPLAY SPEED";value=Settings::displayMhz()==80?"80 MHz (EXP)":"40 MHz (normal)";break;
         case SettingsRow::DIAGNOSTICS:
             label = "DIAGNOSTICS";
             break;
@@ -898,13 +956,13 @@ static void rowContent(SettingsRow r, const DetectionEngine& eng, char* valBuf, 
             label = "TIME ZONE"; value = Settings::timeZoneName();
             break;
         case SettingsRow::REPLAY_INTRO:
-            label = "REPLAY INTRO";
+            label = "REPLAY ONBOARDING";
             break;
         case SettingsRow::SHOW_OFF:
             label = "SHOW OFF";
             break;
         case SettingsRow::SHADES_COLOR:
-            label = "SHADES COLOR"; value = Squachy::shadesColorName();
+            label = "SUNGLASSES COLOR"; value = Squachy::shadesColorName();
             break;
         // "SIZE" rather than "SQUACHY SIZE": this row is already under the
         // SQUACHY heading, and the longer label plus "MEDIUM" overruns a
@@ -970,7 +1028,7 @@ static void rowContent(SettingsRow r, const DetectionEngine& eng, char* valBuf, 
             danger = true;
             break;
         case SettingsRow::APPEARANCE:
-            label = "APPEARANCE"; value = ">";
+            label = "DISPLAY & APPEARANCE"; value = ">";
             break;
         case SettingsRow::TOP_HAT:
             label = "TOP HAT"; value = Settings::topHatShown() ? "SHOWN" : "HIDDEN";
@@ -1016,7 +1074,7 @@ void uiSettingsTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
     // Only the BACKGROUND moves. Everything else on this screen still
     // begins where it did, so no content shifts.
     const int bgTop = 0;
-switch (Settings::background()) {
+switch (Field::config.reduced ? Settings::Background::BLACK : Settings::background()) {
         case Settings::Background::STARFIELD: Theme::drawStarfield(t, now, bgTop, bodyBottom); break;
         case Settings::Background::TOASTERS:   Theme::drawFlyingToasters(t, now, bgTop, bodyBottom); break;
         case Settings::Background::AQUARIUM:   Theme::drawAquarium(t, now, bgTop, bodyBottom); break;
@@ -1032,13 +1090,10 @@ switch (Settings::background()) {
     }
     Theme::restorePalette(saved);
 
-    const char* pageTitle = ">> SETTINGS <<";
-    if (s_page == SettingsPage::APPEARANCE) pageTitle = ">> APPEARANCE <<";
-    else if (s_page == SettingsPage::SYSTEM) pageTitle = ">> SYSTEM <<";
-    else if (s_page == SettingsPage::ALERTS) pageTitle = ">> ALERTS <<";
-    else if (s_page == SettingsPage::FUN) pageTitle = ">> GAMES & SQUACHY <<";
-    else if (s_page == SettingsPage::DESK)   pageTitle = ">> DESK MODE <<";
+    const char* pageTitle = MENU_PAGES[(uint8_t)s_page].title;
     Theme::drawTitleBar(t, pageTitle);
+    t.fillRect(28,4,w-56,18,Theme::BG);
+    Lang::draw(t,pageTitle,30,5,w-60,16,Theme::CYAN,true,true);
 
     // +6, not +4: four group headers plus the two tracking rows.
     DisplayItem items[2 * (LIST_MAX_N + 2)];
@@ -1070,7 +1125,8 @@ switch (Settings::background()) {
             } else if (isTwoLineRow(items[idx].row)) {
                 drawTwoLineRow(t, w, y, itemH, label, value, groupColor(items[idx].group),
                                items[idx].row == SettingsRow::BACKGROUND ||
-                               items[idx].row == SettingsRow::DESK_BACKGROUND);
+                               items[idx].row == SettingsRow::DESK_BACKGROUND ||
+                               items[idx].row == SettingsRow::DISPLAY_SPEED);
             } else {
                 drawRow(t, w, y, itemH, label, value, danger, groupColor(items[idx].group),
                         h > w);
@@ -1090,37 +1146,6 @@ switch (Settings::background()) {
     // Over the top of everything, so the list is still visible around it and
     // it is obvious which screen you are being asked about.
     drawSettingsConfirm(t, w, h);
-}
-
-bool uiSettingsTapHeader(TFT_eSPI& t, int x, int y, int screenW, int screenH) {
-    (void)x; (void)screenW;
-    int top, bodyBottom, rowH, headerH, tallH;
-    computeGeom(t, screenH, top, bodyBottom, rowH, headerH, tallH);
-
-    DisplayItem items[2 * (LIST_MAX_N + 2)];
-    uint8_t n = buildDisplayList(items);
-    // Same clamp the draw applies, so a tap can never be tested against a
-    // scroll position the screen is not actually showing.
-    { const int m = maxScroll(items, n, top, bodyBottom, rowH, headerH, tallH);
-      if (g_scroll > m) g_scroll = m; }
-
-    int cy = top;
-    int idx = g_scroll;
-    while (idx < n) {
-        int itemH = itemHeight(items[idx], rowH, headerH, tallH);
-        if (cy + itemH > bodyBottom) break;
-        if (y >= cy && y < cy + itemH && items[idx].isHeader) {
-            const uint8_t g = (uint8_t)items[idx].group;
-            s_folded[g] = !s_folded[g];
-            // Folding shortens the list under your finger; an old scroll
-            // offset would leave you staring at blank space below the end.
-            g_scroll = 0;
-            return true;
-        }
-        cy += itemH;
-        idx++;
-    }
-    return false;
 }
 
 SettingsRow uiSettingsHitTest(TFT_eSPI& t, int x, int y, int screenW, int screenH) {
@@ -1148,4 +1173,3 @@ SettingsRow uiSettingsHitTest(TFT_eSPI& t, int x, int y, int screenW, int screen
     }
     return SettingsRow::NONE;
 }
-

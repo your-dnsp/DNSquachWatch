@@ -28,3 +28,4 @@ void uiLightScroll(int delta);          // positive = scroll down
 // Row layout matches whatever uiLightTick just drew (shared geometry), so
 // only call this against a screen already showing this list.
 LightRow uiLightHitTest(TFT_eSPI& t, int x, int y, int screenW, int screenH);
+

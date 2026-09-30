@@ -21,3 +21,4 @@ void uiOutfitTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool ad
 // or right arrow. False for a tap anywhere else, so the caller's own
 // back-button handling still runs untouched.
 bool uiOutfitTapArrow(int x, int y, int screenW, int screenH);
+

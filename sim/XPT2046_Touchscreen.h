@@ -37,3 +37,4 @@ public:
 
     void setRotation(uint8_t) {}
 };
+

@@ -217,42 +217,30 @@ void uiBootTick(TFT_eSPI& t, uint32_t now) {
             if (bootScale < 1.95f) bootScale = 1.95f;
             if (bootScale > 3.2f)  bootScale = 3.2f;
         }
-        Squachy::drawWaving(t, w / 2, h - 21, now, bootScale, BOOT_LINES[s_bootLineIdx]);
+        Squachy::drawWaving(t, w / 2, h - 33, now, bootScale, BOOT_LINES[s_bootLineIdx]);
     }
 
-    // INITIALIZING...  vX.Y.Z -- version tacked onto this line rather
-    // than given its own row. Everything from the subtitle down to
-    // here is already tightly packed around Squachy's cameo (see its
-    // own comment above about the room dropping the old standalone
-    // version line bought him), and this is the one line on the splash
-    // that already reads as status text, not brand/character content,
-    // so it's the natural place for a version stamp without touching
-    // his space.
-    t.setTextSize(1);
-    t.setTextColor(Theme::CYAN);
-    char init[56];   // room for a full "git describe --dirty" string, not just a bare tag
-#if defined(CYD35)
-    // The 3.5" ships as a beta and says so on every boot. That board is newer
-    // than the rest of the port by years, it is the only one that draws in two
-    // bands, and it is the one most likely to still surprise somebody -- so
-    // the word goes where nobody can miss it rather than in a release note
-    // they may never have read.
-    snprintf(init, sizeof(init), "3.5in BETA   %s", FIRMWARE_VERSION);
-#else
-    snprintf(init, sizeof(init), "INITIALIZING...  %s", FIRMWARE_VERSION);
-#endif
-    int iw = t.textWidth(init);
-    t.setCursor((w - iw) / 2, h - 16);
-#if defined(CYD35)
-    t.setTextColor(Theme::AMBER);   // not the cyan the rest of the line uses
-#endif
-    t.print(init);
-
-    // animated scanline sweeping top to bottom every 600 ms
+    // Paint attribution last, in a reserved footer clear of artwork and
+    // the panel edges. Plain built-in text has no custom glyph dependency.
     int phase = (int)((now / 600) % (uint32_t)h);
     Theme::drawScanline(t, phase, Theme::VAPOR_PURPLE);
+    uiBootAttribution(t);
+
+}
+
+void uiBootAttribution(TFT_eSPI& t) {
+    const int w=t.width(),h=t.height();
+    t.setTextFont(1);t.setTextSize(1);t.setTextWrap(false);
+    t.fillRect(0,h-28,w,28,Theme::BG);
+    t.setTextColor(Theme::WHITE,Theme::BG);
+    const char* line="modified firmware by dnsp";
+    t.setCursor((w-t.textWidth(line))/2,h-25);t.print(line);
+    t.setTextColor(Theme::CYAN,Theme::BG);
+    const char* version="DNSP v1.1.2 | base v1.25.0";
+    t.setCursor((w-t.textWidth(version))/2,h-13);t.print(version);
 }
 
 bool uiBootDone(uint32_t startMs, uint32_t holdMs) {
     return (millis() - startMs) >= holdMs;
+
 }

@@ -25,7 +25,7 @@ class RecoveryChecks(unittest.TestCase):
         self.layout.write_bytes(table.ljust(4096, b'\xff'))
         body = b'DNSP_PUBLIC_V1=1\n'
         (self.backup/'preferences.txt').write_bytes(body + b'crc32=' + str(zlib.crc32(body)).encode() + b'\n')
-        self.manifest = {'firmware':'DNSquachWatch v0.7-draft','build':'cyd-fast','app_bytes':str(len(image)), 'source_address':'0x1f0000','sha256':hashlib.sha256(image).hexdigest(),'app_only':'true','partition_sector_sha256':module.sha(self.layout)}
+        self.manifest = {'firmware':'DNSquachWatch v0.10.3-draft','build':'cyd-fast','app_bytes':str(len(image)), 'source_address':'0x1f0000','sha256':hashlib.sha256(image).hexdigest(),'app_only':'true','partition_sector_sha256':module.sha(self.layout)}
         self.save_marker()
         entries=[]
         for name, offset in [('bootloader.bin',0x1000),('partitions.bin',0x8000),('boot_app0.bin',0xe000),('firmware.bin',0x10000)]:
@@ -36,6 +36,12 @@ class RecoveryChecks(unittest.TestCase):
         (self.backup/'COMPLETE.txt').write_text('DNSP_BACKUP_V1\n'+''.join(f'{k}={v}\n' for k,v in self.manifest.items()))
     def check(self): return module.check(self.backup,self.kit,self.layout)
     def test_valid(self): self.assertEqual(self.check(),self.backup/'firmware.bin')
+    def test_v11_requires_log_snapshot(self):
+        self.manifest['firmware']='DNSquachWatch v1.1.2';self.save_marker()
+        with self.assertRaises(ValueError): self.check()
+        self.manifest['current_log']='current-log.csv';self.manifest['current_log_rows']='0';self.save_marker()
+        (self.backup/'current-log.csv').write_text('row,type,mac,rssi\n')
+        self.assertEqual(self.check(),self.backup/'firmware.bin')
     def test_missing_marker(self):
         (self.backup/'COMPLETE.txt').unlink()
         with self.assertRaises(ValueError): self.check()

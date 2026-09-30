@@ -41,6 +41,12 @@ const char* KEY = "tab";
 int find(const uint8_t* mac) {
     for (uint8_t i = 0; i < CAP; i++)
         if (s_t[i].lastDay && memcmp(s_t[i].mac, mac, 6) == 0) return i;
+    for (uint8_t i = 0; i < CAP; i++) {
+        if (!s_t[i].lastDay) continue;
+        bool same = true;
+        for (uint8_t b = 0; b < 6 && same; b++) same = s_t[i].mac[b] == mac[5 - b];
+        if (same) return i;
+    }
     return -1;
 }
 
@@ -84,6 +90,12 @@ void noteOnDay(const uint8_t* mac, DetectionType type, uint32_t day) {
         memcpy(s_t[i].mac, mac, 6);
         s_t[i].type    = (uint8_t)type;
         s_t[i].nameIdx = pickName(mac);
+    } else if (memcmp(s_t[i].mac, mac, 6) != 0) {
+        // Migrate a pre-v1.25 reversed BLE address in place while keeping the
+        // regular's assigned name and history.
+        memcpy(s_t[i].mac, mac, 6);
+        s_dirty = true;
+        s_changed = millis();
     }
     if (s_t[i].lastDay == day) return;
     s_t[i].lastDay = day;
@@ -139,4 +151,3 @@ void reset() {
 }
 
 }  // namespace Regulars
-

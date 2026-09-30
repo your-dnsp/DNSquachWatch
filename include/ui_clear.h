@@ -104,3 +104,4 @@ bool uiClearEmote(uint8_t emote, uint8_t setup, bool fromGuest);
 // straight from the compose screen.
 void uiClearEmoteTick(uint32_t now);
 #endif
+

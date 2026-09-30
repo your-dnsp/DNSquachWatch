@@ -32,3 +32,4 @@ inline int report() {
     printf("\n%s\n", g_fails ? "*** FAILURES ***" : "all passed");
     return g_fails ? 1 : 0;
 }
+

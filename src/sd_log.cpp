@@ -1,11 +1,14 @@
 // SquachWatch-CYD — SD log implementation
 #include "sd_log.h"
+#include "deauth_tracker.h"
 #include "research.h"
 namespace Research { bool storageSink(const char*, const char*, bool); }
 #include <SD.h>
+#include <esp_heap_caps.h>
 #include "ff.h"
 #include "diskio_impl.h"
 #include "diskio.h"
+#include <esp_heap_caps.h>
 #include "csv_text.h"
 #include <stdio.h>
 // The Phantoms define CYD (they ARE a CYD) but still need this reference,
@@ -41,8 +44,12 @@ static const uint8_t SD_MAX_FILES = 2;
 
 bool SdLog::begin() {
     if (_ready) return true;
+    _memoryLimited = false;
+#if defined(TWATCH_S3)
+    return false;   // no card slot; GPIO19/20 are the S3's USB pins
+#endif
     ff_diskio_get_drive(&_drive); // SD.begin reserves the next free FAT drive below.
-    Serial.printf("[sd] mounting: heap %lu, largest block %lu\n", (unsigned long)ESP.getFreeHeap(), (unsigned long)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+    Serial.printf("[sd] mounting: heap %lu, largest block %lu\n", (unsigned long)heap_caps_get_free_size(MALLOC_CAP_8BIT), (unsigned long)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
 #if defined(CYD35)
     // (The RL Phantom used to land here too, and its SD card never worked as
     // a result: the card is on 18/19/23, and the display's SPI engine never
@@ -102,6 +109,14 @@ bool SdLog::begin() {
         return false;
     }
     Serial.printf("[sd] card mounted: %llu MB\n", (unsigned long long)(SD.cardSize() >> 20));
+    Serial.printf("[sd] mounted: byte heap %lu, largest %lu\n", (unsigned long)heap_caps_get_free_size(MALLOC_CAP_8BIT), (unsigned long)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+    // Refuse a mount that would leave radio tasks unable to allocate. Do not
+    // mark it usable or format anything; the caller can report SD unavailable.
+    if (heap_caps_get_free_size(MALLOC_CAP_8BIT) < 12288 ||
+        heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) < 8192) {
+        Serial.println("[sd] insufficient working RAM; unmounting card to keep scanning safe");
+        SD.end(); _ready=false; _memoryLimited=true; return false;
+    }
     _ready = true;
     Research::setSink(Research::storageSink);
     Research::setReportSink(Research::storageReport);
@@ -134,6 +149,10 @@ void SdLog::logPressure(uint32_t alerts, uint32_t ble) {
 }
 
 void SdLog::describe(char* out, size_t cap) {
+    if (!_ready && _memoryLimited) {
+        snprintf(out, cap, "microSD unmounted: insufficient working RAM after mounting. Scanning continues; SD logging and backups are unavailable. Restart and capture the startup serial log if this repeats.");
+        return;
+    }
     if (!_ready) {
         snprintf(out, cap, "No mounted microSD card. Insert a FAT-formatted card with power off, then restart. Logging is unavailable.");
         return;
@@ -167,7 +186,7 @@ void SdLog::logEvent(const Detection& d) {
     if (!_ready) return;
     File f = SD.open(_filename, FILE_APPEND);
     if (!f) { if (_writeErrors != UINT32_MAX) ++_writeErrors; return; }
-    char line[96];
+    char line[208];
     char mac[18];
     snprintf(mac, sizeof(mac), "%02X:%02X:%02X:%02X:%02X:%02X",
              d.mac[0], d.mac[1], d.mac[2], d.mac[3], d.mac[4], d.mac[5]);
@@ -175,15 +194,27 @@ void SdLog::logEvent(const Detection& d) {
     char vendorSafe[12], nameSafe[20];
     safeCsvText(vendorSafe, sizeof vendorSafe, vendorText(d), strlen(vendorText(d)));
     safeCsvText(nameSafe, sizeof nameSafe, d.name, sizeof d.name);
-    snprintf(line, sizeof(line),
-             "%lu,%s,%d,%s,%u,%s,%s\n",
-             (unsigned long)millis(),
-             detectionTypeName(d.type),
-             d.rssi,
-             mac,
-             d.channel,
-             vendorSafe,
-             nameSafe);
+    if (d.type == DetectionType::DEAUTH) {
+        const unsigned targets = d.evidenceBits & DEAUTH_META_TARGET_MASK;
+        const unsigned long duration = (unsigned long)(d.lastSeen - d.firstSeen);
+        char reason[16];
+        if (d.evidenceBits & DEAUTH_META_REASON_VALID)
+            snprintf(reason, sizeof reason, "%u", (unsigned)d.signature);
+        else
+            snprintf(reason, sizeof reason, "unknown");
+        snprintf(line, sizeof(line),
+                 "%lu,%s,%d,%s,%u,%s,%s,count=%u,window_ms=%lu,targets=%u,reason=%s,protected=%u,unprotected=%u\n",
+                 (unsigned long)millis(), detectionTypeName(d.type), d.rssi, mac,
+                 d.channel, vendorSafe, nameSafe, (unsigned)d.hits, duration, targets,
+                 reason,
+                 (d.evidenceBits & DEAUTH_META_PROTECTED_SEEN) ? 1u : 0u,
+                 (d.evidenceBits & DEAUTH_META_UNPROTECTED_SEEN) ? 1u : 0u);
+    } else {
+        snprintf(line, sizeof(line),
+                 "%lu,%s,%d,%s,%u,%s,%s\n",
+                 (unsigned long)millis(), detectionTypeName(d.type), d.rssi, mac,
+                 d.channel, vendorSafe, nameSafe);
+    }
     if (f.print(line) != strlen(line) && _writeErrors != UINT32_MAX) ++_writeErrors;
     f.close();
 }
@@ -241,5 +272,66 @@ bool SdLog::safeEnd() {
     const bool ok = _drive < 10 && disk_ioctl(_drive, CTRL_SYNC, nullptr) == RES_OK && _writeErrors == 0;
     SD.end();
     _ready = false;
+    return ok;
+}
+
+bool SdLog::recoveryRemount() {
+    if (_ready) safeEnd();
+    _drive = 255;
+    const bool ok = begin();
+    snprintf(_recovery, sizeof _recovery, "%s", ok
+        ? "Card found and remounted. Storage services are available."
+        : "Card could not be mounted. Power off, reseat it, and try again.");
+    return ok;
+}
+
+bool SdLog::recoveryTest() {
+    if (!_ready && !recoveryRemount()) return false;
+    const char* path = "/.dnsp-card-test.tmp";
+    static const char sample[] = "DNSP microSD read/write test v1\n";
+    SD.remove(path);
+    File f = SD.open(path, FILE_WRITE);
+    if (!f) { snprintf(_recovery,sizeof _recovery,"Test failed while creating a temporary file."); return false; }
+    const bool wrote = f.write((const uint8_t*)sample, sizeof(sample)-1) == sizeof(sample)-1;
+    f.flush(); f.close();
+    char back[sizeof sample] = {};
+    f = SD.open(path, FILE_READ);
+    const bool read = f && f.size() == sizeof(sample)-1 && f.read((uint8_t*)back,sizeof(sample)-1) == sizeof(sample)-1;
+    f.close();
+    const bool same = wrote && read && memcmp(back,sample,sizeof(sample)-1)==0;
+    const bool removed = SD.remove(path);
+    if (same && removed) snprintf(_recovery,sizeof _recovery,"Read/write test passed; temporary file removed.");
+    else snprintf(_recovery,sizeof _recovery,"Card test failed: write %s, read-back %s, cleanup %s.",wrote?"ok":"failed",same?"ok":"failed",removed?"ok":"failed");
+    return same && removed;
+}
+
+bool SdLog::recoveryFormat() {
+    if (!_ready && !recoveryRemount()) {
+        snprintf(_recovery,sizeof _recovery,"Format could not start because the card did not mount.");
+        return false;
+    }
+    if (_drive > 9) { snprintf(_recovery,sizeof _recovery,"Format stopped: filesystem drive could not be identified."); return false; }
+    FATFS* fs = nullptr; DWORD freeClusters = 0;
+    char drive[] = {char('0' + _drive), ':', 0};
+    if (f_getfree(drive,&freeClusters,&fs)!=FR_OK || !fs) {
+        snprintf(_recovery,sizeof _recovery,"Format stopped: filesystem could not be opened safely.");
+        return false;
+    }
+    void* work = heap_caps_malloc(4096, MALLOC_CAP_8BIT);
+    if (!work) { snprintf(_recovery,sizeof _recovery,"Format stopped: not enough working memory."); return false; }
+    // No files are held open by SdLog. Temporarily detach the FatFS object,
+    // create a fresh volume, then attach the same object the VFS already owns.
+    FRESULT r = f_mount(nullptr,drive,0);
+    if (r == FR_OK) r = f_mkfs(drive,FM_ANY,0,work,4096);
+    if (r == FR_OK) r = f_mount(fs,drive,1);
+    free(work);
+    if (r != FR_OK) {
+        _ready = false; SD.end();
+        snprintf(_recovery,sizeof _recovery,"Format failed (filesystem error %u). Power off before removing the card.",(unsigned)r);
+        return false;
+    }
+    _writeErrors=0;_memoryLimited=false;_filename[0]=0;openDaily();
+    const bool ok = recoveryTest();
+    if (ok) snprintf(_recovery,sizeof _recovery,"Format complete. FAT volume created and read/write test passed.");
     return ok;
 }

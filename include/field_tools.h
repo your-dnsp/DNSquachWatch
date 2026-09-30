@@ -42,6 +42,8 @@ bool observeBle(const uint8_t *mac, const uint8_t *ad, size_t n, uint32_t now);
 bool observeWifi(const uint8_t *frame, size_t n, uint32_t now);
 void tick();
 const Aircraft &aircraft(uint8_t index);
+int associatedAircraft(uint8_t index, uint32_t now);
+bool identityConflict(uint8_t index, uint32_t now);
 const Sensor &sensor(uint8_t index);
 const Sensor &discovery(uint8_t index);
 uint32_t dropped();

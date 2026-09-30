@@ -25,7 +25,17 @@ static bool        s_messagesOn   = false;
 static bool        s_msgTutor     = false;
 #endif
 static bool        s_infoPrimerShown = false;
-static bool        s_rotationLocked = false;
+// Locked on the watch: a square screen with a crown has one way up, and a
+// corner button that spins it is a thing to hit by accident on a wrist.
+// Locked on the CrowPanel too, for a different reason: an RGB panel has no
+// MADCTL, so rotating it would be a per-pixel software transform of an
+// 800x480 buffer every frame -- and the panel is natively landscape anyway.
+#if defined(TWATCH_S3) || defined(CROWPANEL7)
+static const bool DEFAULT_ROTATION_LOCK = true;
+#else
+static const bool DEFAULT_ROTATION_LOCK = true;
+#endif
+static bool        s_rotationLocked = DEFAULT_ROTATION_LOCK;
 static bool        s_topHat = true;
 // Eight is the ceiling because the radio's own squad ring holds eight (see
 // SQUAD_N in mesh.cpp). A menu that offered thirty would be offering something
@@ -36,7 +46,16 @@ static uint8_t     s_meshCrowd = 1;   // how many on screen at once, 1..CROWD_MA
 static bool        s_deskSquad     = false;   // the squad on the desk clock as well
 static uint8_t     s_deskCrowd     = 1;       // the desk's own HOW MANY
 static bool        s_deskFullVisit = false;   // one visitor: the whole visit, not a chat
-static uint8_t     s_rotation = 1;
+// The screen's starting rotation: landscape on every CYD; the watch reads
+// one step round from that with its crown on the right (LilyGo's default).
+#if defined(TWATCH_S3)
+static const uint8_t DEFAULT_ROTATION = 2;
+#elif defined(CROWPANEL7)
+static const uint8_t DEFAULT_ROTATION = 0;   // the panel is landscape as wired
+#else
+static const uint8_t DEFAULT_ROTATION = 3;
+#endif
+static uint8_t     s_rotation = DEFAULT_ROTATION;
 // OFF / 5 / 10. Stored as the number itself rather than an index, so the
 // value in NVS still means something if the choices ever change.
 static uint8_t s_autoQuiet = 0;
@@ -51,14 +70,14 @@ static const uint8_t CLOCK_BG_N  = 7;
 // Bit N = DetectionType N enabled. UNKNOWN (0) is never included -- see
 // Types that arrive switched OFF, on a fresh install and on upgrade alike.
 //
-// Only IBEACON so far, and it is not a judgement about how interesting they
+// IBEACON and TILE, and it is not a judgement about how interesting they
 // are -- it is about how MANY. Proximity beacons are bolted to shelves in
 // their dozens; one shop can put more of them in range than this device
 // would otherwise see all week, and the ALERT screen is gated on confidence
 // rather than on type, so with an exact-match signature every one of them
 // would take over the display. Off by default, one tap away in DETECTION
 // FILTER, and everything about the detection itself is honest either way.
-static const uint32_t DEFAULT_OFF = (1u << (uint8_t)DetectionType::IBEACON);
+static const uint32_t DEFAULT_OFF = (1u << (uint8_t)DetectionType::IBEACON) | (1u << (uint8_t)DetectionType::TILE);
 
 // typeEnabled()'s comment. Default has bits 1..(COUNT-1) set (every real
 // type on), computed once at namespace-init time rather than a hand-
@@ -74,8 +93,17 @@ static uint32_t    s_typeMask = 0;
 // keeps it, which is why changing this default is safe.
 static uint8_t     s_sqSizeIx = 1;
 static uint8_t     s_brightness = 255;
+static bool s_ambientLight = false;
+// Panel initialization always starts at 40 MHz, before preferences load.
+static uint8_t s_displayMhz = 40;
+#if defined(CYD) && defined(SPI_FREQUENCY) && SPI_FREQUENCY == 80000000
+static constexpr uint8_t DEFAULT_DISPLAY_MHZ = 80;
+#else
+static constexpr uint8_t DEFAULT_DISPLAY_MHZ = 40;
+#endif
 static Confidence  s_minConf    = Confidence::LOW_CONF;
 static bool        s_boringMode = false;
+static bool        s_glitchEffects = true;
 
 // ---- power saver ---------------------------------------------------------
 // Indices into the tables below rather than raw values, so the menu can
@@ -90,13 +118,53 @@ static const uint8_t  IDLE_AFTER_N      = sizeof(IDLE_AFTER) / sizeof(IDLE_AFTER
 static const uint16_t CPU_MHZ[]         = { 240, 160, 80 };
 static const uint8_t  CPU_MHZ_N         = sizeof(CPU_MHZ) / sizeof(CPU_MHZ[0]);
 
-static bool     s_powerSaver   = false;
+// On by default on the watch: a screen timeout is what makes a watch a
+// watch, and the rest of the saver's rows stay at their stock values until
+// someone changes them.
+#if defined(TWATCH_S3)
+static const bool DEFAULT_POWER_SAVER = true;
+#else
+static const bool DEFAULT_POWER_SAVER = false;
+#endif
+static bool     s_powerSaver   = DEFAULT_POWER_SAVER;
 static uint8_t  s_scrTimeoutIx = 2;    // 30 s
 static uint8_t  s_dimLevel     = 16;   // ~6%, dim but not off
 static uint8_t  s_idleFpsIx    = 2;    // 12 fps
 static uint8_t  s_idleAfterIx  = 1;    // 10 s
 static uint8_t  s_cpuIx        = 0;    // 240 MHz, the stock clock
+static const uint8_t  BLE_LISTEN[]   = { 25, 50, 75 };
+static const uint16_t IDLE_CPU[]     = { 80, 160, 240 };
+#if defined(TWATCH_S3)
+static const uint8_t  BLE_LISTEN_DEFAULT = 0;   // 25%
+static const uint8_t  IDLE_CPU_DEFAULT   = 0;   // 80 MHz asleep
+#else
+static const uint8_t  BLE_LISTEN_DEFAULT = 2;   // 75%, as always
+static const uint8_t  IDLE_CPU_DEFAULT   = 2;   // no change asleep
+#endif
+static uint8_t  s_bleIx        = BLE_LISTEN_DEFAULT;
+static uint8_t  s_idleCpuIx    = IDLE_CPU_DEFAULT;
 static bool     s_wakeOnAlert  = true;
+static uint8_t  s_buzzMode     = 2;    // 0 OFF, 1 HIGH, 2 MED, 3 LOW; MED by default
+static bool     s_steady       = false;
+// The watch's radio duty cycle: on for a few seconds, resting for the rest.
+// 0 ALWAYS, 1 five seconds of thirty, 2 ten of sixty, 3 BLE always on with
+// WiFi five of thirty. Watch only; the CYDs never read it.
+static const char* const RADIO_DUTY_NAMES[] = { "ALWAYS", "5/30", "10/60", "BLE+5/30" };
+static const uint8_t     RADIO_DUTY_N       = 4;
+#if defined(TWATCH_S3)
+// BLE+5/30: Bluetooth listens all the time, WiFi rests 25 s in every 30.
+// Trackers walking past are the catches that cannot wait; WiFi is the
+// radio that costs the most to keep on.
+static const uint8_t RADIO_DUTY_DEFAULT = 3;
+#else
+static const uint8_t RADIO_DUTY_DEFAULT = 1;
+#endif
+static uint8_t  s_radioDutyIx  = RADIO_DUTY_DEFAULT;
+
+// ---- buzzer --------------------------------------------------------------
+// Opt in. The one setting here that can make a sound, so it starts off and
+// stays off until somebody finds the row. Only the CrowPanel 7 shows it.
+static bool     s_buzzer       = false;
 
 // ---- status light --------------------------------------------------------
 static bool    s_lightOn     = true;
@@ -104,7 +172,7 @@ static bool    s_lightAlerts = true;
 static bool    s_lightMsgs   = true;
 static uint8_t s_lightIdle   = 1;    // BREATHE
 static uint8_t s_lightColor  = 0;    // THEME
-static uint8_t s_lightBright = 2;    // of 5
+static uint8_t s_lightBright = 4;    // of 7
 static bool    s_remoteUpdate = false;
 static bool    s_phraseShown  = true;
 static bool    s_updateCheck  = true;
@@ -144,16 +212,46 @@ const char* backgroundName(Background b) {
 // the rest of the firmware never has to ask twice: one call tells it both
 // whether the feature is on and what to do.
 bool     powerSaver()       { return s_powerSaver; }
+#if defined(TWATCH_S3)
+// On the watch the screen times out POWER SAVER or not: a screen left on is
+// never what a wrist wants. The two exceptions are the cable (main.cpp
+// keeps it lit on USB) and NEVER, kept as the deliberate override.
+uint16_t screenTimeoutSec() { return SCREEN_TIMEOUTS[s_scrTimeoutIx]; }
+#else
 uint16_t screenTimeoutSec() { return s_powerSaver ? SCREEN_TIMEOUTS[s_scrTimeoutIx] : 0; }
+#endif
 uint8_t  dimLevel()         { return s_dimLevel; }
 uint8_t  idleFps()          { return s_powerSaver ? IDLE_FPS[s_idleFpsIx] : 0; }
 uint16_t idleAfterSec()     { return IDLE_AFTER[s_idleAfterIx]; }
 uint16_t cpuMhz()           { return s_powerSaver ? CPU_MHZ[s_cpuIx] : 240; }
 bool     wakeOnAlert()      { return s_wakeOnAlert; }
+bool     buzz()             { return s_buzzMode != 0; }
+bool     steadyPower()      { return s_steady; }
+// Only while POWER SAVER is on. Either RADIO DUTY row (the Power screen,
+// or WATCH in settings) picks the mode; neither turns the saver on.
+uint8_t  radioDuty()        { return s_powerSaver ? s_radioDutyIx : 0; }
+uint8_t  radioDutyRaw()     { return s_radioDutyIx; }
+const char* radioDutyName(uint8_t ix) { return RADIO_DUTY_NAMES[ix < RADIO_DUTY_N ? ix : 0]; }
+void cycleRadioDuty() {
+    s_radioDutyIx = (uint8_t)((s_radioDutyIx + 1) % RADIO_DUTY_N);
+    s_prefs.putUChar("pwrRadio", s_radioDutyIx);
+}
 
 uint16_t screenTimeoutSecRaw() { return SCREEN_TIMEOUTS[s_scrTimeoutIx]; }
 uint8_t  idleFpsRaw()          { return IDLE_FPS[s_idleFpsIx]; }
 uint16_t cpuMhzRaw()           { return CPU_MHZ[s_cpuIx]; }
+uint8_t  bleListen()           { return s_powerSaver ? BLE_LISTEN[s_bleIx] : 75; }
+uint8_t  bleListenRaw()        { return BLE_LISTEN[s_bleIx]; }
+void cycleBleListen() {
+    s_bleIx = (uint8_t)((s_bleIx + 1) % 3);
+    s_prefs.putUChar("bleWin", s_bleIx);
+}
+uint16_t idleCpuMhz()          { return s_powerSaver ? IDLE_CPU[s_idleCpuIx] : 240; }
+uint16_t idleCpuMhzRaw()       { return IDLE_CPU[s_idleCpuIx]; }
+void cycleIdleCpu() {
+    s_idleCpuIx = (uint8_t)((s_idleCpuIx + 1) % 3);
+    s_prefs.putUChar("idleCpu", s_idleCpuIx);
+}
 
 void togglePowerSaver() {
     s_powerSaver = !s_powerSaver;
@@ -182,10 +280,26 @@ void cycleCpuMhz() {
     s_cpuIx = (uint8_t)((s_cpuIx + 1) % CPU_MHZ_N);
     s_prefs.putUChar("pwrCpu", s_cpuIx);
 }
+void toggleSteadyPower() {
+    s_steady = !s_steady;
+    s_prefs.putBool("steady", s_steady);
+}
+
+uint8_t buzzStrength() { return s_buzzMode == 0 ? 0 : (uint8_t)(3 - s_buzzMode); }
+const char* buzzModeName() {
+    static const char* const N[] = { "OFF", "HIGH", "MED", "LOW" };
+    return N[s_buzzMode < 4 ? s_buzzMode : 2];
+}
+void cycleBuzz() {
+    s_buzzMode = (uint8_t)((s_buzzMode + 1) % 4);
+    s_prefs.putUChar("buzzMode", s_buzzMode);
+}
 void toggleWakeOnAlert() {
     s_wakeOnAlert = !s_wakeOnAlert;
     s_prefs.putBool("pwrWake", s_wakeOnAlert);
 }
+bool buzzerOn()     { return s_buzzer; }
+void toggleBuzzer() { s_buzzer = !s_buzzer; s_prefs.putBool("buzzer", s_buzzer); }
 
 // ---- easter-egg hunt progress ----------------------------------------
 // Packed into one NVS entry rather than one each: the store has a few
@@ -250,10 +364,10 @@ void load() {
     s_msgTutor     = s_prefs.getBool("msgtut", false);
 #endif
     s_infoPrimerShown = s_prefs.getBool("infoprimer", false);
-    s_rotationLocked = s_prefs.getBool("rotlock", false);
+    s_rotationLocked = s_prefs.getBool("rotlock", DEFAULT_ROTATION_LOCK);
     s_topHat         = s_prefs.getBool("tophat", true);
-    s_rotation = s_prefs.getUChar("rot", 1);
-    if (s_rotation > 3) s_rotation = 1;
+    s_rotation = s_prefs.getUChar("rot", DEFAULT_ROTATION);
+    if (s_rotation > 3) s_rotation = DEFAULT_ROTATION;
     s_backgroundLocked = s_prefs.getBool("bglock", false);
     s_deskBg = s_prefs.getUChar("deskBg", 255);
     s_clockFont     = s_prefs.getUChar("clkfont", 0);
@@ -263,6 +377,9 @@ void load() {
     if (s_clockSize > 2)     s_clockSize = 1;
     if (s_clockBackdrop >= CLOCK_BG_N) s_clockBackdrop = 0;
     if (s_deskBg != 255 && s_deskBg >= BACKGROUND_COUNT) s_deskBg = 255;
+    s_displayMhz = s_prefs.getUChar("dispMHz", DEFAULT_DISPLAY_MHZ);
+    if(s_displayMhz!=40 && s_displayMhz!=80)s_displayMhz=40;
+    s_ambientLight = s_prefs.getBool("ldr", false);
     s_brightness = s_prefs.getUChar("bri", 255);
     if (s_brightness < 32) s_brightness = 32;
     s_alertSeconds = s_prefs.getUChar("alertsecs", 30);
@@ -273,6 +390,7 @@ void load() {
     s_minConf    = (Confidence)s_prefs.getUChar("conf", (uint8_t)Confidence::LOW_CONF);
     if ((uint8_t)s_minConf > (uint8_t)Confidence::HIGH_CONF) s_minConf = Confidence::LOW_CONF;
     s_boringMode = s_prefs.getBool("boring", false);
+    s_glitchEffects = s_prefs.getBool("glitchfx", true);
     // BLACK only exists while boring mode does. A board that saved it and
     // then had boring mode turned off -- or one restored from someone
     // else's settings -- would otherwise boot to a flat screen with the
@@ -285,13 +403,37 @@ void load() {
     // cycle out. Moved to the default rather than to DIGITAL -- it is what a
     // fresh device shows, and the two look nothing alike.
     if (s_background == Background::TUNNEL) s_background = Background::SYNTHWAVE;
-    s_powerSaver   = s_prefs.getBool("pwrOn", false);
+    s_powerSaver   = s_prefs.getBool("pwrOn", DEFAULT_POWER_SAVER);
+#if defined(TWATCH_S3)
+    // Once per watch: POWER SAVER on. The default only reaches a watch that
+    // never saved the switch, and every watch that went through the bench
+    // builds had it saved OFF -- the radios then never rested and a night on
+    // the wrist lasted 2.2 hours. After this one pass, OFF sticks as usual.
+    if (!s_prefs.getBool("pwrWatch1", false)) {
+        s_powerSaver = true;
+        s_prefs.putBool("pwrOn", true);
+        s_prefs.putBool("pwrWatch1", true);
+    }
+#endif
     s_scrTimeoutIx = s_prefs.getUChar("pwrScrnT", 2);
     s_dimLevel     = s_prefs.getUChar("pwrDim", 16);
     s_idleFpsIx    = s_prefs.getUChar("pwrFps", 2);
     s_idleAfterIx  = s_prefs.getUChar("pwrIdleT", 1);
     s_cpuIx        = s_prefs.getUChar("pwrCpu", 0);
+    s_bleIx        = s_prefs.getUChar("bleWin", BLE_LISTEN_DEFAULT);
+    s_idleCpuIx    = s_prefs.getUChar("idleCpu", IDLE_CPU_DEFAULT);
+    if (s_bleIx > 2)     s_bleIx = BLE_LISTEN_DEFAULT;
+    if (s_idleCpuIx > 2) s_idleCpuIx = IDLE_CPU_DEFAULT;
     s_wakeOnAlert  = s_prefs.getBool("pwrWake", true);
+    // The old on/off switch carries over: a watch that had BUZZ off stays off.
+    s_buzzMode     = s_prefs.getUChar("buzzMode", s_prefs.getBool("buzz", true) ? 2 : 0);
+    if (s_buzzMode > 3) s_buzzMode = 2;
+    s_steady       = s_prefs.getBool("steady", false);
+    s_radioDutyIx  = s_prefs.getUChar("pwrRadio", RADIO_DUTY_DEFAULT);
+    if (s_radioDutyIx >= RADIO_DUTY_N) s_radioDutyIx = RADIO_DUTY_DEFAULT;
+    // The T-Watch's BUZZ (haptics on an alert) already owns "buzz", and with
+    // the opposite default, so the CrowPanel's buzzer keeps its own key.
+    s_buzzer       = s_prefs.getBool("buzzer", false);
     s_lightOn      = s_prefs.getBool("ltOn", true);
     s_lightAlerts  = s_prefs.getBool("ltAlert", true);
     s_lightMsgs    = s_prefs.getBool("ltMsg", true);
@@ -299,7 +441,10 @@ void load() {
     s_banter       = s_prefs.getUChar("banter", 2);
     if (s_banter > 3) s_banter = 2;
     s_lightColor   = s_prefs.getUChar("ltColor", 0);
-    s_lightBright  = s_prefs.getUChar("ltBright", 2);
+    // v1.25 adds two dimmer levels below the original five. A new key keeps
+    // the actual output of an existing saved level unchanged.
+    if (s_prefs.isKey("ltBri7")) s_lightBright = s_prefs.getUChar("ltBri7", 4);
+    else                         s_lightBright = (uint8_t)(s_prefs.getUChar("ltBright", 2) + 2);
     // On by default since v1.7.7: a squad member can only ever make this board
     // install a signed release newer than the one it runs, with a countdown
     // and SKIP, and the trust is the phrase they already hold. Off is for
@@ -313,7 +458,7 @@ void load() {
     Clock::applyZone(s_timeZone);
     if (s_lightIdle > 2)                 s_lightIdle = 1;
     if (s_lightColor >= LIGHT_COLOR_N)   s_lightColor = 0;
-    if (s_lightBright < 1 || s_lightBright > 5) s_lightBright = 2;
+    if (s_lightBright < 1 || s_lightBright > 7) s_lightBright = 4;
     // A saved index from a build with more steps than this one must not walk
     // off the end of the table.
     if (s_scrTimeoutIx >= SCREEN_TIMEOUTS_N) s_scrTimeoutIx = 2;
@@ -519,7 +664,7 @@ void cycleLightColor() {
     else                         s_lightColor++;
     s_prefs.putUChar("ltColor", s_lightColor);
 }
-void cycleLightBrightness() { s_lightBright = (uint8_t)(s_lightBright % 5 + 1);          s_prefs.putUChar("ltBright", s_lightBright); }
+void cycleLightBrightness() { s_lightBright = (uint8_t)(s_lightBright % 7 + 1);          s_prefs.putUChar("ltBri7", s_lightBright); }
 bool remoteUpdate()         { return s_remoteUpdate; }
 void toggleRemoteUpdate()   { s_remoteUpdate = !s_remoteUpdate; s_prefs.putBool("rmtUpd", s_remoteUpdate); }
 bool phraseShown()          { return s_phraseShown; }
@@ -543,7 +688,7 @@ void setTimeZone(uint8_t i) {
 // chosen: only THIS IS RIGHT, the row's own tap, or the flasher does that.
 void cycleTimeZone()     { stepTimeZone(1); markTimeZoneChosen(); }
 void stepTimeZone(int dir) {
-    s_timeZone = (uint8_t)((s_timeZone + Clock::zoneCount() + dir) % Clock::zoneCount());
+    s_timeZone = Clock::zoneStep(s_timeZone, dir);
     s_prefs.putUChar("tz", s_timeZone);
     Clock::applyZone(s_timeZone);
 }
@@ -562,7 +707,20 @@ void toggleBoringMode() {
     }
 }
 
+bool glitchEffects() { return s_glitchEffects; }
+void toggleGlitchEffects() {
+    s_glitchEffects = !s_glitchEffects;
+    s_prefs.putBool("glitchfx", s_glitchEffects);
+}
+
+bool ambientLight() { return s_ambientLight; }
+void toggleAmbientLight() { s_ambientLight=!s_ambientLight; s_prefs.putBool("ldr",s_ambientLight); }
 uint8_t brightness() { return s_brightness; }
+uint8_t displayMhz() { return s_displayMhz; }
+void cycleDisplayMhz() {
+    s_displayMhz = s_displayMhz==40?80:40;
+    s_prefs.putUChar("dispMHz",s_displayMhz);
+}
 
 void adjustBrightness(int8_t delta) {
     int16_t v = (int16_t)s_brightness + delta;
@@ -588,9 +746,20 @@ const char* alertSecondsLabel() {
 
 Confidence minConfidence() { return s_minConf; }
 
+// On the watch, POWER SAVER holds AUTO SNOOZE at five at most. Every alert
+// lights the screen and buzzes, and a night of two Ring cameras coming back
+// every two and a half minutes was about ninety of them: most of a battery.
+#if defined(TWATCH_S3)
+static bool autoQuietForced() { return s_powerSaver && (s_autoQuiet == 0 || s_autoQuiet > 5); }
+uint8_t autoQuietAfter() { return autoQuietForced() ? 5 : s_autoQuiet; }
+#else
 uint8_t autoQuietAfter() { return s_autoQuiet; }
+#endif
 
 const char* autoQuietLabel() {
+#if defined(TWATCH_S3)
+    if (autoQuietForced()) return "SAVER 5";
+#endif
     switch (s_autoQuiet) {
         case 5:  return "AFTER 5";
         case 10: return "AFTER 10";
@@ -770,3 +939,13 @@ uint8_t enabledTypeCount() {
 
 }
 
+
+// Hook used only by the pinned 2.8-inch CYD display-write drivers.
+extern "C" uint32_t dnsp_display_write_hz() { return uint32_t(Settings::displayMhz())*1000000UL; }
+
+namespace Settings {
+void prepareGiftDisplay() {
+    s_rotation=DEFAULT_ROTATION;s_rotationLocked=true;s_colorChecked=false;
+    s_prefs.putUChar("rot",s_rotation);s_prefs.putBool("rotlock",true);s_prefs.putBool("colorchk",false);
+}
+}

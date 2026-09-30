@@ -9,6 +9,8 @@
 #include "signatures.h"   // Confidence
 
 namespace Settings {
+    bool ambientLight();
+    void toggleAmbientLight();
     enum class Background : uint8_t {
         DIGITAL = 0, STARFIELD = 1, TOASTERS = 2,
         AQUARIUM = 3, TERMINAL = 4, FIREFLIES = 5,
@@ -111,6 +113,7 @@ namespace Settings {
     // has ever been completed -- gates whether it auto-shows right
     // after the boot splash. Settings' own "CHECK COLORS" row can
     // re-enter that screen on demand afterward regardless of this.
+    void       prepareGiftDisplay(); // next gift boot repeats panel checks without erasing data
     bool       colorChecked();
     void       markColorChecked();
 
@@ -149,9 +152,18 @@ namespace Settings {
     bool       boringMode();
     void       toggleBoringMode();
 
+    // Cosmetic signal-corruption effects. Turning this off is an
+    // accessibility promise: no incidental screen tears, static, jitter or
+    // colour ghosts are drawn anywhere. Reward celebrations still run, but
+    // use their clean animation path.
+    bool       glitchEffects();
+    void       toggleGlitchEffects();
+
     // 32..255 — floor keeps the backlight from going fully dark and
     // unreadable via the settings screen itself.
     uint8_t    brightness();
+    uint8_t displayMhz();
+    void cycleDisplayMhz();
     void       adjustBrightness(int8_t delta);   // clamps, persists
 
     // ---- POWER SAVER -----------------------------------------------------
@@ -196,11 +208,61 @@ namespace Settings {
     uint16_t   cpuMhz();
     void       cycleCpuMhz();
 
+    // The watch's two battery knobs, both only while POWER SAVER is on.
+    // BLE LISTEN: how much of each 100 ms the Bluetooth receiver is open,
+    // 25, 50 or 75 percent. The receiver is the watch's whole battery story
+    // (about 100 mA whenever it is open), and a tracker announcing itself
+    // every second or two is still caught within seconds at 25. Off the
+    // watch this reads 75, the window every board has always run.
+    uint8_t    bleListen();
+    uint8_t    bleListenRaw();
+    void       cycleBleListen();
+    // SLEEP CPU: the core clock while the screen is asleep, 80, 160 or 240.
+    // The screen-on clock is CPU CLOCK above; this one never goes above it.
+    uint16_t   idleCpuMhz();
+    uint16_t   idleCpuMhzRaw();
+    void       cycleIdleCpu();
+
     // Whether an alert pulls the backlight back up. On by default: a
     // detector that dims itself and then hides the alert it just found is
     // worse than useless.
     bool       wakeOnAlert();
     void       toggleWakeOnAlert();
+    // The T-Watch's buzz on an alert (the DRV2605 haptic motor). Kept on
+    // every board so the settings file reads the same; only the watch has
+    // a motor to use it.
+    // One row: OFF, HIGH, MED, LOW. buzz() is "not OFF"; buzzStrength() is
+    // 0 LOW, 1 MED, 2 HIGH, which picks the motor driver's effect library
+    // (1 is meant for a 1.3 V motor, 2 for a 3 V one -- the watch's is 3 V),
+    // the patterns, and at HIGH lifts the drive clamp a little too.
+    bool       buzz();
+    uint8_t    buzzStrength();
+    const char* buzzModeName();
+    void       cycleBuzz();
+    // STEADY POWER on the watch: the power chip's DC1, which feeds the
+    // ESP32 and its radio, held in PWM instead of dropping to PFM at light
+    // load. A test for the deaf radios: PFM ripple is the kind of noise a
+    // receiver hears first. Off by default; costs a few mA.
+    bool       steadyPower();
+    void       toggleSteadyPower();
+
+    // The watch's radio duty cycle; see RADIO_DUTY_NAMES in settings.cpp.
+    // 0 when the saver is off. Watch only.
+    uint8_t     radioDuty();
+    uint8_t     radioDutyRaw();
+    const char* radioDutyName(uint8_t ix);
+    void        cycleRadioDuty();
+
+    // ---- BUZZER ----------------------------------------------------------
+    // The CrowPanel 7's buzzer, behind the helper MCU that runs its backlight.
+    // OFF by default, and ON means one chirp for a device this board has not
+    // logged before, at the moment the alert goes up -- never for one coming
+    // back, never with the screen dimmed, never at night. The rules live with
+    // the hook in main.cpp (alertMayInterrupt); this is only the switch.
+    // Boards without a buzzer never show the row; the value is kept on all
+    // of them so a saved preference travels, the way the light's knobs do.
+    bool        buzzerOn();
+    void        toggleBuzzer();
 
     // ---- STATUS LIGHT ----------------------------------------------------
     // The RGB LED on the back of the 2.8" CYD. See status_light.h for the
@@ -228,7 +290,7 @@ namespace Settings {
     uint8_t     lightColor();            // 0 THEME, 1..9 fixed colours, 10 BACKGROUND
     void        cycleLightColor();
     const char* lightColorName();
-    uint8_t     lightBrightness();       // 1..5, caps everything
+    uint8_t     lightBrightness();       // 1..7, caps everything
     void        cycleLightBrightness();
 
     // REMOTE UPDATE: whether a squad update nudge over SquachMesh may start
@@ -282,6 +344,7 @@ namespace Settings {
     // ALERT screen before it has to earn the next one by coming CLOSER.
     // 0 is off. Nothing is actually silenced -- see Detection::quietBar --
     // which matters on a device whose job is telling you what is near you.
+    // On the watch, POWER SAVER makes it five at most.
     uint8_t     autoQuietAfter();
     void        cycleAutoQuiet();
     const char* autoQuietLabel();
@@ -413,4 +476,3 @@ namespace Settings {
     uint8_t  huntProgress(Hunt h);
     void     setHuntProgress(Hunt h, uint8_t v);   // writes only on a change
 }
-

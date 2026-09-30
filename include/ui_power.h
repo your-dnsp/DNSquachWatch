@@ -22,6 +22,9 @@ enum class PowerRow : uint8_t {
     IDLE_AFTER,
     CPU_CLOCK,
     WAKE_ON_ALERT,
+#if defined(TWATCH_S3)
+    RADIO_DUTY,     // the watch only; also on the WATCH group in settings
+#endif
     COUNT,
     NONE = 255
 };
@@ -42,3 +45,4 @@ void uiPowerScroll(int delta);          // positive = scroll down
 // TFT_eSPI& because row height depends on real font metrics -- same
 // reasoning as ui_settings.cpp and ui_detfilter.cpp.
 PowerRow uiPowerHitTest(TFT_eSPI& t, int x, int y, int screenW, int screenH);
+

@@ -75,3 +75,4 @@ static const int8_t VOID_SPOKE[VOID_SPOKE_N][4] = {
     {    0,  -13,    0,  -31 },
     {    9,   -9,   22,  -22 },
 };
+

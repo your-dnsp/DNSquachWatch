@@ -1,14 +1,9 @@
 // SquachWatch-CYD — which rows are actually being drawn right now.
 //
-// The 3.5" is the only board that cannot hold a whole frame in RAM. It draws
-// its 480x320 screen as two 480x160 bands: one half-height sprite, filled and
-// pushed at the top of the panel, then filled again and pushed halfway down.
-// Both passes run the entire screen's drawing code. The sprite's viewport
-// throws away whatever lands outside the band, so the picture is right -- but
-// it is thrown away one primitive at a time, after the work of asking for it.
-// Measured on the board, the second pass costs exactly what the first does:
-// 10.1 / 8.6 ms on FIREFLIES, 22.8 / 21.8 on the aquarium. Half the drawing
-// on that board is for rows the pass cannot reach.
+// CYD builds use one half-height RGB332 sprite, painting and pushing it
+// twice. The sprite viewport preserves full-screen coordinates and clips
+// each pass to the rows it owns. The hints below avoid painting work that
+// cannot reach those rows; animation state still advances once per frame.
 //
 // This is the row range the current pass can reach, in panel coordinates, so
 // that a block of drawing can decline in one call instead of being clipped a
@@ -18,17 +13,14 @@
 // anything else read after the frame are computed either way -- only the
 // painting is skipped.
 //
-// On every other board there is one pass over a full-height sprite, so the
-// band is the whole screen and no block would ever be skipped. Rather than
-// leave a live comparison in those builds' hot loops, has() compiles to
-// `true` there and the guards vanish -- verified by building cyd-fast before
-// and after and byte-comparing the firmware.
+// Full-frame builds compile these hints to no-ops.
 #pragma once
+#include "frame_config.h"
 #include <Arduino.h>
 
 namespace DrawBand {
 
-#if defined(CYD35)
+#if SQW_BANDED_FRAME
 
 // Panel rows [y0, y1) that this pass can paint.
 extern int16_t g_y0, g_y1;
@@ -72,3 +64,4 @@ inline bool enabled()        { return false; }
 #endif
 
 }  // namespace DrawBand
+

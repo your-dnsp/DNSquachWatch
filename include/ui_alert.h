@@ -19,7 +19,11 @@ void uiAlertSetNight(bool night);
 // device -- and a board that goes quieter without saying so is the failure
 // this whole thing exists to avoid.
 void uiAlertSetLastFree(bool lastFree);
+// This alert is a spam flood's one announcement (see spam_watch.h): the card
+// says how many fakes so far, and that the rest of the flood stays quiet.
+void uiAlertSetSpam(bool spam, uint16_t fakes);
 // SNOOZE (this device, until restart), bottom centre between HUNT and MORE INFO.
+bool uiAlertHitSnoozeAll(int x, int y, int screenW, int screenH);
 bool uiAlertHitSnooze(int x, int y, int screenW, int screenH);
 // While the device is locked with ALERTS WHEN LOCKED at TYPE ONLY: the type
 // and the signal still show, the device's name, label and address do not.
@@ -35,7 +39,7 @@ void uiAlertSetRedacted(bool redacted);
 // behind the alert -- SPECTRUM is the one background that reads live
 // radio state. See ALERT_SHOW_BACKGROUND in the implementation.
 void uiAlertTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng,
-                 bool infoPending, const char* infoTypeName, const char* infoText);
+                 bool infoPending, const char* infoTypeName, const char* infoText, bool advance = true);
 bool uiAlertTouched();   // any touch since uiAlertInit
 
 // Hit test for the MORE INFO button -- meaningful any time ALERT is

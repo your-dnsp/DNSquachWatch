@@ -7,6 +7,7 @@
 #if __has_include(<esp_flash.h>)
 #include <esp_flash.h>
 #include <esp_partition.h>
+static_assert(sizeof(BlackBox::BattRecord) == 64, "BattRecord must be one 64-byte record");
 #define BB_ON_DEVICE 1
 #else
 #define BB_ON_DEVICE 0
@@ -19,7 +20,11 @@
 namespace BlackBox {
 namespace {
 
+#if defined(SQW_S3) || defined(CROWPANEL7)
+const uint32_t BASE    = 0x810000;   // the gap after app1; partitions_twatch.csv (both SQW_S3 boards) and partitions_crowpanel7.csv, the same 16 MB shape
+#else
 const uint32_t BASE    = 0x3D0000;   // the gap after app1; see partitions_ota.csv
+#endif
 const uint32_t SECTOR  = 4096;
 const uint8_t  SECTORS = 32;
 const uint32_t SIZE    = SECTORS * SECTOR;
@@ -32,6 +37,7 @@ const uint8_t  FORMAT  = 2;   // 2: a boot record keeps a whole version string
 const uint8_t KIND_BOOT  = 1;
 const uint8_t KIND_DET   = 2;
 const uint8_t KIND_CLEAR = 3;
+const uint8_t KIND_BATT  = 4;   // watch only; see BattRecord
 
 // ---- the flash itself ------------------------------------------------------
 // On the board, the chip. In the emulator, 128 KB of RAM that starts erased.
@@ -200,7 +206,15 @@ struct Ring {
 };
 
 Ring s_boots(KIND_BOOT, 0, 2);
+#if defined(TWATCH_S3)
+// Six sectors of battery samples: 378 of them, two and a half days at one
+// every ten minutes. Taken from the detection ring, which the watch's black
+// box starts empty anyway.
+Ring s_dets (KIND_DET, 2, 24);
+Ring s_batt (KIND_BATT, 26, 6);
+#else
 Ring s_dets (KIND_DET, 2, 30);
+#endif
 bool     s_ready     = false;
 uint16_t s_bootNo    = 1;
 uint16_t s_detKept   = 0;
@@ -240,6 +254,9 @@ bool begin() {
     if (!regionFree()) return false;
     s_boots.scan();
     s_dets.scan();
+#if defined(TWATCH_S3)
+    s_batt.scan();
+#endif
     s_ready = true;
 
     uint16_t newest = 0;
@@ -280,6 +297,31 @@ bool begin() {
 bool     ready()          { return s_ready; }
 uint16_t bootNumber()     { return s_bootNo; }
 uint16_t detectionsKept() { return s_detKept; }
+
+void noteBattery(BattRecord& r) {
+#if defined(TWATCH_S3)
+    if (!s_ready) return;
+    r.kind = KIND_BATT;
+    r.boot = s_bootNo;
+    s_batt.append((uint8_t*)&r);
+#else
+    (void)r;
+#endif
+}
+
+void forEachBattery(bool (*fn)(const BattRecord&, void*), void* ctx) {
+#if defined(TWATCH_S3)
+    if (!s_ready) return;
+    struct W { bool (*fn)(const BattRecord&, void*); void* ctx; } w = { fn, ctx };
+    s_batt.walk([](const uint8_t* p, void* c) {
+        if (p[0] != KIND_BATT) return true;
+        const W& w = *(const W*)c;
+        return w.fn(*(const BattRecord*)p, w.ctx);
+    }, &w);
+#else
+    (void)fn; (void)ctx;
+#endif
+}
 uint8_t  crashesKept()    { return s_crashes; }
 bool lastCrash(BootRecord& out) {
     if (!s_haveCrash) return false;
@@ -307,7 +349,7 @@ void noteDetection(const Detection& d, bool again) {
     r.kind    = KIND_DET;
     r.type    = (uint8_t)d.type;
     r.conf    = (uint8_t)d.conf;
-    r.flags   = again ? DET_AGAIN : 0;
+    r.flags   = (uint8_t)((again ? DET_AGAIN : 0) | DET_PRINTED);
     memcpy(r.mac, d.mac, 6);
     r.rssi    = d.rssi;
     r.channel = d.channel;
@@ -338,7 +380,11 @@ void forEachDetection(bool (*fn)(const DetRecord&, void*), void* ctx) {
         if (p[0] == KIND_CLEAR) return false;
         if (p[0] != KIND_DET) return true;
         const W& w = *(const W*)c;
-        return w.fn(*(const DetRecord*)p, w.ctx);
+        const DetRecord& r = *(const DetRecord*)p;
+        if (r.channel != 0 || (r.flags & DET_PRINTED)) return w.fn(r, w.ctx);
+        DetRecord fixed = r;
+        for (uint8_t i = 0; i < 6; i++) fixed.mac[i] = r.mac[5 - i];
+        return w.fn(fixed, w.ctx);
     }, &w);
 }
 
@@ -374,12 +420,25 @@ void forEachBoot(bool (*fn)(const BootRecord&, void*), void* ctx) {
     }, &w);
 }
 
+uint16_t readBoots(uint16_t from,uint16_t max,BootRecord* out){
+    if(!s_ready||!out||!max)return 0;
+    struct C{uint16_t skip,max,n;BootRecord* out;} c{from,max,0,out};
+    forEachBoot([](const BootRecord& r,void* p){C& c=*(C*)p;if(c.skip){--c.skip;return true;}c.out[c.n++]=r;return c.n<c.max;},&c);
+    return c.n;
+}
+uint16_t bootsKept(){
+    if(!s_ready)return 0;uint16_t n=0;forEachBoot([](const BootRecord&,void* p){uint16_t& n=*(uint16_t*)p;if(n<0xffff)++n;return true;},&n);return n;
+}
+
 void wipe() {
     if (!regionFree()) return;
     flashErase(0, SIZE);
     if (!s_ready) return;
     s_boots.scan();
     s_dets.scan();
+#if defined(TWATCH_S3)
+    s_batt.scan();
+#endif
     s_detKept = 0;
     s_crashes = 0;
     s_haveCrash = false;
@@ -408,7 +467,19 @@ void dump() {
         return true;
     }, nullptr);
     Serial.println("boot,epoch,up_s,type,mac,rssi,channel,hits,again,vendor,name");
-    forEachDetection([](const DetRecord& r, void*) {
+    // Everything the ring holds, CLR or not. The LOG screen stops at the mark
+    // a CLR leaves (a restart must not bring back what was cleared), but this
+    // is the record: it prints the mark as a line and carries on, so a
+    // morning cleared at lunch is still here to read (2026-09-26).
+    s_dets.walk([](const uint8_t* p, void*) {
+        if (p[0] == KIND_CLEAR) {
+            const DetRecord& c = *(const DetRecord*)p;
+            Serial.printf("# LOG CLEARED here (boot %u, epoch %lu): the rows below were hidden from the LOG screen\n",
+                          (unsigned)c.boot, (unsigned long)c.epoch);
+            return true;
+        }
+        if (p[0] != KIND_DET) return true;
+        const DetRecord& r = *(const DetRecord*)p;
         Serial.printf("%u,%lu,%lu,%s,%02x:%02x:%02x:%02x:%02x:%02x,%d,%u,%u,%u,%s,%s\n",
                       (unsigned)r.boot, (unsigned long)r.epoch, (unsigned long)r.upSec,
                       detectionTypeName((DetectionType)r.type),

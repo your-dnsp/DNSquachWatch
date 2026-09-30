@@ -103,3 +103,4 @@ inline bool write(const char* path, int width, int height, const uint8_t* rgb888
 }
 
 }  // namespace PngWriter
+

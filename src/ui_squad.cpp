@@ -296,3 +296,4 @@ const uint8_t* uiSquadSelectedMac()  { return s_n ? s_members[s_sel].mac : nullp
 const char*    uiSquadSelectedName() { return s_n ? memberName(s_members[s_sel].peer) : ""; }
 
 #endif // SQUACH_MESH
+

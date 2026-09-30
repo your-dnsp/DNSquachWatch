@@ -14,7 +14,7 @@
 
 using OtaCore::Fail;
 
-#if defined(CONFIG_BT_NIMBLE_ROLE_PERIPHERAL)
+#if CONFIG_BT_NIMBLE_ROLE_PERIPHERAL   // nimconfig.h defines it 1 or 0, never leaves it undefined
 
 namespace OtaBle {
 namespace {
@@ -398,7 +398,7 @@ uint32_t    pairingCode()   { return s_code; }
 
 }  // namespace OtaBle
 
-#else  // no Bluetooth server compiled in (cyd35)
+#else  // no Bluetooth server compiled in: the CYDs, see nimble_flags_cyd in platformio.ini
 
 namespace OtaBle {
 bool        available()     { return false; }
@@ -416,3 +416,4 @@ uint32_t    pairingCode()   { return 0; }
 }  // namespace OtaBle
 
 #endif
+

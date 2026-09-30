@@ -32,6 +32,65 @@ CYAN  = (0, 214, 214)
 # ---- the clips ----
 
 CLIPS = {
+    # v1.24.1 "Ghost Town": a hotfix with nothing new on screen -- the fix is
+    # the absence of phantom FLOCK rows, so the clip is the log as it should
+    # read, and Squachy at rest.
+    "ghost-town": [
+        ("log", 20, 30, [], {}, 1800, "NO MORE PHANTOM FLOCKS"),
+        ("clear", 200, 30, ["--noseed", "--bg", "3"], {}, 1800, "SAME SQUACHY. FEWER GHOSTS."),
+    ],
+    # v1.24.0 "Look Up": drones are really detected now (the page is the
+    # emulator's seeded aircraft, decoded), ignored devices wear a tag, and
+    # eighteen more time zones, shown on the zone card.
+    "look-up": [
+        ("log", 20, 40, ["--info", "7"], {}, 1800, "REAL DRONES SHOW UP NOW. PILOT INCLUDED."),
+        ("log", 20, 30, [], {}, 1400, "IGNORED DEVICES WEAR A TAG NOW"),
+        ("zonecard", 30, 20, [], {"SQUACHSIM_ZONE": "33"}, 1100, "18 MORE TIME ZONES. HELLO, BANGKOK."),
+        ("zonecard", 30, 20, [], {"SQUACHSIM_ZONE": "26"}, 1100, "HELLO, JOHANNESBURG."),
+        ("zonecard", 30, 20, [], {"SQUACHSIM_ZONE": "35"}, 1400, "HELLO, SEOUL."),
+    ],
+    # v1.23.0 "Locked On": the new watch-list alert. One scene per line
+    # Squachy says (they change every 7 s), each started a little after its
+    # line so the bubble has typed out and the sweep has come round.
+    "locked-on": [
+        ("watchalert", 20,  60, [], {}, 1200, "SOMETHING ON YOUR WATCH LIST IS BACK"),
+        ("watchalert", 250, 50, [], {}, 1200, "THE NEARER THE MIDDLE, THE NEARER TO YOU"),
+        ("watchalert", 460, 50, [], {}, 1600, "AND IT WAITS UNTIL YOU TAP. NO RUSH."),
+    ],
+    # v1.22.0 "Costume Drama": the wardrobe, redrawn. One outfit a scene on
+    # CLEAR, long enough for each one's moving part (the propeller, the
+    # headband, the blinking chest lights) to do its thing. Warm-up 200 so
+    # the "every outfit unlocked" bubble --outfit brings with it has gone.
+    "costume-drama": [
+        ("clear", 200, 16, ["--outfit", "1",  "--noseed", "--bg", "3"],  {}, 800, "THE TANOOKI SUIT. THE WHOLE SUIT."),
+        ("clear", 200, 16, ["--outfit", "3",  "--noseed", "--bg", "4"],  {}, 800, "TINFOIL HAT NOW HAS A PROPELLER. FOR SCIENCE."),
+        ("clear", 200, 16, ["--outfit", "4",  "--noseed", "--bg", "10"], {}, 800, "THE NINJA IS VISIBLE NOW. BAD NINJA."),
+        ("clear", 200, 16, ["--outfit", "5",  "--noseed", "--bg", "8"],  {}, 800, "THE S IS FOR SQUACHY. LAWYERS, RELAX."),
+        ("clear", 200, 16, ["--outfit", "6",  "--noseed", "--bg", "5"],  {}, 700, "TALL BRO. SAME, BUT TALLER."),
+        ("clear", 200, 16, ["--outfit", "7",  "--noseed", "--bg", "1"],  {}, 800, "THE SPACE SUIT HAS ARMS NOW"),
+        ("clear", 200, 16, ["--outfit", "8",  "--noseed", "--bg", "0"],  {}, 700, "GOTTA DETECT FAST"),
+        ("clear", 200, 16, ["--outfit", "9",  "--noseed", "--bg", "3"],  {}, 800, "A PIRATE HAT, NOT A TENT"),
+        ("clear", 200, 16, ["--outfit", "10", "--noseed", "--bg", "6"],  {}, 800, "THE WOLF PELT GREW PAWS"),
+        ("clear", 200, 16, ["--outfit", "11", "--noseed", "--bg", "2"],  {}, 800, "CHROME WING IS ACTUALLY CHROME"),
+        ("clear", 200, 16, ["--outfit", "12", "--noseed", "--bg", "1"],  {}, 900, "THE VOID BLINKS BACK"),
+    ],
+    # v1.21.0 "All Ears": the watch hears again, the buzz grew up, and the
+    # watch rows got a page. Shot on the watch's 240x240 like v1.20.0's; the
+    # emulator is not the watch build, so the page itself is the notes' to
+    # describe and the captions carry the story.
+    "all-ears": [
+        ("clear",  60, 36, ["--noseed", "--bg", "7"],  {}, 1600, "HE HEARS AGAIN. EVERY BOOT. WE CHECKED."),
+        ("alert",  30, 16, [],                          {}, 1600, "THE BUZZ GREW A BACKBONE. MED BY DEFAULT."),
+        ("clear",  60, 36, ["--noseed", "--bg", "10"], {}, 1500, "WORN ALL DAY. NOT ONE DEAF MINUTE."),
+    ],
+    # v1.20.0 "SquachWatch^2": he moves onto a wrist. Shot on the T-Watch S3's
+    # own 240x240 panel (see CLIP_SIZE). The emulator is not the watch build,
+    # so the corner clock and the WATCH settings are the notes' to describe.
+    "squachwatch-squared": [
+        ("clear",  60, 36, ["--noseed", "--bg", "7"],                                  {}, 1500, "SQUACHWATCH. ON A WATCH."),
+        ("clear",  60, 36, ["--peer", "3", "--peername", "POOTS", "--noseed", "--bg", "6"], {}, 1600, "SQUAD VISITS STAY PUT NOW"),
+        ("clear", 716, 32, ["--showoff", "--noseed", "--bg", "10"],                    {},  900, "240 BY 240. HE FITS. MOSTLY."),
+    ],
     # v1.19.1 "Crash Override": the WiFi update that finishes, the label he
     # reads now, and the shark suit that survives a visit.
     "crash-override": [
@@ -110,6 +169,8 @@ CLIPS = {
 # 1 there: 480x320 doubled is a 960-pixel GIF, which is more than the notes
 # embed at anyway.
 CLIP_SIZE = {
+    "all-ears":            (240, 240, 2),
+    "squachwatch-squared": (240, 240, 2),
     "the-big-screen": (480, 320, 1),
     "good-company":   (480, 320, 1),
 }

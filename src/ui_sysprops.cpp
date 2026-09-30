@@ -1,3 +1,5 @@
+#include "language.h"
+#include "crash_reports.h"
 // SquachWatch-CYD — SYSTEM PROPERTIES. See include/ui_sysprops.h.
 #include "ui_sysprops.h"
 #include "theme.h"
@@ -28,10 +30,12 @@ const int BTN_H   = 24;
 const int LINE    = 17;       // one font-2 line and a pixel of air
 const int SLOP    = 5;        // a fingertip is wider than a tab
 
-enum Tab : uint8_t { TAB_UPDATE = 0, TAB_NOTES = 1, TAB_BOARD = 2, TAB_N = 3 };
-const char* const TAB_NAME[TAB_N] = { "Update", "Notes", "Board" };
+enum Tab : uint8_t { TAB_UPDATE = 0, TAB_BOARD = 1, TAB_CREDITS = 2, TAB_N = 3 };
+const char* const TAB_NAME[TAB_N] = { "Update", "Board", "Credits" };
 
 uint8_t s_tab = TAB_UPDATE;
+int s_creditScroll = 0;
+int s_creditScrollMax = 0;
 
 struct Geom {
     int x, y, w, h;          // the window
@@ -70,8 +74,8 @@ Buttons buttons(TFT_eSPI& t, const Geom& g) {
     t.setTextSize(1);
     Buttons b;
     const int right = g.x + g.w - 6;
-    b.laterW = boldWidth(t, "Later") + 24;      if (b.laterW < 64) b.laterW = 64;
-    b.updW   = boldWidth(t, "Update now") + 24;
+    b.laterW = boldWidth(t, "Close") + 24;      if (b.laterW < 64) b.laterW = 64;
+    b.updW   = boldWidth(t, "Update") + 24;
     b.closeW = boldWidth(t, "Close") + 24;      if (b.closeW < 64) b.closeW = 64;
     b.laterX = right - b.laterW;
     b.updX   = b.laterX - 6 - b.updW;
@@ -198,79 +202,52 @@ void uptimeText(char* out, size_t n, uint32_t now) {
 // ---- the three panels -------------------------------------------------------
 
 void drawUpdateTab(TFT_eSPI& t, const Geom& g) {
-    int y = g.py + 6;
-    char buf[48];
-
-    // As the build stamped it: a release is "v1.10.1", a bench build carries
-    // the commit and "-dirty" after it, and both are the truth about what is
-    // running. Cut to what the panel holds rather than dressed up.
-    row(t, g, y, "Running", "DNSP v0.7-draft", Theme::W95_DKSHADOW, true);
-    y += LINE;
-
-    const char* name = OtaCore::releaseName();
-    if (name[0]) snprintf(buf, sizeof buf, "v%s  %s", OtaCore::availableVersion(), name);
-    else         snprintf(buf, sizeof buf, "v%s", OtaCore::availableVersion());
-    row(t, g, y, "Available", buf, NAVY, true);
-    y += LINE;
-
-    const char* from = OtaCore::availableFrom();
-    if (from[0]) snprintf(buf, sizeof buf, "%s's board", from);
-    else         snprintf(buf, sizeof buf, "squachwatch.com");
-    row(t, g, y, "Heard from", buf, Theme::W95_DKSHADOW, true);
-    y += LINE + 5;
-
-    const int cb = checkboxY(g);
-    para(t, g.px + 8, y, g.pw - 16, cb - 3,
-         "Upstream updates replace DNSP custom firmware. Reinstall using a DNSP image from your-dnsp.");
-
-    checkbox(t, g.px + 8, cb, Settings::updateCheck(), "Look for updates every boot");
-}
-
-void drawNotesTab(TFT_eSPI& t, const Geom& g) {
-    int y = g.py + 6;
-    const int limit = g.py + g.ph - 3;
-    char buf[48];
-    const char* name = OtaCore::releaseName();
-    if (name[0]) snprintf(buf, sizeof buf, "v%s  \"%s\"", OtaCore::availableVersion(), name);
-    else         snprintf(buf, sizeof buf, "v%s", OtaCore::availableVersion());
-    char head[48];
-    fit(t, buf, g.pw - 16, head, sizeof head);
-    text(t, g.px + 8, y, head, NAVY);
-    y += LINE + 4;
-
-    const uint8_t n = OtaCore::newsCount();
-    if (!n) {
-        // Nothing came with it, and saying so is better than an empty box.
-        // A squad member's hello carries a version and nothing else, and a
-        // release made before the site started sending its lines has none.
-        para(t, g.px + 8, y, g.pw - 16, limit,
-             OtaCore::availableFrom()[0]
-                 ? "A squad member had this one, and a hello carries no notes. What changed is on the site."
-                 : "The site sent no notes with this one. What changed is on the site.");
-        return;
-    }
-    // One bullet a line, each wrapped under its own dash.
-    const int dash = t.textWidth("- ");
-    for (uint8_t i = 0; i < n && y + 16 <= limit; i++) {
-        text(t, g.px + 8, y, "-");
-        y = para(t, g.px + 8 + dash, y, g.pw - 16 - dash, limit, OtaCore::newsAt(i));
-        y += 2;
-    }
+    int count=0;const int visible=(g.ph-LINE-12)/LINE;
+    auto add=[&](const char* paragraph){
+        char lines[10][48];int n=Theme::wrapText(t,paragraph,g.pw-26,lines,10);
+        for(int i=0;i<n;++i,++count)
+            if(count>=s_creditScroll&&count<s_creditScroll+visible)
+                text(t,g.px+8,g.py+5+(count-s_creditScroll)*LINE,lines[i],Theme::BLACK);
+    };
+    add("Original SquachWatch base: 1.25.0");
+    const char* version=OtaCore::availableVersion();char line[100];
+    snprintf(line,sizeof line,"Latest original release heard: %s",version[0]?version:"not checked / none known");add(line);
+    const char* source=OtaCore::availableFrom();
+    snprintf(line,sizeof line,"Source: %s",!version[0]?"none this boot":source[0]?source:"squachwatch.com");add(line);
+    add("Current DNSP firmware: v1.1.2");
+    add("Based on SquachWatch v1.25.0.");
+    add("Last flash date: unknown (USB flashing does not record it).");
+    add("The system is running custom firmware by DNSP. Updating from SquachWatch directly will remove the customizations.");
+    add("If you need a newer DNSP firmware update, contact dnsp@duck.com.");
+    add("For a saved firmware copy, open Storage & Recovery > Backup & Restore. Data Help checks whether a completed backup is present.");
+    s_creditScrollMax=count>visible?count-visible:0;
+    if(s_creditScroll>s_creditScrollMax)s_creditScroll=s_creditScrollMax;
+    if(s_creditScrollMax){int track=visible*LINE,thumb=track*visible/count;if(thumb<6)thumb=6;
+        t.fillRect(g.px+g.pw-9,g.py+5,4,track,Theme::W95_SHADOW);
+        t.fillRect(g.px+g.pw-9,g.py+5+(track-thumb)*s_creditScroll/s_creditScrollMax,4,thumb,NAVY);}
+    checkbox(t,g.px+8,checkboxY(g),Settings::updateCheck(),"Check at boot");
 }
 
 void drawBoardTab(TFT_eSPI& t, const Geom& g) {
     int y = g.py + 6;
     char buf[48];
 
-    row(t, g, y, "Build", OtaCore::buildName());
+    snprintf(buf,sizeof buf,"%s-%uMHz",
+#if defined(ILI9341_DRIVER)
+    "ILI9341",
+#else
+    "ST7789",
+#endif
+    Settings::displayMhz());
+    row(t, g, y, "Display", buf);
     y += LINE;
 
     snprintf(buf, sizeof buf, "%s  %s", OtaCore::runningSlot(), OtaCore::runningVersion());
-    row(t, g, y, "This slot", buf);
+    row(t, g, y, "Installed", "DNSP v1.1.2");
     y += LINE;
 
     const char* other = OtaCore::otherVersion();
-    row(t, g, y, "Other slot", other && other[0] ? other : "nothing to go back to");
+    row(t, g, y, "Fallback", other && other[0] ? other : "nothing to go back to");
     y += LINE;
 
     uptimeText(buf, sizeof buf, millis());
@@ -288,8 +265,11 @@ void drawBoardTab(TFT_eSPI& t, const Geom& g) {
 
 }  // namespace
 
+void uiSysPropsShowBoard(){s_tab=TAB_BOARD;}
+void uiSysPropsShowCredits(){s_tab=TAB_CREDITS;s_creditScroll=0;s_creditScrollMax=0;}
 void uiSysPropsInit(TFT_eSPI& t) {
     s_tab = TAB_UPDATE;
+    s_creditScroll = 0;
     OtaCore::refreshOther();     // the BOARD tab reads the other slot
     t.fillRect(0, 0, t.width(), t.height(), Theme::BG);
 }
@@ -297,12 +277,8 @@ void uiSysPropsInit(TFT_eSPI& t) {
 void uiSysPropsTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool advance) {
     const int w = t.width(), h = t.height();
 
-    // The room carries on behind it, dimmed: the window is in front of the
-    // board, not instead of it.
-    Theme::Palette saved = Theme::dimPaletteForOverlay(150);
-    Theme::drawActiveBackground(t, now, 0, h, eng, advance);
-    Theme::restorePalette(saved);
-    Theme::dimRegion(t, 0, 0, w, h, 130);
+    (void)now;(void)eng;(void)advance;
+    t.fillRect(0,0,w,h,Theme::BG);
 
     const Geom g = geom(t);
     const Buttons b = buttons(t, g);   // also switches to font 2
@@ -340,18 +316,39 @@ void uiSysPropsTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool 
     t.fillRect(g.x + 5 + s_tab * g.tabW, g.py, g.tabW - 2, 2, Theme::W95_FACE);
 
     if      (s_tab == TAB_UPDATE) drawUpdateTab(t, g);
-    else if (s_tab == TAB_NOTES)  drawNotesTab(t, g);
+    else if(s_tab==TAB_CREDITS) {
+        const char* credit = "Modified firmware by dnsprincess. Kudos to SquachWatch creator Talking Sasquach (YouTube) / skizzophrenic (GitHub). DNSP is responsible for custom changes and creative works, not the original creator. Original firmware: https://squachwatch.com/";
+        char lines[16][48];
+        const int count = Theme::wrapText(t, credit, g.pw-26, lines, 16);
+        const int visible = (g.ph-10)/LINE;
+        s_creditScrollMax = count > visible ? count-visible : 0;
+        if (s_creditScroll > s_creditScrollMax) s_creditScroll = s_creditScrollMax;
+        for (int i=0; i<visible && i+s_creditScroll<count; ++i)
+            text(t,g.px+8,g.py+5+i*LINE,lines[i+s_creditScroll],Theme::BLACK);
+        if (s_creditScrollMax) {
+            const int track = g.ph-10;
+            const int thumb = track*visible/count;
+            t.fillRect(g.px+g.pw-10,g.py+5,5,track,Theme::W95_SHADOW);
+            t.fillRect(g.px+g.pw-10,g.py+5+(track-thumb)*s_creditScroll/s_creditScrollMax,5,thumb,NAVY);
+        }
+    }
     else                          drawBoardTab(t, g);
 
     // The buttons. UPDATE NOW only where it belongs -- a button that acts on
     // the other tabs' content would be a button that means different things
     // in different places.
     if (s_tab == TAB_UPDATE) {
-        boldButton(t, b.laterX, g.btnY, b.laterW, BTN_H, "Later");
-        boldButton(t, b.updX, g.btnY, b.updW, BTN_H, "Update now");
+        boldButton(t,g.px+2,g.btnY,28,BTN_H,"^");
+        boldButton(t,g.px+34,g.btnY,28,BTN_H,"v");
+        boldButton(t, b.laterX, g.btnY, b.laterW, BTN_H, "Close");
+        boldButton(t, b.updX, g.btnY, b.updW, BTN_H, "Update");
         // The default button, the one a keyboard would have focused.
         t.drawRect(b.updX - 2, g.btnY - 2, b.updW + 4, BTN_H + 4, Theme::W95_DKSHADOW);
     } else {
+        if (s_tab == TAB_CREDITS) {
+            boldButton(t, g.px+4, g.btnY, 54, BTN_H, "Up");
+            boldButton(t, g.px+62, g.btnY, 62, BTN_H, "Down");
+        }
         boldButton(t, b.closeX, g.btnY, b.closeW, BTN_H, "Close");
     }
     // Every other screen assumes the small face.
@@ -371,9 +368,14 @@ SysPropsHit uiSysPropsTouch(TFT_eSPI& t, int x, int y) {
     if (in(x, y, cx, g.y + 5, 16, TITLE_H - 4)) return SysPropsHit::CLOSE;
 
     for (uint8_t i = 0; i < TAB_N; i++)
-        if (in(x, y, g.x + 4 + i * g.tabW, g.tabY - 2, g.tabW, TAB_H + 4)) { s_tab = i; return SysPropsHit::NONE; }
+        if (in(x, y, g.x + 4 + i * g.tabW, g.tabY - 2, g.tabW, TAB_H + 4)) { s_tab = i;s_creditScroll=0;s_creditScrollMax=0; return SysPropsHit::NONE; }
 
+    if (s_tab == TAB_CREDITS) {
+        if (x>=g.px+2 && x<g.px+60 && y>=g.btnY-5 && y<g.btnY+BTN_H+5) { uiSysPropsScroll(-1); return SysPropsHit::NONE; }
+        if (x>=g.px+60 && x<g.px+126 && y>=g.btnY-5 && y<g.btnY+BTN_H+5) { uiSysPropsScroll(1); return SysPropsHit::NONE; }
+    }
     if (s_tab == TAB_UPDATE) {
+        if(y>=g.btnY&&y<g.btnY+BTN_H&&x>=g.px&&x<g.px+64){uiSysPropsScroll(x<g.px+32?-1:1);return SysPropsHit::NONE;}
         if (in(x, y, b.laterX, g.btnY, b.laterW, BTN_H)) return SysPropsHit::CLOSE;
         if (in(x, y, b.updX, g.btnY, b.updW, BTN_H))     return SysPropsHit::UPDATE_NOW;
         // The checkbox, and its words: a label you can tap is the difference
@@ -385,3 +387,10 @@ SysPropsHit uiSysPropsTouch(TFT_eSPI& t, int x, int y) {
     return SysPropsHit::NONE;
 }
 
+
+void uiSysPropsScroll(int rows) {
+    if (s_tab != TAB_CREDITS && s_tab != TAB_UPDATE) return;
+    s_creditScroll += rows;
+    if (s_creditScroll < 0) s_creditScroll = 0;
+    if (s_creditScroll > s_creditScrollMax) s_creditScroll = s_creditScrollMax;
+}

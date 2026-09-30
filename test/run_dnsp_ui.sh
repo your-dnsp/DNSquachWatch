@@ -11,3 +11,7 @@ SQUACHSIM_NVS="$fixture_dir/portrait" SQUACHSIM_ROTATE=1 DNSP_UI_TEST=1 DNSP_UI_
 
 mkdir "$fixture_dir/reboot"
 SQUACHSIM_NVS="$fixture_dir/reboot" DNSP_UI_TEST=1 DNSP_TEST_REBOOT=1 "$project_dir/sim/squachsim-live"
+
+# Compare full-frame and half-frame painting at fixed state in both orientations.
+mkdir "$fixture_dir/banded"
+SQUACHSIM_NVS="$fixture_dir/banded" DNSP_BAND_TEST=1 "$project_dir/sim/squachsim-live"

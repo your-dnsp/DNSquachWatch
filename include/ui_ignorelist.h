@@ -22,3 +22,4 @@ void uiIgnoreListScroll(int delta);   // positive = scroll down
 // deliberately muted. Needs a live TFT_eSPI& because row height comes
 // from real font metrics, same as every other row list here.
 uint8_t uiIgnoreListHitRemove(TFT_eSPI& t, int x, int y, int screenW, int screenH);
+

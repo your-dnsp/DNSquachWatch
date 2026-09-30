@@ -50,7 +50,7 @@ static void drawUfo(TFT_eSPI& t, uint32_t elapsed, uint32_t dur, int x0, int x1)
 
     // Faint pulsing light beam underneath, drawn first so the hull
     // paints over the top of it.
-    uint16_t beamCol = blend(BG, CYAN, 50 + (uint16_t)(20 * sinf((float)elapsed / 180.0f)));
+    uint16_t beamCol = blend(BG, CYAN, (uint16_t)(50.0f + 20.0f * sinf((float)elapsed / 180.0f)));
     t.fillTriangle(cx - 10, cy + 4, cx + 10, cy + 4, cx, cy + 22, beamCol);
 
     // Saucer hull + dome.
@@ -162,3 +162,4 @@ void tick(TFT_eSPI& t, uint32_t now, int x0, int y0, int x1, int y1, bool advanc
 }
 
 }  // namespace IdleEvents
+

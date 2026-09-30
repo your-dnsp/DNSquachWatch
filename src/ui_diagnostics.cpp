@@ -213,3 +213,4 @@ void uiDiagnosticsTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, co
     backButtonRect(w, h, bx, by, bw, bh);
     Theme::drawButton(t, bx, by, bw, bh, "[ BACK ]", false);
 }
+

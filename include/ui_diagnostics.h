@@ -110,3 +110,4 @@ void uiDiagnosticsTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, co
 
 // Single [ BACK ] button, same shape as the raw-scan screen's.
 bool uiDiagnosticsHitBack(int x, int y, int screenW, int screenH);
+

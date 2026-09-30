@@ -1,0 +1,503 @@
+{
+  "image_bytes": 1821552,
+  "largest_mapped_flash_symbols": [
+    {
+      "bytes": 31002,
+      "kind": "t",
+      "name": "_ZN7SquachyL8drawBodyER8TFT_eSPIiiijNS_4MoodEfbb$constprop$15"
+    },
+    {
+      "bytes": 28815,
+      "kind": "T",
+      "name": "loop()"
+    },
+    {
+      "bytes": 25966,
+      "kind": "d",
+      "name": "glyphBits"
+    },
+    {
+      "bytes": 15219,
+      "kind": "T",
+      "name": "Theme::drawSnowfall(TFT_eSPI&, unsigned int, int, int)"
+    },
+    {
+      "bytes": 12258,
+      "kind": "T",
+      "name": "_vfprintf_r"
+    },
+    {
+      "bytes": 11979,
+      "kind": "T",
+      "name": "_svfprintf_r"
+    },
+    {
+      "bytes": 11620,
+      "kind": "T",
+      "name": "Theme::drawStarfield(TFT_eSPI&, unsigned int, int, int)"
+    },
+    {
+      "bytes": 9345,
+      "kind": "T",
+      "name": "__ssvfscanf_r"
+    },
+    {
+      "bytes": 8909,
+      "kind": "t",
+      "name": "drawVisit(TFT_eSPI&, unsigned int, SquachMesh::Peer const*, int, int, bool, bool)"
+    },
+    {
+      "bytes": 8779,
+      "kind": "T",
+      "name": "Theme::drawGibson(TFT_eSPI&, unsigned int, int, int, DetectionEngine const&)"
+    },
+    {
+      "bytes": 8525,
+      "kind": "T",
+      "name": "Theme::drawAquarium(TFT_eSPI&, unsigned int, int, int)"
+    },
+    {
+      "bytes": 8523,
+      "kind": "T",
+      "name": "Squachy::tick(TFT_eSPI&, int, int, int, unsigned int, bool, float, bool, int, unsigned char)"
+    },
+    {
+      "bytes": 8362,
+      "kind": "T",
+      "name": "_vfiprintf_r"
+    },
+    {
+      "bytes": 8130,
+      "kind": "T",
+      "name": "_svfiprintf_r"
+    },
+    {
+      "bytes": 8081,
+      "kind": "T",
+      "name": "__ssvfiscanf_r"
+    },
+    {
+      "bytes": 7674,
+      "kind": "T",
+      "name": "Theme::drawFire(TFT_eSPI&, unsigned int, int, int)"
+    },
+    {
+      "bytes": 7100,
+      "kind": "T",
+      "name": "uiMeshComposeTick(TFT_eSPI&, unsigned int, DetectionEngine const&, bool)"
+    },
+    {
+      "bytes": 6271,
+      "kind": "T",
+      "name": "Theme::drawFlyingToasters(TFT_eSPI&, unsigned int, int, int)"
+    },
+    {
+      "bytes": 5814,
+      "kind": "T",
+      "name": "Theme::drawTypeIcon(TFT_eSPI&, DetectionType, int, int, int)"
+    },
+    {
+      "bytes": 5217,
+      "kind": "T",
+      "name": "uiDeskTick(TFT_eSPI&, unsigned int, DetectionEngine const&, bool)"
+    },
+    {
+      "bytes": 5168,
+      "kind": "d",
+      "name": "glyphs"
+    },
+    {
+      "bytes": 4540,
+      "kind": "T",
+      "name": "mbedtls_internal_sha1_process"
+    },
+    {
+      "bytes": 4096,
+      "kind": "d",
+      "name": "CAUSTIC_TILE"
+    },
+    {
+      "bytes": 4088,
+      "kind": "T",
+      "name": "tcp_input"
+    },
+    {
+      "bytes": 4030,
+      "kind": "T",
+      "name": "Theme::drawFireflies(TFT_eSPI&, unsigned int, int, int)"
+    },
+    {
+      "bytes": 3749,
+      "kind": "T",
+      "name": "nd6_input"
+    },
+    {
+      "bytes": 3558,
+      "kind": "T",
+      "name": "uiAlertTick(TFT_eSPI&, unsigned int, DetectionEngine const&, bool, char const*, char const*)"
+    },
+    {
+      "bytes": 3538,
+      "kind": "t",
+      "name": "mbedtls_sha512_software_process"
+    },
+    {
+      "bytes": 3465,
+      "kind": "T",
+      "name": "uiSettingsTick(TFT_eSPI&, unsigned int, DetectionEngine const&)"
+    },
+    {
+      "bytes": 3415,
+      "kind": "T",
+      "name": "TouchCal::runInteractive(TFT_eSPI&, bool (*)(short&, short&), unsigned char, TouchFit::Fit const*, short, unsigned short, unsigned short, unsigned short, TouchFit::Fit&)"
+    },
+    {
+      "bytes": 3393,
+      "kind": "T",
+      "name": "ieee80211_sta_new_state"
+    },
+    {
+      "bytes": 3312,
+      "kind": "T",
+      "name": "_strtod_l"
+    },
+    {
+      "bytes": 3276,
+      "kind": "d",
+      "name": "catalog"
+    },
+    {
+      "bytes": 3200,
+      "kind": "T",
+      "name": "_dtoa_r"
+    },
+    {
+      "bytes": 3132,
+      "kind": "t",
+      "name": "tcp_receive"
+    },
+    {
+      "bytes": 3042,
+      "kind": "T",
+      "name": "uiClearTick(TFT_eSPI&, unsigned int, DetectionEngine const&, bool, bool)"
+    },
+    {
+      "bytes": 3029,
+      "kind": "T",
+      "name": "Theme::drawClockBackdrop(TFT_eSPI&, unsigned int, int, int, int, int, unsigned char)"
+    },
+    {
+      "bytes": 2868,
+      "kind": "T",
+      "name": "setup()"
+    },
+    {
+      "bytes": 2828,
+      "kind": "T",
+      "name": "r_lld_con_start"
+    },
+    {
+      "bytes": 2787,
+      "kind": "T",
+      "name": "MeshTalk::tick(unsigned int)"
+    },
+    {
+      "bytes": 2661,
+      "kind": "t",
+      "name": "lmp_not_accepted_handler"
+    },
+    {
+      "bytes": 2631,
+      "kind": "T",
+      "name": "uiSquadTick(TFT_eSPI&, unsigned int, DetectionEngine const&, bool)"
+    },
+    {
+      "bytes": 2575,
+      "kind": "T",
+      "name": "uiPhoneTick(TFT_eSPI&, unsigned int, DetectionEngine const&, bool)"
+    },
+    {
+      "bytes": 2400,
+      "kind": "T",
+      "name": "Theme::drawSynthwave(TFT_eSPI&, unsigned int, int, int, float)"
+    },
+    {
+      "bytes": 2395,
+      "kind": "t",
+      "name": "visitTick(unsigned int)"
+    },
+    {
+      "bytes": 2394,
+      "kind": "T",
+      "name": "Theme::drawDigitalRain(TFT_eSPI&, unsigned int, int, int, bool)"
+    },
+    {
+      "bytes": 2371,
+      "kind": "T",
+      "name": "wpa_sm_rx_eapol"
+    },
+    {
+      "bytes": 2356,
+      "kind": "T",
+      "name": "hostap_recv_mgmt"
+    },
+    {
+      "bytes": 2286,
+      "kind": "T",
+      "name": "r_llm_le_adv_report_ind"
+    },
+    {
+      "bytes": 2270,
+      "kind": "T",
+      "name": "Pet::tick(TFT_eSPI&, unsigned int, int, int, int)"
+    },
+    {
+      "bytes": 2264,
+      "kind": "T",
+      "name": "FieldUI::draw(TFT_eSPI&, unsigned int, DetectionEngine const&)"
+    },
+    {
+      "bytes": 2191,
+      "kind": "T",
+      "name": "sta_recv_mgmt"
+    },
+    {
+      "bytes": 2160,
+      "kind": "T",
+      "name": "scan_parse_beacon"
+    },
+    {
+      "bytes": 2080,
+      "kind": "T",
+      "name": "OtaWifi::bootCheck(unsigned int)"
+    },
+    {
+      "bytes": 2080,
+      "kind": "t",
+      "name": "mbedtls_sha256_software_process"
+    },
+    {
+      "bytes": 2063,
+      "kind": "T",
+      "name": "uiUpdateTick(TFT_eSPI&, unsigned int, bool)"
+    },
+    {
+      "bytes": 2019,
+      "kind": "t",
+      "name": "uart_rx_intr_handler_default"
+    },
+    {
+      "bytes": 2018,
+      "kind": "t",
+      "name": "OtaWifi::(anonymous namespace)::run(void*)"
+    },
+    {
+      "bytes": 1962,
+      "kind": "T",
+      "name": "uiMeshPhraseTick(TFT_eSPI&, unsigned int, DetectionEngine const&, bool)"
+    },
+    {
+      "bytes": 1955,
+      "kind": "T",
+      "name": "uiBingoTick(TFT_eSPI&, unsigned int, DetectionEngine const&, bool)"
+    }
+  ],
+  "format_scan_symbols": [
+    {
+      "bytes": 12258,
+      "kind": "T",
+      "name": "_vfprintf_r"
+    },
+    {
+      "bytes": 11979,
+      "kind": "T",
+      "name": "_svfprintf_r"
+    },
+    {
+      "bytes": 9345,
+      "kind": "T",
+      "name": "__ssvfscanf_r"
+    },
+    {
+      "bytes": 8362,
+      "kind": "T",
+      "name": "_vfiprintf_r"
+    },
+    {
+      "bytes": 8130,
+      "kind": "T",
+      "name": "_svfiprintf_r"
+    },
+    {
+      "bytes": 8081,
+      "kind": "T",
+      "name": "__ssvfiscanf_r"
+    },
+    {
+      "bytes": 3312,
+      "kind": "T",
+      "name": "_strtod_l"
+    },
+    {
+      "bytes": 3200,
+      "kind": "T",
+      "name": "_dtoa_r"
+    },
+    {
+      "bytes": 306,
+      "kind": "T",
+      "name": "printf_decode"
+    },
+    {
+      "bytes": 200,
+      "kind": "T",
+      "name": "__wrap_log_printf"
+    },
+    {
+      "bytes": 179,
+      "kind": "T",
+      "name": "log_printfv"
+    },
+    {
+      "bytes": 162,
+      "kind": "T",
+      "name": "Print::printf(char const*, ...)"
+    },
+    {
+      "bytes": 151,
+      "kind": "t",
+      "name": "__sbprintf"
+    },
+    {
+      "bytes": 151,
+      "kind": "t",
+      "name": "__sbprintf"
+    },
+    {
+      "bytes": 113,
+      "kind": "T",
+      "name": "snprintf"
+    },
+    {
+      "bytes": 104,
+      "kind": "T",
+      "name": "siscanf"
+    },
+    {
+      "bytes": 104,
+      "kind": "T",
+      "name": "sscanf"
+    },
+    {
+      "bytes": 102,
+      "kind": "T",
+      "name": "_snprintf_r"
+    },
+    {
+      "bytes": 87,
+      "kind": "T",
+      "name": "sprintf"
+    },
+    {
+      "bytes": 86,
+      "kind": "T",
+      "name": "_siscanf_r"
+    },
+    {
+      "bytes": 86,
+      "kind": "T",
+      "name": "_sscanf_r"
+    },
+    {
+      "bytes": 86,
+      "kind": "T",
+      "name": "_vsnprintf_r"
+    },
+    {
+      "bytes": 72,
+      "kind": "T",
+      "name": "_sprintf_r"
+    },
+    {
+      "bytes": 66,
+      "kind": "t",
+      "name": "lib_printf$isra$0"
+    },
+    {
+      "bytes": 64,
+      "kind": "T",
+      "name": "printf"
+    },
+    {
+      "bytes": 56,
+      "kind": "T",
+      "name": "_printf_r"
+    },
+    {
+      "bytes": 52,
+      "kind": "T",
+      "name": "vprintf"
+    },
+    {
+      "bytes": 46,
+      "kind": "T",
+      "name": "_vprintf_r"
+    },
+    {
+      "bytes": 41,
+      "kind": "T",
+      "name": "vsnprintf"
+    },
+    {
+      "bytes": 40,
+      "kind": "T",
+      "name": "coexist_printf"
+    },
+    {
+      "bytes": 40,
+      "kind": "T",
+      "name": "log_printf"
+    },
+    {
+      "bytes": 40,
+      "kind": "T",
+      "name": "net80211_printf"
+    },
+    {
+      "bytes": 40,
+      "kind": "T",
+      "name": "phy_printf"
+    },
+    {
+      "bytes": 40,
+      "kind": "T",
+      "name": "sc_printf"
+    },
+    {
+      "bytes": 33,
+      "kind": "T",
+      "name": "vfiprintf"
+    },
+    {
+      "bytes": 33,
+      "kind": "T",
+      "name": "vfprintf"
+    },
+    {
+      "bytes": 27,
+      "kind": "T",
+      "name": "strtod"
+    },
+    {
+      "bytes": 24,
+      "kind": "T",
+      "name": "strtod_l"
+    },
+    {
+      "bytes": 23,
+      "kind": "T",
+      "name": "_strtod_r"
+    }
+  ],
+  "notes": "Symbol sizes are not guaranteed independently recoverable savings; image includes headers/padding/IRAM data. RAM peaks require hardware measurements."
+}

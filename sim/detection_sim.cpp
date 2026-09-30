@@ -30,6 +30,9 @@ bool DetectionEngine::shutdownTick(){return true;}
 void SdLog::logPressure(uint32_t, uint32_t) {}
 void SdLog::wipe() {}
 void SdLog::openDaily() {}
+bool SdLog::recoveryRemount() { return false; }
+bool SdLog::recoveryTest() { return false; }
+bool SdLog::recoveryFormat() { return false; }
 
 // ---- DetectionEngine -------------------------------------------------
 #if SQUACH_MESH
@@ -47,8 +50,9 @@ namespace MeshProbe {
 // sim/meshsim.cpp stands in for the radio underneath it.
 #endif
 
-bool DetectionEngine::init() { return true; }
-void DetectionEngine::loop() {}
+unsigned simEngineInitCalls=0,simEngineLoopCalls=0;
+bool DetectionEngine::init() { ++simEngineInitCalls;return true; }
+void DetectionEngine::loop() { ++simEngineLoopCalls; }
 // No radio, so nothing to restart and nothing freed.
 ScanFlushStats scanFlushStats() { return ScanFlushStats{ 0, 0, 0 }; }
 BootHeap bootHeap()             { return BootHeap{ 0, 0, 0, 0 }; }
@@ -60,6 +64,9 @@ uint32_t advertsSeen()          { return 0; }
 static const volatile uint32_t s_kinds0[5] = { 0, 0, 0, 0, 0 };
 const volatile uint32_t* advertKinds() { return s_kinds0; }
 void     setScanWindow(uint8_t) {}
+void     setScanWindowBase(uint8_t) {}
+void     setScanBoost(bool) {}
+void     setScanInterval(uint16_t, uint8_t) {}
 void     setScanPin(uint8_t)    {}
 
 void DetectionEngine::clearLog() {
@@ -88,8 +95,8 @@ void DetectionEngine::pushLog(const Detection& d) {
 }
 
 // Radio-fed entry points: inert here, nothing calls them in the sim.
-void DetectionEngine::postWiFi(const uint8_t*, int8_t, uint8_t, const char*, bool, bool) {}
-void DetectionEngine::postDeauth(const uint8_t*, int8_t, uint8_t) {}
+void DetectionEngine::postWiFi(const uint8_t*, int8_t, uint8_t, const char*, bool, bool, bool) {}
+void DetectionEngine::postDeauth(const DeauthFrameEvidence&) {}
 void DetectionEngine::postBle(Detection d) { if(!_stopping.load())pushLog(d); }
 
 // Not a stub. Everything else in this file is inert because it would need
@@ -194,4 +201,3 @@ void DetectionEngine::processDeauthQ() {}
 void DetectionEngine::expireStale() {}
 void DetectionEngine::hopChannel() {}
 void DetectionEngine::decayChannelActivity() {}
-

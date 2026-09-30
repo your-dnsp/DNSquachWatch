@@ -256,3 +256,4 @@ private:
     std::map<std::string, std::string> _s;
     std::map<std::string, int16_t>  _sh;
 };
+

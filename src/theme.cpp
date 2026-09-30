@@ -288,6 +288,12 @@ static int lockIconX(int w) {
     return rotateShown() ? (w - ROTATE_ICON_W - LOCK_ICON_W) : (w - LOCK_ICON_W);
 }
 
+int titleBarRightIconsX(int w) {
+    if (Security::enabled()) return lockIconX(w);
+    if (rotateShown()) return w - ROTATE_ICON_W;
+    return w;
+}
+
 static void drawLockIcon(TFT_eSPI& t, int w, int barH) {
     const int x0 = lockIconX(w);
     t.fillRect(x0, 0, LOCK_ICON_W, barH, BG);
@@ -854,7 +860,7 @@ void drawDigitalRain(TFT_eSPI& t, uint32_t now, int yStart, int yEnd, bool advan
     static const int  MINTRAIL = 17;      // averages ~21, just under the old flat 22
     // Ordered cool -> warm so that indexing them by depth gives distance:
     // violet sits at the back, pink at the front.
-    static const uint16_t HUES[4] = { VAPOR_PURPLE, CYAN, GREEN, VAPOR_PINK };
+    const uint16_t HUES[4] = { VAPOR_PURPLE, CYAN, GREEN, VAPOR_PINK };
     // One switch back to the old behaviour, where hue was rolled at random
     // per drop and had nothing to do with how far away it was.
     static const bool RAIN_DEPTH_HUE = true;
@@ -8588,7 +8594,7 @@ void drawSynthwave(TFT_eSPI& t, uint32_t now, int yTop, int yBottom,
 
 void drawGlitchText(TFT_eSPI& t, int y, const char* text,
                     uint16_t color, uint32_t now) {
-    int8_t jitter = (int8_t)((now / 150) % 3) - 1;  // -1, 0, +1
+    int8_t jitter = Settings::glitchEffects() ? (int8_t)((now / 150) % 3) - 1 : 0;
     int w = t.width();
     t.setTextSize(1);
     t.setTextColor(color, BG);
@@ -8598,7 +8604,7 @@ void drawGlitchText(TFT_eSPI& t, int y, const char* text,
 }
 
 void drawTransitionGlitch(TFT_eSPI& t, uint32_t elapsedMs, uint32_t totalMs) {
-    if (elapsedMs >= totalMs) return;
+    if (!Settings::glitchEffects() || elapsedMs >= totalMs) return;
     int w = t.width();
     int h = t.height();
     float fade = 1.0f - (float)elapsedMs / (float)totalMs;
@@ -8713,6 +8719,11 @@ static uint32_t glitchHash(uint32_t x) {
 // `now < s_glitchUntil` makes every later call in that same instant
 // see it's already armed instead of re-rolling.
 static bool updateGlitchState(uint32_t now) {
+    if (!Settings::glitchEffects()) {
+        s_glitchUntil = 0;
+        s_glitchNextAt = 0;
+        return false;
+    }
     if (s_glitchNextAt == 0) s_glitchNextAt = now + (uint32_t)random(5000, 10001);
     if (now >= s_glitchNextAt && now >= s_glitchUntil) {
         // Ambient, nobody-asked-for-it bursts always stay mild (level
@@ -8731,6 +8742,7 @@ bool glitchActive() {
 }
 
 void triggerGlitchBurst(uint8_t intensity) {
+    if (!Settings::glitchEffects()) return;
     if (intensity > 4) intensity = 4;
     uint32_t now = millis();
     s_glitchLevel  = intensity;
@@ -8747,7 +8759,7 @@ void drawGlitchStatic(TFT_eSPI& t, int x0, int y0, int x1, int y1) {
     if (!glitchActive()) return;
     int rw = x1 - x0, rh = y1 - y0;
     if (rw <= 0 || rh <= 0) return;
-    static const uint16_t SPECKLE_COLORS[] = {
+    const uint16_t SPECKLE_COLORS[] = {
         WHITE, CYAN, VAPOR_PINK, VAPOR_PURPLE, VAPOR_BLUE, PURPLE,
     };
     int speckleN = SPECKLE_N_BY_LEVEL[s_glitchLevel];
@@ -8944,7 +8956,7 @@ void drawClockBackdrop(TFT_eSPI& t, uint32_t now, int x, int y, int w, int h, ui
         // Digital rain: the same glyphs and the same depth colours as the
         // background, dimmed so the time stays the brightest thing.
         static const char GL[] = "01ABCDEFGHIJKLMNOPQRSTUVWXYZ!@#$%^&*<>{}[]/\\|+=~SASQUACH";
-        static const uint16_t HUE[3] = { VAPOR_PURPLE, CYAN, GREEN };
+        const uint16_t HUE[3] = { VAPOR_PURPLE, CYAN, GREEN };
         const int COL = 6, ROW = 8, TRAIL = 7;
         t.setTextSize(1);
         for (int c = 0; c * COL < w; c++) {
@@ -9206,36 +9218,48 @@ void drawBangersOutline(TFT_eSPI& t, int x, int y, const char* s, uint16_t color
 // moment the buffer itself would fill, independent of maxW); the wider
 // buffer just means that happens less often in the first place.
 uint8_t wrapText(TFT_eSPI& t, const char* text, int maxW,
-                 char lines[][48], uint8_t maxLines) {
-    // 320, not the original 160 -- fine for every short quip/bubble
-    // this ran on originally, but LOG's MORE INFO panel passes real
-    // paragraph-length explanations (the RSSI/confidence primer alone
-    // is ~290 chars), which strncpy was silently truncating before a
-    // single word ever got wrapped.
-    char buf[320];
-    strncpy(buf, text, sizeof(buf) - 1);
-    buf[sizeof(buf) - 1] = 0;
-
-    uint8_t n = 0;
-    char lineBuf[48] = "";
-    char* word = strtok(buf, " ");
-    while (word) {
-        char trial[48];
-        if (lineBuf[0]) snprintf(trial, sizeof(trial), "%s %s", lineBuf, word);
-        else            snprintf(trial, sizeof(trial), "%s", word);
-        bool tooWide = lineBuf[0] &&
-                       (t.textWidth(trial) > maxW || strlen(trial) >= sizeof(lineBuf) - 1);
-        if (tooWide) {
-            if (n >= maxLines - 1) break; // out of lines -- let the rest go rather than drop it silently
-            strncpy(lines[n], lineBuf, sizeof(lines[n]) - 1); lines[n][sizeof(lines[n]) - 1] = 0; n++;
-            strncpy(lineBuf, word, sizeof(lineBuf) - 1); lineBuf[sizeof(lineBuf) - 1] = 0;
-        } else {
-            strncpy(lineBuf, trial, sizeof(lineBuf) - 1); lineBuf[sizeof(lineBuf) - 1] = 0;
+                 char lines[][48], uint8_t maxLines, const char** remaining) {
+    const char* p = text ? text : "";
+    uint8_t n=0;
+    while (*p && (unsigned char)*p <= ' ') ++p;
+    while (*p && n<maxLines && maxW>0) {
+        const char* start=p;
+        const char* space=nullptr;
+        size_t used=0;
+        char trial[48] = {};
+        while (*p && *p!='\n') {
+            // Keep UTF-8 codepoints together, including when splitting a word.
+            size_t bytes=1;
+            while (p[bytes] && ((unsigned char)p[bytes]&0xc0)==0x80) ++bytes;
+            if (used+bytes>=sizeof trial) break;
+            memcpy(trial+used,p,bytes);trial[used+bytes]=0;
+            if (t.textWidth(trial)>maxW) { trial[used]=0; break; }
+            if (*p==' ') space=p;
+            used+=bytes;p+=bytes;
         }
-        word = strtok(nullptr, " ");
+        if (p==start) { // Width too small for even one glyph: don't loop forever.
+            if (remaining) *remaining=start;
+            return n;
+        }
+        if (*p && *p!='\n' && space && space>start) p=space;
+        size_t len=(size_t)(p-start);
+        while (len && (unsigned char)start[len-1]<=' ') --len;
+        memcpy(lines[n],start,len);lines[n][len]=0;++n;
+        while (*p && (unsigned char)*p<=' ') ++p;
     }
-    if (lineBuf[0] && n < maxLines) {
-        strncpy(lines[n], lineBuf, sizeof(lines[n]) - 1); lines[n][sizeof(lines[n]) - 1] = 0; n++;
+    if (remaining) *remaining=*p ? p : nullptr;
+    else if (*p && n) {
+        // Callers without continuation support must advertise truncation.
+        char* last=lines[n-1];size_t len=strlen(last);
+        while (true) {
+            if (len+3<48) {
+                memcpy(last+len,"...",4);
+                if (t.textWidth(last)<=maxW) break;
+            }
+            last[len]=0;
+            if (!len) { last[0]=0; break; }
+            --len;while (len && ((unsigned char)last[len]&0xc0)==0x80) --len;
+        }
     }
     return n;
 }
@@ -9333,4 +9357,3 @@ void drawInfoPanel(TFT_eSPI& t, int w, int h, uint32_t now,
 }
 
 }  // namespace Theme
-

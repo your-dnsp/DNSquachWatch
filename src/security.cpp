@@ -82,7 +82,9 @@ void begin() {
     if (s_len != 4 && s_len != 6 && s_len != 8) s_len = 4;
     if (s_prefs.getBytes("salt", s_salt, 8) != 8) s_enabled = false;
     if (s_prefs.getBytes("hash", s_hash, 32) != 32) s_enabled = false;
-    s_hasDuress = s_prefs.getBool("don", false) &&
+    // Do not silently upgrade an old, less destructive duress PIN. The user
+    // must read the new warning and set it again for the v0.9 wipe semantics.
+    s_hasDuress = s_enabled && s_prefs.getUChar("dver",0)==9 && s_prefs.getBool("don", false) &&
                   s_prefs.getBytes("dsalt", s_dsalt, 8) == 8 &&
                   s_prefs.getBytes("dhash", s_dhash, 32) == 32;
     s_lockAtBoot = s_prefs.getBool("boot", false);
@@ -126,7 +128,7 @@ bool setPin(const char* digits) {
 
 void disable() {
     s_prefs.remove("on"); s_prefs.remove("salt"); s_prefs.remove("hash");
-    s_prefs.remove("don"); s_prefs.remove("dsalt"); s_prefs.remove("dhash");
+    s_prefs.remove("don"); s_prefs.remove("dsalt"); s_prefs.remove("dhash"); s_prefs.remove("dver");
     s_prefs.remove("fails");
     s_enabled = false; s_hasDuress = false; s_locked = false; s_fails = 0;
 }
@@ -141,15 +143,18 @@ bool setDuress(const char* digits) {
     if (memcmp(h, s_hash, 32) == 0) return false;
     freshSalt(s_dsalt);
     hashPin(s_dsalt, digits, s_dhash);
-    s_prefs.putBytes("dsalt", s_dsalt, 8);
-    s_prefs.putBytes("dhash", s_dhash, 32);
-    s_prefs.putBool("don", true);
-    s_hasDuress = true;
-    return true;
+    s_hasDuress = false;
+    if(s_prefs.putBool("don",false)!=1 || s_prefs.putBytes("dsalt",s_dsalt,8)!=8 ||
+       s_prefs.putBytes("dhash",s_dhash,32)!=32 || s_prefs.putUChar("dver",9)!=1 ||
+       s_prefs.putBool("don",true)!=1)return false;
+    uint8_t salt[8],hash[32];
+    s_hasDuress = s_prefs.getBytes("dsalt",salt,8)==8 && s_prefs.getBytes("dhash",hash,32)==32 &&
+        !memcmp(salt,s_dsalt,8) && !memcmp(hash,s_dhash,32) && s_prefs.getBool("don",false) && s_prefs.getUChar("dver",0)==9;
+    return s_hasDuress;
 }
 
 void clearDuress() {
-    s_prefs.remove("don"); s_prefs.remove("dsalt"); s_prefs.remove("dhash");
+    s_prefs.remove("don"); s_prefs.remove("dsalt"); s_prefs.remove("dhash"); s_prefs.remove("dver");
     s_hasDuress = false;
 }
 
@@ -211,16 +216,12 @@ Check check(const char* digits, uint32_t now) {
     if (!s_enabled || !digits) return Check::WRONG;
     if (lockoutRemainingMs(now) > 0) return Check::WRONG;
 
-    if (s_hasDuress) {
+    if (s_locked && s_hasDuress) {
         uint8_t h[32];
         hashPin(s_dsalt, digits, h);
         if (memcmp(h, s_dhash, 32) == 0) {
-            // Wipe, then behave exactly like a correct unlock: no message, no
-            // delay. Whoever forced this sees an ordinary, empty SquachWatch.
-            wipeSecrets();
-            clearDuress();
-            s_fails = 0; s_prefs.putUChar("fails", 0);
-            s_locked = false;
+            // Recognition only. The caller must persist wipe intent before
+            // deleting any data. A failed journal write must leave us locked.
             return Check::DURESS;
         }
     }

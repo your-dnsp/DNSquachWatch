@@ -8,9 +8,10 @@ static Research::Record selected; static bool haveSelected=false;
 static const char* notes[]={"No note","Control location","Stationary observation","Moving observation","Camera visually nearby"};
 void open(){page=0;selection=0;confirmRaw=false;haveSelected=false;}
 // Wrap long URLs as well as prose; never silently discard a long word.
-static void text(TFT_eSPI& t,const char* msg,int y) {
+static void text(TFT_eSPI& t,const char* msg,int y,int bottom=0) {
+    if(!bottom)bottom=t.height()-40;
     const int maxW=t.width()-20;
-    while(*msg && y<t.height()-40) {
+    while(*msg && y+11<=bottom) {
         while(*msg==' ') ++msg;
         if(!*msg) break;
         char line[48]{};size_t n=0,lastSpace=0;
@@ -26,18 +27,36 @@ static void text(TFT_eSPI& t,const char* msg,int y) {
     }
 }
 
-void draw(TFT_eSPI& t,uint32_t){
+const char* modeLabel(){
+    auto s=Research::stats();bool currentRaw=(s.active||!Research::settled())?s.raw:raw;
+    return currentRaw?"CURRENT MODE: RAW":"CURRENT MODE: REDACTED";
+}
+const char* modeAction(){
+    if(Research::active())return "MODE LOCKED WHILE RECORDING";
+    if(!Research::settled())return "MODE LOCKED WHILE SAVING";
+    return confirmRaw?"CONFIRM RAW (PRIVATE DATA)":raw?"SWITCH TO REDACTED":"SWITCH TO RAW...";
+}
+void sessionLine(char* out,size_t cap,uint32_t now){
+    auto s=Research::stats();const uint32_t seconds=(s.active?uint32_t(now-s.start):s.elapsed)/1000;
+    const char* state=s.active?"REC":!Research::settled()?"SAVING":s.errors?"ERROR":s.session?"FINISHED":"IDLE";
+    if(!s.session&&!s.active&&Research::settled())snprintf(out,cap,"IDLE - NOT RECORDING");
+    else snprintf(out,cap,"%s %02lu:%02lu | %lu saved",state,(unsigned long)(seconds/60),(unsigned long)(seconds%60),(unsigned long)s.saved);
+}
+void draw(TFT_eSPI& t,uint32_t now){
     const int w=t.width(),h=t.height();auto s=Research::stats();t.fillRect(0,0,w,h,Theme::BG);Theme::drawTitleBar(t,"RESEARCH LAB");t.setTextSize(1);t.setTextWrap(false);t.setTextColor(Theme::WHITE,Theme::BG);
     const char* titles[]={"1/7 SESSION","2/7 COVERAGE","3/7 FIELD NOTES","4/7 SIGNATURE PACKS","5/7 DEVICE SUPPORT","6/7 CAMERA RESOURCES","7/7 PUBLIC RECORDS"};t.setCursor(10,20);t.print(titles[page]);char buf[380];
     if(page==0){
-        if(confirmRaw){text(t,"RAW EXPORT includes MAC addresses and radio payloads. Saved on microSD in current and previous session files. Switch below again to confirm. Redacted mode omits names, payloads and notes.",36);}
-        else {snprintf(buf,sizeof buf,"%s. %s. Five minutes, up to 1 MiB. Exports JSONL + CSV. Last session retained. %s",Research::profileName(profile),raw?"RAW identifiers":"Redacted summaries",Research::status());text(t,buf,36);}
-        Theme::drawButton(t,10,h-120,w-20,24,Research::profileName(profile),false);
-        Theme::drawButton(t,10,h-92,w-20,24,confirmRaw?"CONFIRM RAW":raw?"RAW -> REDACTED":"REDACTED -> RAW",false);
-        Theme::drawButton(t,10,h-64,w-20,24,s.active?"STOP + SAVE":"START SESSION",false);
+        sessionLine(buf,sizeof buf,now);t.setTextColor(s.active?Theme::GREEN:Theme::AMBER,Theme::BG);
+        t.setCursor(10,36);t.print(buf);t.setTextColor(Theme::WHITE,Theme::BG);
+        t.setCursor(10,50);t.print(modeLabel());
+        if(confirmRaw)text(t,"RAW includes MAC addresses and radio payloads. Tap CONFIRM RAW to enable; current mode stays redacted until confirmed.",66,h-124);
+        else {snprintf(buf,sizeof buf,"%s. Five minutes / 1 MiB max. JSONL + CSV. %s",Research::status(),(s.active?s.raw:raw)?"RAW includes private identifiers.":"Redacted omits names, payloads and notes.");text(t,buf,66,h-124);}
+        Theme::drawButton(t,10,h-120,w-20,24,Research::profileName((s.active||!Research::settled())?s.profile:profile),false);
+        Theme::drawButton(t,10,h-92,w-20,24,modeAction(),false);
+        Theme::drawButton(t,10,h-64,w-20,24,s.active?"STOP + SAVE":!Research::settled()?"SAVING - PLEASE WAIT":confirmRaw?"CONFIRM MODE ABOVE":"START SESSION",false);
     } else if(page==1){
         unsigned channels=0;for(int i=1;i<=13;i++)if(s.channels&(1u<<i))channels++;
-        snprintf(buf,sizeof buf,"%s. Elapsed %lus. Observations %lu; saved %lu; omitted %lu; errors %lu. BLE enabled %lus; WiFi enabled %lus; channels visited %u. %lu KiB written. Enabled time is NOT guaranteed radio airtime. No detection does not mean no camera.",s.active?"RECORDING":"STOPPED",(unsigned long)(s.elapsed/1000),(unsigned long)s.observed,(unsigned long)s.saved,(unsigned long)s.dropped,(unsigned long)s.errors,(unsigned long)(s.bleMs/1000),(unsigned long)(s.wifiMs/1000),channels,(unsigned long)(s.bytes/1024));text(t,buf,36);
+        snprintf(buf,sizeof buf,"%s. Elapsed %lus. Observations %lu; saved %lu; omitted %lu; errors %lu. DEAUTH frames %lu; coherent bursts %lu; multi-target %lu. BLE enabled %lus; WiFi enabled %lus; channels visited %u. %lu KiB written. Counts cover observed channel dwell time, not every transmitted frame. No detection does not mean no camera.",s.active?"RECORDING":!Research::settled()?"SAVING":"STOPPED",(unsigned long)(s.elapsed/1000),(unsigned long)s.observed,(unsigned long)s.saved,(unsigned long)s.dropped,(unsigned long)s.errors,(unsigned long)s.deauthFrames,(unsigned long)s.deauthBursts,(unsigned long)s.deauthMultiTargetBursts,(unsigned long)(s.bleMs/1000),(unsigned long)(s.wifiMs/1000),channels,(unsigned long)(s.bytes/1024));text(t,buf,36);
     } else if(page==2){
         Research::Record r=selected;if(haveSelected){snprintf(buf,sizeof buf,"Record %lu: %s, %ddBm, %lus. A visual sighting nearby does not prove which radio belongs to it. Note: %s",(unsigned long)r.id,detectionTypeName(r.match.type),r.rssi,(unsigned long)(r.at/1000),notes[note]);text(t,buf,36);}else text(t,"No saved observation yet. Start a session with microSD. Notes reference record IDs; radio confidence stays separate. Redacted exports omit note text.",36);
         Theme::drawButton(t,10,h-120,w/2-14,24,"OLDER",false);Theme::drawButton(t,w/2+4,h-120,w/2-14,24,"NOTE",false);
@@ -55,9 +74,9 @@ bool tap(int x,int y,int w,int h,uint32_t now,bool card,uint32_t id){
     if(x<10||x>w-10)return false;
     if(y>=h-32&&y<h-8){if(x<w/2){Research::stop();return true;}page=(page+1)%7;confirmRaw=false;if(page==2){selection=0;haveSelected=Research::select(0,selected);}return false;}
     if(page==0){
-        if(y>=h-120&&y<h-96&&!Research::active())profile=(Research::Profile)(((unsigned)profile+1)%3);
-        if(y>=h-92&&y<h-68&&!Research::active()){if(raw){raw=false;confirmRaw=false;haveSelected=false;}else if(confirmRaw){raw=true;confirmRaw=false;haveSelected=false;}else confirmRaw=true;}
-        if(y>=h-64&&y<h-40){if(Research::active())Research::stop();else if(!confirmRaw)Research::start(profile,raw,300000,now,id,card);}
+        if(y>=h-120&&y<h-96&&Research::settled())profile=(Research::Profile)(((unsigned)profile+1)%3);
+        if(y>=h-92&&y<h-68&&Research::settled()){if(raw){raw=false;confirmRaw=false;haveSelected=false;}else if(confirmRaw){raw=true;confirmRaw=false;haveSelected=false;}else confirmRaw=true;}
+        if(y>=h-64&&y<h-40){if(Research::active())Research::stop();else if(!confirmRaw&&Research::settled())Research::start(profile,raw,300000,now,id,card);}
     }else if(page==2){
         if(y>=h-120&&y<h-96){if(x<w/2){Research::Record r;if(Research::recent(selection+1,r))selection++;else selection=0;haveSelected=Research::select(selection,selected);}else note=(note+1)%5;}
         Research::Record r=selected;if(!haveSelected)return false;Research::Verdict v=Research::Verdict::UNREVIEWED;

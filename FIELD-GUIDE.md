@@ -26,7 +26,7 @@ Alert Rules can quiet manufacturer-only matches, require multiple independent ev
 
 ## Accessibility and languages
 
-Options include high contrast, reduced motion, larger common controls and a left-handed footer on Field Tools pages. Legacy screens are not all mirrored. English, Spanish, French, German, Japanese and Simplified Chinese are visible language choices. Tap the Language title seven times to reveal Hebrew; once selected it remains accessible. Hebrew, Japanese and Chinese use bundled bitmap glyphs independent of a Latin themed font.
+Options include high contrast, reduced motion, larger common controls and a left-handed footer on Field Tools pages. Legacy screens are not all mirrored. English, Spanish, French, German, Japanese and Simplified Chinese are visible language choices. In Settings → Language, hold the large current-language button for three seconds to reveal Hebrew; the unlock is saved. Short taps cycle languages. Hebrew, Japanese and Chinese use bundled bitmap glyphs independent of a Latin themed font.
 
 Translations are previews needing fluent human review. Common settings, Field Tools, help and generic detection explanations are covered; legacy flavor/game dialogue, detailed diagnostics and some dynamic technical labels remain English. Hebrew layout supports the supplied unpointed catalog and preserves Latin/numeric runs, not arbitrary Unicode text shaping.
 

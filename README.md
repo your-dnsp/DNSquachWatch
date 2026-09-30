@@ -1,121 +1,146 @@
-# DNSquachWatch v0.7-draft
+# DNSquachWatch v1.1.2
 
-A private, friends-and-family remix of **SquachWatch 1.19.1** for the **ESP32 CYD ST7789**. Original authorship and GPLv3 licensing are preserved; see [LICENSE](LICENSE) and the [original upstream README](README-UPSTREAM.md).
+DNSquachWatch is a friends-and-family modified edition of **SquachWatch** for the classic 2.8-inch ESP32 Cheap Yellow Display (CYD). It keeps Squachy, the original visual identity, the core detection model, and the spirit of the upstream project while adding DNSP recovery, research, accessibility, security, logging, FPV, field, and whimsical features.
 
-DNSP adds adjustable queued alerts and match explanations, experimental camera/wearable clues, research exports, FPV tools, friendlier menus, favorites, walkthroughs, partial translations, microSD firmware/public-preferences backups, recovery tools, and **Squach Snacks** Breakout. Existing features are retained. [Full details](README-DNSP.md) · [Feature status](FEATURE-STATUS.md) · [Tests](TEST-REPORT.md)
+This release is based on **SquachWatch v1.25.0**. DNSP decisions take priority where the projects differ, including the menu organization, conservative detection wording, storage workflow, recovery behavior, and custom tools.
 
-**This is a development draft.** Software checks passed; real-device endurance, SD failure handling and USB recovery still need testing before gifting. The included `cyd-fast` build retains the **experimental 80 MHz display**. Flash memory runs at **40 MHz**; these are different settings. Do not use this image on an ILI9341 or 3.5-inch CYD.
+DNSquachWatch is maintained by **dnsprincess**. Bugs and design choices in this modified firmware should be reported to DNSP and should not be attributed to the original SquachWatch creator.
 
-## Flash locally: Mac, Debian or Fedora
+## Choose the correct display image
 
-You do not drag the firmware onto the microSD or a mounted USB drive. Use a data-capable USB cable and write the four supplied images to their specified addresses. The original SquachWatch web flasher installs upstream firmware, replacing DNSP features; this kit is a local USB build, not an upstream-signed OTA package.
+The same-looking 2.8-inch CYD has shipped with two incompatible display controllers. There is no reliable way to identify the controller from the outside, so v1.1.2 provides two 80 MHz release kits:
 
-### 1. Get the files and Python
+| Release kit | Display controller | PlatformIO target |
+|---|---|---|
+| `DNSquachWatch-v1.1.2-ST7789-80MHz` | ST7789 | `cyd-fast` |
+| `DNSquachWatch-v1.1.2-ILI9341-80MHz` | ILI9341 | `cyd-ili9341-fast` |
 
-Download this private repository using **Code → Download ZIP**, extract it, and open Terminal in `firmware/v0.7-cyd-fast` inside the extracted folder. All four `.bin` files, `manifest.json`, and `SHA256SUMS` must be there. Friends need repository access or a kit you share with them. The separately supplied `DNSquachWatch-v0.7-cyd-fast.zip` has the same files at its top level.
+Try the ST7789 image first on the newer/common panel. If the display remains solid white, flash the ILI9341 image instead. A white screen after choosing the wrong driver ordinarily means the panel was not initialized; it does not mean the board was damaged.
 
-**macOS:** use Python 3 from [python.org](https://www.python.org/downloads/macos/). If `python3 --version` already works, try the setup below first.
+Both images start the display bus at 80 MHz. The ESP32 flash bus remains at 40 MHz. A runtime option under **System** can change the display to 40 MHz if an individual panel flickers, shows torn pixels, dims irregularly, or is unstable at 80 MHz. The two builds otherwise contain the same DNSP features and data layout.
 
-**Debian:**
+The firmware does not require a microSD card to flash, boot, scan, enter Safe Mode, or display its built-in help. A card is needed for exports, readable log copies, research files, backups, and card-based recovery material.
 
-```sh
-sudo apt update
-sudo apt install python3 python3-venv python3-pip
+## What DNSquachWatch adds
+
+### Detection and alerts
+
+- Longer 15, 30, 45, and 60-second device popups, with 30 seconds as the default.
+- A bounded popup queue, an **X more** indicator, and **Snooze All** for crowded environments.
+- Qualitative confidence and **Why This Matched** explanations that distinguish a clue from proof.
+- Expanded Flock, Raven, Axon, other ALPR, Meta, tracker, Remote ID, FPV, and ExpressLRS research coverage.
+- Stored history for every retained alert event, with separate boot, crash, and system history.
+- A **Sketchy Environment** rule that raises a second caution when an ALPR clue and a Wi-Fi deauthentication burst are observed within 90 seconds. The paired evidence is saved without claiming that the two events are causally connected.
+- Per-source DEAUTH tracking. Six frames from unrelated claimed transmitters can no longer combine into one alert. Each claimed source has its own six-frame, three-second burst threshold and 15-second cooldown.
+- DEAUTH evidence can retain the claimed transmitter, receiver targets, BSSID, reason code, protection bit, channel, signal, and observed burst details. The interface warns that 802.11 management addresses can be spoofed.
+- Adjustable Stationary, Balanced, Fast Sweep, Maximum, and Custom scanning profiles. Maximum returns to Balanced after 30 minutes and after a reboot.
+
+Radio matches remain observations rather than certain identification. Manufacturer prefixes can be shared by unrelated products, signal strength is not distance or direction, and Remote ID broadcasts are not authenticated. The ESP32 sees legacy BLE and 2.4 GHz Wi-Fi; it cannot receive 5.8 GHz FPV video or BLE Coded PHY. Channel hopping, radio coexistence, interference, and transmission timing can all cause a device to be missed.
+
+### Research, history, and microSD
+
+- Research sessions with Balanced, Bluetooth-only, and Wi-Fi-only profiles, visible elapsed time, activity counters, coverage information, redacted/raw choices, and explicit save progress.
+- Incremental **Refresh Files** output with stable record identifiers and an interruption-safe journal.
+- **Export & Organize** for a numbered, permanent, human-readable snapshot.
+- Pocket Reader support for the generated text files.
+- microSD status showing card type, filesystem, capacity, use, and mount health where the hardware and FAT layer expose them.
+- Recovery controls in the ordinary **Storage & Recovery** menu and in Safe Mode: remount/find the card, test read/write, and a deliberately confirmed format operation.
+- Verified backups containing the running application, complete readable history, current log, labels, Ignore entries, alert-rule state, radio profile, public preferences, and active Watch/Hunt targets.
+- The installation guide is included in completed backups. PINs, Duress state, Wi-Fi credentials, and authentication secrets are deliberately excluded.
+
+**Safe Shutdown** stops acquisition, drains pending Bluetooth, Wi-Fi, DEAUTH, normal event-log, BlackBox, Research, and Drone/Remote ID capture records, saves counters, synchronizes the card, and unmounts it. Wait for the confirmation screen before removing power or the card. Safe Shutdown does not automatically create a new **Refresh Files**, **Export & Organize**, or full firmware backup. A running full backup is canceled and remains incomplete without `COMPLETE.txt`.
+
+### Security and recovery
+
+- An optional interface PIN lock with clearer setup, removal, retry, and wipe confirmations.
+- A separately configured Duress PIN that is accepted only from the lock screen.
+- Duress enters the persistent **Pixel Tide** decoy and attempts bounded cleanup of DNSP-owned internal and microSD data.
+- Duress cleanup is best effort. It is not encryption, secure whole-card erasure, or a guarantee against forensic recovery.
+- Ordinary reflashing can leave NVS state, including Pixel Tide, intact. Follow the full erase/recovery instructions when recovering from Duress.
+- Safe Mode can start after repeated short boots or qualifying crashes. Holding the touchscreen during startup also requests recovery startup, which is useful when normal touch navigation or optional services are failing.
+- Crash information is retained as separate bounded records and can be exported after a later successful boot.
+- Gift Preparation restores the requested touch and color setup flow and explains that installing ordinary upstream firmware replaces DNSP’s modifications.
+
+The PIN protects the interface; it does not encrypt flash or the microSD card. Treat readable exports, backups, research captures, user labels, and device identifiers as private data.
+
+### Interface, accessibility, and tools
+
+- Landscape orientation defaults to the USB-C port on the left, with rotation lock enabled by default.
+- A marked DNSP splash and detailed credits separate the custom firmware from upstream responsibility.
+- A skippable walkthrough, contextual help, fuller troubleshooting, progress indicators, and clearer descriptions for average users.
+- Optional high contrast, larger common controls, reduced motion, left-handed footer placement, Auto Brightness, runtime display speed, and a dependable switch that disables transition/glitch effects while retaining meaningful celebrations.
+- English plus preview catalogs for Spanish, French, German, Japanese, Simplified Chinese, and hidden Hebrew. Hold the English language choice for three seconds to reveal Hebrew. Hebrew, Japanese, and Chinese use compatible bundled glyphs rather than the optional Latin fantasy style.
+- Original Squachy features remain grouped together. DNSP tools, games, research, alerts, FPV features, storage, and system controls have their own clear menu destinations.
+- DNSP tools include Screen Light and Morse, SOS/rainbow/caution light patterns, Coin Flip, Dowsing Rod, Timer and Counter, Pocket Reader, and Radio Activity.
+- **Squach Snacks**, a whimsical Breakout game, runs while preserving the device’s alert behavior.
+
+## Menu map
+
+The principal destinations are:
+
+- **Alerts & Detection:** enabled detection types, popup behavior, confidence/help, rules, stored alert history, Watch/Hunt, and detection troubleshooting.
+- **Research:** timed research sessions, raw/redacted capture choice, reports, readable history, and research guidance.
+- **FPV:** drone readings, Remote ID capture, pit/frequency planning, ELRS clues, and supported own-equipment telemetry.
+- **Squachy:** the original mascot and inherited Squachy modules.
+- **DNSP:** DNSP walkthrough, Squach Snacks, Pocket Reader, Timer and Counter, Screen Light/Morse, Coin Flip, Dowsing Rod, and Radio Activity.
+- **Storage & Recovery:** microSD information and recovery, readable files, organized exports, backup/restore, crash reports, and safe storage guidance.
+- **Appearance & Accessibility:** theme-related choices, Auto Brightness, transition effects, language, contrast, control sizing, motion, and layout options.
+- **System:** display speed, diagnostics, Device Health export, credits, Safe Mode/recovery information, reboot, and Safe Shutdown.
+
+Some labels move slightly with display orientation or enabled features, but tools stay in their subject area rather than a favorites-only duplicate.
+
+## Installation and recovery material
+
+Detailed flashing commands are intentionally kept out of this README while DNSP revises that section. Each release ZIP is self-contained and includes:
+
+- `bootloader.bin`
+- `partitions.bin`
+- `boot_app0.bin`
+- `firmware.bin`
+- `manifest.json`
+- `SHA256SUMS`
+- `flash-macos-linux.sh`
+- `DNSQUACHWATCH INSTALLATION.txt`
+- recovery, Duress, feature-status, research, size-audit, and test documents
+
+Keep all four binary files from the same display kit together. Do not mix an ST7789 application image with ILI9341 boot/release files or combine files from different DNSquachWatch versions. Follow `DNSQUACHWATCH INSTALLATION.txt` for the exact offsets, backup location, erase choices, macOS/Linux commands, and recovery procedure.
+
+The repository's older browser-flasher assets are not the v1.1.2 release path. Use one of the two complete v1.1.2 kits above until a DNSP web flasher is deliberately rebuilt and validated for this version.
+
+The project uses two 1,966,080-byte application slots, preserves dedicated NVS, BlackBox, coredump, and Duress-journal regions, and does not use SPIFFS/LittleFS for ordinary storage. A microSD cannot be populated by `esptool`; optional card content must be copied separately or seeded later by the running firmware.
+
+## Build and validation status
+
+Dependencies are pinned in `platformio.ini`. The two release targets are:
+
+```text
+cyd-fast             ST7789, initial 80 MHz display clock
+cyd-ili9341-fast     ILI9341, initial 80 MHz display clock
 ```
 
-**Fedora:**
+The v1.1.2 size work compresses the embedded installation guide and reduces the Pixel Tide texture without removing user-facing features. The ST7789 application image is 1,918,512 bytes, leaving 47,568 bytes in its application slot. The ILI9341 image is 1,918,608 bytes, leaving 47,472 bytes. A proposed parser replacement was measured and reverted because it increased the image after shared ESP32 framework routines were considered. Link-time optimization remains deferred.
 
-```sh
-sudo dnf install python3 python3-pip
-```
+Automated native, malformed-input, security, storage, layout, display, and UI tests are described in [TEST-REPORT.md](TEST-REPORT.md). Exact firmware-image validation and package hashes are included in each release kit. Hardware testing remains necessary for touch calibration, panel colors, 80 MHz electrical stability, real radio reception, card behavior, Duress cleanup, and long-duration operation. The ST7789 line has received the user’s ongoing physical testing; the newly produced v1.1.2 ILI9341 image requires testing on an older-panel board.
 
-Then, on any of these systems, from the firmware folder:
+See [FEATURE-STATUS.md](FEATURE-STATUS.md), [RESEARCH-GUIDE.md](RESEARCH-GUIDE.md), [RECOVERY.md](RECOVERY.md), [DURESS.md](DURESS.md), [SIZE-AUDIT.md](SIZE-AUDIT.md), and [UPSTREAM-MERGE.md](UPSTREAM-MERGE.md) for the detailed status and limitations.
 
-```sh
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install 'esptool==4.5.1'
-```
+Deferred work includes physical Avata 2 validation, fluent human review of translated text, optional WiGLE integration, and further size work such as measured LTO. Deferred items are not presented as completed features.
 
-This pins the tool version used for this kit. In a new Terminal session, return to this folder and activate `.venv` again.
+## Credits and thanks
 
-### 2. Check the files and find the serial port
+**Talking Sasquach** on YouTube, **skizzophrenic** on GitHub, created SquachWatch and did the work that made this entire project possible. The device concept, Squachy, core detector, interface, and continuing upstream improvements come from that project. Please give the original creator the credit and kudos they deserve. The original firmware and web flasher are available at [squachwatch.com](https://squachwatch.com/), and the upstream source is [skizzophrenic/SquachWatch-CYD](https://github.com/skizzophrenic/SquachWatch-CYD).
 
-Check the kit's files before connecting:
+The expanded Flock and ALPR work benefited from four independent public projects:
 
-```sh
-# macOS
-shasum -a 256 -c SHA256SUMS
+- [ReconGrunt/FlipDeFlock](https://github.com/ReconGrunt/FlipDeFlock) informed conservative signature handling, visual-verification guidance, and offline research ideas.
+- [zmattmanz/flock-detection](https://github.com/zmattmanz/flock-detection) supplied research leads for accessory names, supplier clues, and combined evidence.
+- [Ringmast4r/FLOCK](https://github.com/Ringmast4r/FLOCK) deserves particular thanks for the collected Flock and OUI intelligence and its public map resource. That research materially improved DNSP coverage while the firmware continues to treat shared hardware prefixes as clues rather than proof.
+- [rpriven/flock-public-records-toolkit](https://github.com/rpriven/flock-public-records-toolkit) provides the public-records resource referenced by the firmware.
 
-# Debian / Fedora
-sha256sum -c SHA256SUMS
-```
+Those projects remain independent. DNSquachWatch does not imply their endorsement and does not treat any third-party dataset as proof that a live radio belongs to a specific device.
 
-Run only the command for your system. All four files should report OK. Checksums detect damage; they do not authenticate an untrusted download.
+Additional protocol references and third-party notices are preserved in the source tree and release documentation. Bundled font source and licenses remain with the corresponding language assets.
 
-Connect the CYD and close any web flasher or serial monitor. Compare the port list before and after connecting:
+## License
 
-```sh
-# macOS
-ls /dev/cu.*
-
-# Debian / Fedora
-ls /dev/ttyUSB* /dev/ttyACM* 2>/dev/null
-```
-
-Use the newly appearing USB port, not a Bluetooth port. Replace **PORT** in every command below with that exact path, such as `/dev/cu.usbserial-1234` or `/dev/ttyUSB0`. These examples are not your device's guaranteed name.
-
-On Debian/Fedora, if opening the port reports permission denied, inspect its group with `ls -l PORT`. When it is `dialout`, run:
-
-```sh
-sudo usermod -aG dialout "$USER"
-```
-
-Log out completely and back in, then reactivate the virtual environment. If the device uses another group, follow that distribution's serial-access policy. Do not solve this by making the port world-writable or running pip as root.
-
-### 3. Back up the current firmware before changing it
-
-```sh
-python -m esptool --chip esp32 --port PORT flash_id
-python -m esptool --chip esp32 --port PORT read_flash 0 0x400000 before-dnsp.bin
-```
-
-Confirm the detected flash is **4 MB** before continuing, and keep the successful 4,194,304-byte backup somewhere safe. Choose a new filename if `before-dnsp.bin` already exists. This is a full device-flash backup and may contain credentials and history: do not commit it or share it casually. It does not include the microSD contents.
-
-### 4. Install DNSP
-
-From the folder containing the four kit images:
-
-```sh
-python -m esptool --chip esp32 --port PORT write_flash \
-  --flash_mode dio --flash_freq 40m --flash_size 4MB \
-  0x1000 bootloader.bin \
-  0x8000 partitions.bin \
-  0xe000 boot_app0.bin \
-  0x10000 firmware.bin
-```
-
-Wait for successful verification and reset. **Do not erase all flash, use `--force`, or write `firmware.bin` at address zero.** These separate writes leave the NVS settings and reserved BlackBox history regions untouched on the expected layout; the full backup is your fallback if the installed firmware/layout differs. The command initializes the boot selection to the newly installed app0 image.
-
-If connection stalls, check the cable, close other serial programs and use the board's BOOT/reset procedure to enter its loader. After boot, check touch, screen colors, Wi-Fi/Bluetooth reception and microSD operation. Display corruption or instability warrants testing the normal-speed ST7789 `cyd` build; the 80 MHz overclock is experimental.
-
-For later SD-backup restoration, use [RECOVERY.md](RECOVERY.md). Complete the [hardware checklist](ENDURANCE-CHECKLIST.md) before treating this as gift-ready.
-
-### Windows / Microsoft
-
-**DNSP's editorial opinion:** you shouldn't be using Windows 11 or Microsoft's platform at all. Ditch it and try Debian or Fedora; we think the Microsoft ecosystem is icky. Yes, flashing from Windows is completely possible—this is a platform preference, not a technical limitation. This README documents Mac and Linux.
-
-### Build from source instead
-
-Install PlatformIO in a separate Python environment, open the repository root, and run:
-
-```sh
-pio run -e cyd-fast
-pio run -e cyd-fast -t upload --upload-port PORT
-```
-
-The second command writes to the device. `cyd` is the normal-speed ST7789 alternative; `cyd-ili9341` is a different display. Use the supplied pinned dependencies and retain the partition layout.
-
-### References
-
-[Espressif flashing and backup commands](https://docs.espressif.com/projects/esptool/en/release-v4/esp32/esptool/basic-commands.html) · [Serial-port permissions](https://docs.espressif.com/projects/esptool/en/release-v4/esp32/esptool/basic-options.html) · [Debian virtual environments](https://packages.debian.org/search?keywords=python3-venv) · [Fedora Python environments](https://developer.fedoraproject.org/tech/languages/python/pypi-installation.html)
+DNSquachWatch retains the project’s **GNU General Public License v3.0** licensing. See [LICENSE](LICENSE). The upstream README is preserved as [README-UPSTREAM.md](README-UPSTREAM.md).

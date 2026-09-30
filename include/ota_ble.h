@@ -75,3 +75,4 @@ const char* deviceName();     // what the browser's picker lists, e.g. "SquachWa
 uint32_t    pairingCode();    // regenerated every time update mode is entered
 
 }  // namespace OtaBle
+
