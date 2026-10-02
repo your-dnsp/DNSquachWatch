@@ -1,0 +1,59 @@
+name: Device identity research (unverified)
+description: Submit a user-labeled observation exported by DNSquachWatch.
+title: "[UNVERIFIED RESEARCH] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Reports begin **unverified**. A label concerns one observed device; it does not identify every device with the same prefix. Detector confidence is not researcher verification.
+        Attach the small `/Research Submissions/report-XXXX.txt` export below. Please do not upload a whole backup, raw capture or card image.
+        Read [the research guide](https://github.com/your-dnsp/DNSquachWatch/blob/master/CONTRIBUTING-RESEARCH.md). Others can add independent evidence in comments. A maintainer records the final status.
+  - type: textarea
+    id: report
+    attributes:
+      label: Exported observation
+      description: Drag the exported TXT file here, or paste its contents. Review labels, subtags and any identifiers before uploading.
+      placeholder: Attach report-0001.txt from Research Submissions.
+    validations:
+      required: true
+  - type: input
+    id: proposed_identity
+    attributes:
+      label: Proposed device or model
+      description: Your observation or hypothesis, not a claim about the entire OUI.
+      placeholder: Manufacturer, model, and what you know first-hand.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: What supports this identification?
+      description: Describe physical inspection, your own equipment, repeated observations, or a cited primary source. An OUI lookup alone is weak evidence.
+      placeholder: "I own this device; switching it off/on changed this observation..."
+    validations:
+      required: true
+  - type: dropdown
+    id: address_type
+    attributes:
+      label: Address type, if independently known
+      options:
+        - Unknown
+        - Wi-Fi universally administered
+        - Wi-Fi locally administered or randomized
+        - BLE public
+        - BLE random or private
+      default: 0
+  - type: textarea
+    id: sources
+    attributes:
+      label: Sources and uncertainty
+      description: Add relevant links and possible alternate explanations. Leave precise locations and unrelated personal details out.
+  - type: checkboxes
+    id: sharing
+    attributes:
+      label: Sharing review
+      options:
+        - label: I reviewed this export and have permission to share any full identifiers it contains.
+          required: true
+        - label: I understand this is an unverified report about an individual observation, not an automatically trusted detection rule.
+          required: true
