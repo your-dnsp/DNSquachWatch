@@ -6,14 +6,14 @@ body:
     attributes:
       value: |
         Reports begin **unverified**. A label concerns one observed device; it does not identify every device with the same prefix. Detector confidence is not researcher verification.
-        Attach the small `/Research Submissions/report-XXXX.txt` export below. Please do not upload a whole backup, raw capture or card image.
+        Attach the small `/Research Submissions/report-XXXXXXXX-XXXX.txt` export below. Please do not upload a whole backup, raw capture or card image.
         Read [the research guide](https://github.com/your-dnsp/DNSquachWatch/blob/master/CONTRIBUTING-RESEARCH.md). Others can add independent evidence in comments. A maintainer records the final status.
   - type: textarea
     id: report
     attributes:
       label: Exported observation
       description: Drag the exported TXT file here, or paste its contents. Review labels, subtags and any identifiers before uploading.
-      placeholder: Attach report-0001.txt from Research Submissions.
+      placeholder: Attach report-00000000-0001.txt from Research Submissions.
     validations:
       required: true
   - type: input
