@@ -56,7 +56,7 @@ EXTRA_CXXFLAGS ?=
 CXXFLAGS := -std=c++17 -O1 -g -Wall -Wno-unused-parameter -DSQW_BANDED_FRAME=1 $(EXTRA_CXXFLAGS) \
             -I$(SIM_DIR) -I$(INC) -DSQUACH_MESH=1
 
-UI_SRCS  := $(SRC)/ui_scratch.cpp  $(SRC)/card_content.cpp  $(SRC)/research_submission.cpp $(SRC)/location_label.cpp $(SRC)/ui_location.cpp $(SRC)/remington.cpp  $(SRC)/crash_reports.cpp $(SRC)/ui_device.cpp $(SRC)/alert_snooze.cpp $(SRC)/duress_core.cpp $(SRC)/duress_device.cpp $(SRC)/pixel_tide.cpp $(SRC)/drone_watch.cpp $(SRC)/care.cpp $(SRC)/backup.cpp $(SRC)/readable_logs.cpp $(SRC)/scan_profile.cpp $(SRC)/ui_care.cpp $(SRC)/research_report.cpp $(SRC)/breakout.cpp $(SRC)/ui_breakout.cpp $(SRC)/user_labels.cpp $(SRC)/user_labels_storage.cpp $(SRC)/ui_labels.cpp $(SRC)/sketchy_rule.cpp $(SRC)/ui_rule_alert.cpp $(SRC)/field_tools.cpp $(SRC)/field_storage.cpp $(SRC)/ui_field.cpp $(SRC)/language.cpp \
+UI_SRCS  := $(SRC)/simulation.cpp $(SRC)/ui_scratch.cpp  $(SRC)/card_content.cpp  $(SRC)/research_submission.cpp $(SRC)/location_label.cpp $(SRC)/ui_location.cpp $(SRC)/remington.cpp  $(SRC)/crash_reports.cpp $(SRC)/ui_device.cpp $(SRC)/alert_snooze.cpp $(SRC)/duress_core.cpp $(SRC)/duress_device.cpp $(SRC)/pixel_tide.cpp $(SRC)/drone_watch.cpp $(SRC)/care.cpp $(SRC)/backup.cpp $(SRC)/backup_maintenance.cpp $(SRC)/readable_logs.cpp $(SRC)/scan_profile.cpp $(SRC)/ui_care.cpp $(SRC)/research_report.cpp $(SRC)/breakout.cpp $(SRC)/ui_breakout.cpp $(SRC)/user_labels.cpp $(SRC)/user_labels_storage.cpp $(SRC)/ui_labels.cpp $(SRC)/sketchy_rule.cpp $(SRC)/ui_rule_alert.cpp $(SRC)/field_tools.cpp $(SRC)/field_storage.cpp $(SRC)/ui_field.cpp $(SRC)/language.cpp \
             $(SRC)/research.cpp \
             $(SRC)/research_storage.cpp \
             $(SRC)/ui_research.cpp \

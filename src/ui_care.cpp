@@ -9,15 +9,21 @@
 #include "ota_wifi.h"
 #include "ota_ble.h"
 #include "research.h"
+#include "drone_watch.h"
 #include "readable_logs.h"
+#include "backup_maintenance.h"
+#include "card_content.h"
+#ifndef FIRMWARE_VERSION
+#define FIRMWARE_VERSION "unknown"
+#endif
 #include <cstdio>
 #include <cstring>
 namespace CareUI {
 static Page current=Page::BACKUP;static uint8_t step=0;static bool dirty=true,confirm=false;static uint32_t drawnAt=0;
 static char notice[72]{};
 static bool backupPending=false, pendingRendered=false;
-static uint8_t sdConfirm=0;
-bool working(){return backupPending||Backup::busy()||ReadableLogs::busy();}
+static uint8_t sdConfirm=0;static uint8_t maintenanceConfirm=0;
+bool working(){return backupPending||Backup::busy()||ReadableLogs::busy()||BackupMaintenance::busy();}
 void runPending(bool visible,uint32_t now,DetectionEngine& eng){
  if(!visible){backupPending=false;return;}
  if(backupPending&&pendingRendered){backupPending=false;pendingRendered=false;Backup::start(eng.sd().ready(),now,&eng);dirty=true;}
@@ -38,11 +44,11 @@ void drawBackupProgress(TFT_eSPI& t,unsigned percent,const char* phase,uint32_t 
 }
 
 static uint8_t textPage=0,textPages=1;static int textBottom=88;
-void open(Page p){backupPending=false;pendingRendered=false;current=p;step=0;textPage=0;textPages=1;confirm=false;sdConfirm=0;notice[0]=0;dirty=true;}
+void open(Page p){backupPending=false;pendingRendered=false;current=p;step=0;textPage=0;textPages=1;confirm=false;sdConfirm=0;maintenanceConfirm=0;notice[0]=0;dirty=true;}
 Page page(){return current;}
 bool needsDraw(uint32_t now,int width,int height){static int oldW=0,oldH=0;static uint8_t oldLang=255;
  if(oldW!=width||oldH!=height||oldLang!=Field::config.language){dirty=true;oldW=width;oldH=height;oldLang=Field::config.language;textPage=0;}
- bool live=current==Page::BACKUP||current==Page::STATUS||current==Page::HEALTH||current==Page::REPORT||current==Page::READABLE_LOGS;if(!dirty&&(!live||uint32_t(now-drawnAt)<(working()?250u:1000u)))return false;dirty=false;drawnAt=now;return true;}
+ bool live=current==Page::BACKUP||current==Page::STATUS||current==Page::HEALTH||current==Page::REPORT||current==Page::READABLE_LOGS||current==Page::BACKUP_FILES;if(!dirty&&(!live||uint32_t(now-drawnAt)<(working()?250u:1000u)))return false;dirty=false;drawnAt=now;return true;}
 static void prose(TFT_eSPI& t,const char* s,int bottom=88){
  textBottom=bottom;int cols=(t.width()-24)/8,lines=(t.height()-58-bottom)/18;if(lines<1)lines=1;
  // These bounded help strings are English ASCII. Wrap into pages rather
@@ -69,12 +75,16 @@ static const char* demos[]={
 };
 void draw(TFT_eSPI& t,uint32_t now,DetectionEngine& eng){
  int w=t.width(),h=t.height();t.fillRect(0,0,w,h,Theme::BG);Theme::drawTitleBar(t,"DNSP");
- const char* titles[]={"BACKUP & RECOVERY","PRACTICE - SIMULATED","WHY NO MATCH?","GIFT PREPARATION","SESSION REPORT","DEVICE HEALTH","A GIFT FROM DNSP","MICROSD RECOVERY","READABLE LOG EXPORT"};
+ const char* titles[]={"BACKUP & RECOVERY","PRACTICE - SIMULATED","WHY NO MATCH?","GIFT PREPARATION","SESSION REPORT","DEVICE HEALTH","A GIFT FROM DNSP","MICROSD RECOVERY","READABLE LOG EXPORT","BACKUP FILES"};
  Lang::draw(t,titles[(uint8_t)current],22,20,w-44,18,Theme::CYAN,true,true);char b[620];
  if(current==Page::BACKUP){
   snprintf(b,sizeof b,"%s\nSlot %u. %s",confirm?"Restore settings, labels, rules, ignores and operational choices? Historical logs remain readable and are not replayed.":Backup::status(),Backup::slot(),Backup::busy()?"Cancel leaves an incomplete slot.":"Includes firmware, flash-only user state and complete readable history. PIN and Duress data are never included.");if(working()){if(backupPending)pendingRendered=true;textPages=1;drawBackupProgress(t,backupPending?0:Backup::percent(),backupPending?"PREPARING":Backup::phaseLabel(),now);}else prose(t,b,132);
   Lang::button(t,8,h-126,w-16,36,working()?"CANCEL BACKUP":confirm?"CONFIRM RESTORE":"BACK UP TO MICROSD");
   Lang::button(t,8,h-84,w-16,36,working()?"BACKUP IN PROGRESS":confirm?"CANCEL RESTORE":"RESTORE USER STATE");
+ }else if(current==Page::BACKUP_FILES){
+  prose(t,notice[0]?notice:BackupMaintenance::busy()?BackupMaintenance::status():maintenanceConfirm==1?"Delete only incomplete backup slots? Completed backups are retained. Confirm deliberately.":maintenanceConfirm==2?"Move completed backups from older firmware to /Archive? They remain on the card but restore slots become free.":BackupMaintenance::status(),132);
+  Lang::button(t,8,h-126,w-16,36,maintenanceConfirm==1?"CONFIRM REMOVE INCOMPLETE":"REMOVE INCOMPLETE...");
+  Lang::button(t,8,h-84,w-16,36,maintenanceConfirm==2?"CONFIRM ARCHIVE OLDER":"ARCHIVE OLDER VERSIONS...");
  }else if(current==Page::DEMO){prose(t,demos[step%4]);snprintf(b,sizeof b,"%u/4 - no effect on history",step+1);Lang::draw(t,b,12,h-76,w-24,26,Theme::AMBER);}
  else if(current==Page::STATUS){
   if(step==0){snprintf(b,sizeof b,"Since boot: BLE adverts %lu; WiFi frames %lu. Types enabled %u. Alert threshold: %s. Ignored devices %u. Prefix quiet: %s; multi-clue only: %s. These counts show reception, not complete coverage.",(unsigned long)advertsSeen(),(unsigned long)wifiFramesSeen(),Settings::enabledTypeCount(),Settings::minConfidenceLabel(),IgnoreList::count(),Field::config.quietPrefix?"yes":"no",Field::config.compositeOnly?"yes":"no");prose(t,b);}
@@ -95,7 +105,7 @@ void draw(TFT_eSPI& t,uint32_t now,DetectionEngine& eng){
   if(ReadableLogs::busy())drawBackupProgress(t,ReadableLogs::percent(),ReadableLogs::phase(),now);
   else {snprintf(b,sizeof b,"%s\nRefresh adds newly stored scan and system events without deleting older readable records. Export & Organize creates a numbered permanent snapshot. Full identifiers are included.",ReadableLogs::status());prose(t,b,132);Lang::button(t,8,h-126,w-16,36,"REFRESH FILES");Lang::button(t,8,h-84,w-16,36,"EXPORT & ORGANIZE");}
  }
- if(current!=Page::SD_RECOVERY&&current!=Page::READABLE_LOGS)footer(t,current==Page::BACKUP?(working()?"PLEASE WAIT":"NEXT SLOT"):(current==Page::REPORT||current==Page::HEALTH)?"EXPORT":current==Page::WELCOME?"WALKTHROUGH":"NEXT");
+ if(current!=Page::SD_RECOVERY&&current!=Page::READABLE_LOGS)footer(t,current==Page::BACKUP?(working()?"PLEASE WAIT":"FILES / SLOTS"):current==Page::BACKUP_FILES?(BackupMaintenance::busy()?"PLEASE WAIT":"NEXT SLOT"):(current==Page::REPORT||current==Page::HEALTH)?"EXPORT":current==Page::WELCOME?"WALKTHROUGH":"NEXT");
  else if(current==Page::READABLE_LOGS)Lang::button(t,8,h-40,w-16,34,ReadableLogs::busy()?"CANCEL":"BACK");
  else Lang::button(t,8,h-40,w-16,34,"BACK");
 
@@ -103,6 +113,8 @@ void draw(TFT_eSPI& t,uint32_t now,DetectionEngine& eng){
 SettingsRow tap(int x,int y,int w,int h,uint32_t now,DetectionEngine& eng){
  if(x<8||x>=w-8||y<40)return SettingsRow::NONE;dirty=true;
  if(current==Page::SD_RECOVERY){
+  if(Backup::busy()||BackupMaintenance::busy()||!Research::settled()||!DroneWatch::settled()||DroneWatch::focused()||Field::telemetryActive()||!OtaWifi::settled()){Theme::showToast("STORAGE BUSY","Finish active tools before recovery",Theme::AMBER);return SettingsRow::NONE;}
+  ReadableLogs::cancel();CardContent::reset();
   if(y>=h-40)return SettingsRow::BACK;
   if(sdConfirm){
    if(y>=h-84&&y<h-48){sdConfirm=0;return SettingsRow::NONE;}
@@ -121,14 +133,18 @@ SettingsRow tap(int x,int y,int w,int h,uint32_t now,DetectionEngine& eng){
   return SettingsRow::NONE;
  }
  if(y<h-textBottom&&textPages>1){textPage=(textPage+1)%textPages;return SettingsRow::NONE;}
+ if(current==Page::BACKUP_FILES&&y>=h-40&&y<h-6){
+  if(x<w/2){BackupMaintenance::cancel();open(Page::BACKUP);}else if(!BackupMaintenance::busy()){maintenanceConfirm=0;Backup::nextSlot();snprintf(notice,sizeof notice,"Restore slot %u selected",Backup::slot());}return SettingsRow::NONE;
+ }
  if(y>=h-40&&y<h-6){
-  if(x<w/2){if(Backup::busy())Backup::cancel();return SettingsRow::BACK;}
+  if(x<w/2){if(BackupMaintenance::busy())BackupMaintenance::cancel();if(Backup::busy())Backup::cancel();return SettingsRow::BACK;}
   textPage=0;
-  if(current==Page::BACKUP&&!working()){confirm=false;Backup::nextSlot();}
+  if(current==Page::BACKUP_FILES){maintenanceConfirm=0;BackupMaintenance::cancel();return SettingsRow::NONE;}
+  if(current==Page::BACKUP&&!working()){open(Page::BACKUP_FILES);}
   else if(current==Page::WELCOME)return SettingsRow::DNSP_GUIDE;
   else if(current==Page::REPORT){auto s=Research::stats();bool ok=eng.sd().ready()&&!s.active&&Research::settled()&&s.session&&Research::storageReport(s);strcpy(notice,ok?"Saved /dnsp-field-report.txt":"No finished session, card, or export failed.");}
   else if(current==Page::HEALTH){
-   auto v=Care::health();char report[1024];snprintf(report,sizeof report,"DNSquachWatch v1.5 device-health report\nUptime seconds: %lu\nLoop count: %lu\nMinimum free heap: %lu\nMinimum largest block: %lu\nMaximum loop gap ms: %lu\nLoop gaps >250ms: %lu\nBLE adverts: %lu\nWiFi frames: %lu\nBLE queue drops: %lu\nAdvert pressure drops: %lu\nAlert overflow: %lu\nBackup verified this boot: %s\nThese measurements do not prove coverage, frame rate, or electrical stability. No identifiers included.\n",
+   auto v=Care::health();char report[1024];snprintf(report,sizeof report,"DNSquachWatch " FIRMWARE_VERSION " device-health report\nUptime seconds: %lu\nLoop count: %lu\nMinimum free heap: %lu\nMinimum largest block: %lu\nMaximum loop gap ms: %lu\nLoop gaps >250ms: %lu\nBLE adverts: %lu\nWiFi frames: %lu\nBLE queue drops: %lu\nAdvert pressure drops: %lu\nAlert overflow: %lu\nBackup verified this boot: %s\nThese measurements do not prove coverage, frame rate, or electrical stability. No identifiers included.\n",
    (unsigned long)(now/1000),(unsigned long)v.loops,(unsigned long)v.minHeap,(unsigned long)v.minBlock,(unsigned long)v.maxGap,(unsigned long)v.over250,(unsigned long)advertsSeen(),(unsigned long)wifiFramesSeen(),(unsigned long)eng.bleQueueDropped(),(unsigned long)advertsDropped(),(unsigned long)eng.alerts.dropped(),Backup::verifiedThisBoot()?"yes":"no");
    strcpy(notice,"Exporting device health...");
    bool ok=Backup::exportHealth(eng.sd().ready(),report);
@@ -138,6 +154,11 @@ SettingsRow tap(int x,int y,int w,int h,uint32_t now,DetectionEngine& eng){
   }
   else if(current==Page::DEMO)step=(step+1)%4;else if(current==Page::STATUS)step=(step+1)%3;else if(current==Page::GIFT)step=(step+1)%6;
   return SettingsRow::NONE;
+ }
+ if(current==Page::BACKUP_FILES){
+  if(BackupMaintenance::busy())return SettingsRow::NONE;
+  uint8_t action=y>=h-126&&y<h-90?1:y>=h-84&&y<h-48?2:0;
+  if(action){notice[0]=0;if(maintenanceConfirm==action){if(!Backup::busy()&&Research::settled()&&DroneWatch::settled()){ReadableLogs::cancel();BackupMaintenance::start(action==2,eng.sd().ready());}maintenanceConfirm=0;}else maintenanceConfirm=action;}return SettingsRow::NONE;
  }
  if(current==Page::BACKUP){
   if(y>=h-126&&y<h-90){if(working()){backupPending=false;Backup::cancel();}else if(confirm){Backup::restore(eng.sd().ready(),&eng);confirm=false;}else {backupPending=true;pendingRendered=false;textPage=0;}}

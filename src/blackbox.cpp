@@ -353,7 +353,7 @@ void noteDetection(const Detection& d, bool again) {
     r.kind    = KIND_DET;
     r.type    = (uint8_t)d.type;
     r.conf    = (uint8_t)d.conf;
-    r.flags   = (uint8_t)((again ? DET_AGAIN : 0) | DET_PRINTED);
+    r.flags   = (uint8_t)((again ? DET_AGAIN : 0) | DET_PRINTED | (Simulation::marked(d)?DET_SIMULATED:0) | ((uint8_t)d.addressRole<<4));
     if(d.locationKey){r.flags|=DET_LOCATION;r.pad[0]=d.locationKey;r.pad[1]=d.locationKey>>8;r.pad[2]=d.locationKey>>16;}
     memcpy(r.mac, d.mac, 6);
     r.rssi    = d.rssi;
@@ -530,7 +530,7 @@ void dump() {
                       (r.flags & BOOT_DUMP) ? r.task : "", (unsigned long)r.pc, (unsigned long)r.cause);
         return true;
     }, nullptr);
-    Serial.println("boot,epoch,up_s,type,mac,rssi,channel,hits,again,vendor,name,location");
+    Serial.println("boot,epoch,up_s,type,mac,rssi,channel,hits,again,vendor,name,location,simulated,address_provenance");
     // Everything the ring holds, CLR or not. The LOG screen stops at the mark
     // a CLR leaves (a restart must not bring back what was cleared), but this
     // is the record: it prints the mark as a line and carries on, so a
@@ -543,13 +543,16 @@ void dump() {
             return true;
         }
         if (p[0] != KIND_DET) return true;
-        const DetRecord& r = *(const DetRecord*)p;
-        Serial.printf("%u,%lu,%lu,%s,%02x:%02x:%02x:%02x:%02x:%02x,%d,%u,%u,%u,%s,%s,%s\n",
+        DetRecord r = *(const DetRecord*)p;
+        // Use the same decoded address order as restored history, including
+        // legacy BLE records. The DNSP suffix is never checked in storage order.
+        if(!r.channel&&!(r.flags&DET_PRINTED)){for(uint8_t i=0;i<3;i++){uint8_t b=r.mac[i];r.mac[i]=r.mac[5-i];r.mac[5-i]=b;}}
+        Serial.printf("%u,%lu,%lu,%s,%02x:%02x:%02x:%02x:%02x:%02x,%d,%u,%u,%u,%s,%s,%s,%u,%s\n",
                       (unsigned)r.boot, (unsigned long)r.epoch, (unsigned long)r.upSec,
                       detectionTypeName((DetectionType)r.type),
                       r.mac[0], r.mac[1], r.mac[2], r.mac[3], r.mac[4], r.mac[5],
                       (int)r.rssi, (unsigned)r.channel, (unsigned)r.hits,
-                      (r.flags & DET_AGAIN) ? 1u : 0u, r.vendor, r.name,LocationLabel::text(locationKey(r)));
+                      (r.flags & DET_AGAIN) ? 1u : 0u, r.vendor, r.name,LocationLabel::text(locationKey(r)),simulated(r),Simulation::roleName(addressRole(r)));
         return true;
     }, nullptr);
     Serial.println("[blackbox] end");

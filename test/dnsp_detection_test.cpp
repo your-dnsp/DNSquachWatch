@@ -2,6 +2,8 @@
 #include "detection.h"
 #include "detection_record.h"
 #include "detection_info.h"
+#include "simulation.h"
+#include "signatures.h"
 #include <cstring>
 
 static Detection sample(unsigned id, DetectionType type=DetectionType::FLOCK) {
@@ -73,5 +75,28 @@ int main() {
     ck("deauth evidence names count, targets, BSSID and spoofing limit",strstr(why,"6 deauth")&&strstr(why,"3 targets")&&strstr(why,"reason 7")&&strstr(why,"can be spoofed"));
     ck("deauth duration remains correct across millis rollover",strstr(why,"500ms"));
     ck("RSSI is not presented as distance",strstr(DetectionInfo::rssiConfidencePrimer(),"not distance"));
+    suite("DNSP decoded-address convention and preservation");
+    uint8_t exact[]={0xAC,0x12,0x34,0,0,0};
+    ck("exact zero suffix matches independently of OUI",Simulation::marked(exact));
+    bool misses=true;for(unsigned i=3;i<6;i++){exact[i]=1;misses&=!Simulation::marked(exact);exact[i]=0;}
+    ck("each near miss stays ordinary",misses);
+    uint8_t vendorMac[]={0xB4,0x1E,0x52,1,2,3},testMac[]={0xB4,0x1E,0x52,0,0,0};Confidence aConf,bConf;
+    auto aType=lookupOui(vendorMac,&aConf),bType=lookupOui(testMac,&bConf);
+    ck("simulation suffix cannot change OUI classification or confidence",aType==bType&&aConf==bConf);
+    uint8_t unknown[]={0x00,0x00,0x01,0,0,0};ck("marker alone cannot create an OUI match",Simulation::marked(unknown)&&lookupOui(unknown)==DetectionType::UNKNOWN);
+
+    uint8_t payload[]={0xAC,0x12,0x34,1,2,3,0,0,0};
+    ck("unrelated payload zeros never mark the decoded address",!Simulation::marked(payload));
+    char sub[48];Simulation::subtags(sub,sizeof sub,"friend",exact);
+    ck("automatic subtag preserves user text",!strcmp(sub,"friend / SIMULATED"));
+    Simulation::subtags(sub,sizeof sub,"friend / SIMULATED",exact);
+    ck("automatic subtag is not duplicated",!strcmp(sub,"friend / SIMULATED"));
+    Simulation::subtags(sub,sizeof sub,"friend",payload);ck("ordinary subtag unchanged",!strcmp(sub,"friend"));
+    row=sample(0);row.addressRole=AddressRole::BSSID;seen=row;seen.conf=Confidence::HIGH_CONF;seen.signature=42;
+    mergeObservation(row,seen,1800);q.clear();q.push(row);q.pop(out,1800);
+    ck("merge and queued snapshot keep classification and provenance",Simulation::marked(out)&&out.type==DetectionType::FLOCK&&out.conf==Confidence::HIGH_CONF&&out.signature==42&&out.addressRole==AddressRole::BSSID);
+    seen=row;seen.conf=Confidence::LOW_CONF;seen.evidence=MatchEvidence::OUI;seen.addressRole=AddressRole::TRANSMITTER;mergeObservation(row,seen,1900);
+    ck("weaker observation cannot replace retained evidence provenance",row.addressRole==AddressRole::BSSID);
+    ck("details explain convention without claiming authenticated identity",strstr(DetectionInfo::why(out),"Real hardware")&&strstr(DetectionInfo::why(out),"BSSID"));
     return report();
 }

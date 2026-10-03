@@ -78,6 +78,8 @@ enum class MatchEvidence : uint8_t {
     DEAUTH_BURST, EVIL_TWIN, PWNAGOTCHI, RESEARCH_COMPOSITE, WIFI_REMOTE_ID, BLE_REMOTE_ID
 };
 
+enum class AddressRole : uint8_t { MATCHED=0, TRANSMITTER=1, BSSID=2, BLE_ADVERTISER=3 };
+
 struct Detection {
     uint32_t       locationKey = 0; // immutable label ID captured with this observation
     uint8_t        mac[6];
@@ -130,6 +132,7 @@ struct Detection {
     uint16_t       signature; // matched BLE company/service ID, when applicable
     Confidence     conf;
     bool           active;
+    AddressRole    addressRole = AddressRole::MATCHED; // evidence address; uses existing padding
     // When it last asked to interrupt, allowed or not, in minutes of uptime
     // (wrapping after 45 days). A device that keeps coming back keeps asking,
     // so the gap since the last ask is how long it was really gone. Sits in

@@ -1,3 +1,4 @@
+#include "firmware_version.h"
 // SquachWatch-CYD — boot splash implementation
 #include "ui_boot.h"
 #include "theme.h"
@@ -8,9 +9,6 @@
 // same macro the Diary screen already reads (see its own guard
 // comment). Falls back to "unknown" so this still compiles standalone
 // (the PC emulator, an IDE's syntax pass) without the build flag.
-#ifndef FIRMWARE_VERSION
-#define FIRMWARE_VERSION "unknown"
-#endif
 
 // A dozen one-liners for Squachy's boot-splash speech bubble — one is
 // picked at random each boot (see uiBootInit) so the splash doesn't

@@ -1,5 +1,27 @@
 # DNSquachWatch changelog
 
+## v1.5.7
+
+- Identify the actual history-processing step and its slowest individual storage operation in slow-call serial diagnostics, instead of reporting the phase after a transition.
+- Cache the location schema marker per refresh, avoiding a repeated filesystem lookup for every record while preserving journal verification.
+- Verify diagnostic timing across timer rollover, per-step reset, interrupted refresh recovery, display checks and both CYD 80 MHz builds.
+- Update all current firmware identities together. Existing microSD content and stored formats remain compatible; physical-card pauses still require measurement.
+
+## v1.5.6
+
+- Automatic readable refresh leaves 250 ms between steps; raw detection logging remains active and manual backup is not throttled.
+- Checkpoints alternate CRC-checked files instead of repeated file rotations, retaining the previous valid generation during interruption.
+- All current firmware labels and release packages advance together to v1.5.6. Existing microSD content and stored formats are unchanged.
+- Hardware smoothness still requires retesting; individual synchronous card operations can still pause the main loop.
+
+## v1.5.5
+
+- Shared compiled version across splash, System Info, health reports, research exports and backup metadata; corrects the reused v1.5.3 build identity.
+- Receiver simulation metadata retained through normal detection, history, rules and redacted research reports.
+- MicroSD refresh journals advance across separate passes after drawing, with pauses during touch and alerts. Existing recovery formats remain compatible.
+- Readable-history CSV text uses the existing sanitizer for radio names and labels.
+- Existing `/DNSP Content/v1.5/` files remain unchanged. Hardware responsiveness and backup regression checks are still required.
+
 ## v1.5.2
 
 - Wi-Fi connection has its own screen, returns to saved networks, and preserves connection-only mode across password entry. Startup joins saved networks for time and location recall; firmware checks require the explicit update action.

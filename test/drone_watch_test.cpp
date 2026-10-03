@@ -47,9 +47,14 @@ int main(){
     fail=false;startCapture(700);captureReady();tick(701);observe(false,mac,ad,31,-50,0,702);fail=true;tick(703);
     ck("write failure ends capture",stats().capture==Capture::ERROR&&stats().dropped==1);
     fail=false;startCapture(800);captureReady();tick(801);tick(60801);ck("automatic timeout",settled());
-    Record record;char out[2304];record.length=1025;record.original=1025;
+    Record record;char out[2496];record.length=1025;record.original=1025;
     ck("invalid record bounded",!formatRecord(record,out,sizeof out));record.length=31;record.original=31;
     ck("tiny destination rejected",!formatRecord(record,out,8));
+    record.mac[0]=0xB4;record.mac[1]=0x1E;record.mac[2]=0x52;record.mac[3]=record.mac[4]=record.mac[5]=0;record.wifi=true;
+    ck("Remote ID capture retains transmitter simulation",formatRecord(record,out,sizeof out)&&strstr(out,"\"simulated\":true")&&strstr(out,"claimed transmitter"));
+    record.mac[5]=1;ck("Remote ID payload zeros do not mark an ordinary address",formatRecord(record,out,sizeof out)&&strstr(out,"\"simulated\":false"));
+    record.length=sizeof record.data;record.original=record.length;record.mac[5]=0;
+    ck("maximum capture payload fits with simulation metadata",formatRecord(record,out,sizeof out)&&strstr(out,"\"simulated\":true"));
     suite("No-fix clears previous position");
     RemoteId::Info info;info.haveLoc=true;info.lat=12;
     memset(ad+6,0,25);ad[6]=0x12;

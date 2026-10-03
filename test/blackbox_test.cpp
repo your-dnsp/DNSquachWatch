@@ -80,6 +80,12 @@ int main() {
     ck("still 100, newest first", BlackBox::detectionsKept() == 100 && s.n == 100 && s.first == 100 && s.ordered);
     ck("the next boot is boot 2", BlackBox::bootNumber() == 2);
 
+    Detection simulated=det(0);simulated.addressRole=AddressRole::BSSID;
+    BlackBox::noteDetection(simulated,false);BlackBox::testReopen();BlackBox::DetRecord restored{};
+    BlackBox::forEachDetection([](const BlackBox::DetRecord& r,void* p){*(BlackBox::DetRecord*)p=r;return false;},&restored);
+    ck("simulation and matching-address provenance survive reboot",BlackBox::simulated(restored)&&(restored.flags&BlackBox::DET_SIMULATED)&&BlackBox::addressRole(restored)==AddressRole::BSSID);
+    restored.flags=0;ck("old zero-suffix records derive marker without a new flag",BlackBox::simulated(restored));
+    ck("persistent detection format remains 64 bytes",sizeof(BlackBox::DetRecord)==64);
     suite("A full ring keeps its newest");
     for (uint16_t i = 101; i <= 5000; i++) BlackBox::noteDetection(det(i), false);
     s = walkDets();

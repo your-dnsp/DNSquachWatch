@@ -47,6 +47,7 @@ enum class Fail : uint8_t {
     NOT_SIGNED,
     LOW_MEMORY,
     TOO_OLD,
+    CARD_CONTENT,
 };
 
 // What to tell a person, in words they can act on.
@@ -113,6 +114,8 @@ bool restartPending();
 // ---- the installer ---------------------------------------------------------
 // One image at a time. begin() erases exactly the sectors the image needs, so
 // it takes a few seconds; call it from a task that can afford to wait.
+bool verifyManifest(const uint8_t* body, size_t len, const uint8_t* sig, size_t sigLen);
+void expectImageDigest(const uint8_t hash[32]);
 Fail     begin(uint32_t size, const uint8_t* sig, uint8_t sigLen);
 // Bytes in order. Safe to call from a different task than begin()/finish().
 // False on a flash error; the caller fails the transfer.

@@ -22,7 +22,7 @@ public:
                 replacement.name[sizeof replacement.name - 1] = 0;
                 if (old.conf > d.conf) {
                     replacement.conf = old.conf; replacement.evidence = old.evidence;
-                    replacement.evidenceBits = old.evidenceBits; replacement.signature = old.signature; replacement.vendor = old.vendor;
+                    replacement.evidenceBits = old.evidenceBits; replacement.signature = old.signature; replacement.vendor = old.vendor; replacement.addressRole=old.addressRole;
                 }
                 old = replacement;
                 unlock();

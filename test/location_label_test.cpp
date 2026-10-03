@@ -11,7 +11,14 @@ int main(){char dir[]="/tmp/dnsp-location-test-XXXXXX";ck("isolated persistent s
  ck("default explicitly unset",!strcmp(current(),"no-label-set"));
  ck("manual label",set("Driving"));uint32_t driving=currentKey();
  wifi("My authenticated network");ck("unknown connected network keeps manual label",currentKey()==driving&&!recalled());
- ck("set while connected",set("Home"));uint32_t home=currentKey();
+ ck("set while connected",set("Home"));ck("explicit binding",rememberNetwork("My authenticated network"));uint32_t home=currentKey();
+ ck("active label exposes network association",!strcmp(associatedNetwork(),"My authenticated network"));
+ clearSession();ck("clear active label retains network binding",!currentKey());
+ wifi("");wifi("My authenticated network");ck("binding survives session clear",currentKey()==home&&recalled());
+ ck("Driving does not overwrite Home binding",set("Driving"));begin();wifi("My authenticated network");ck("Home association survives manual Driving",currentKey()==home&&recalled());
+ wifi("");ck("set after station disconnect",set("Home"));ck("explicit verified network save after disconnect",rememberNetwork("My authenticated network"));
+ begin();wifi("My authenticated network");ck("disconnected save persists across reboot",currentKey()==home&&recalled());
+ ck("manual selection after recall",set("Home"));
  Preferences disk;disk.begin("dnsp-location",true);ck("small labels fit restricted storage",disk.getBytesLength("v2")<100);disk.end();
  setenv("SQUACHSIM_NVS_MAX_BLOB_BYTES","1",1);ck("failed write reported",!set("Work"));ck("failed write retains active label",currentKey()==home);unsetenv("SQUACHSIM_NVS_MAX_BLOB_BYTES");
  wifi("");ck("manual survives disconnect",currentKey()==home&&!recalled());

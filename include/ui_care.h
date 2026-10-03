@@ -3,7 +3,7 @@
 #include "ui_settings.h"
 #include <TFT_eSPI.h>
 namespace CareUI {
-enum class Page:uint8_t {BACKUP,DEMO,STATUS,GIFT,REPORT,HEALTH,WELCOME,SD_RECOVERY,READABLE_LOGS};
+enum class Page:uint8_t {BACKUP,DEMO,STATUS,GIFT,REPORT,HEALTH,WELCOME,SD_RECOVERY,READABLE_LOGS,BACKUP_FILES};
 void open(Page=Page::BACKUP);
 Page page();
 void runPending(bool visible, uint32_t now, DetectionEngine&);

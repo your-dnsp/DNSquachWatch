@@ -23,6 +23,7 @@ enum class UpdateHit : uint8_t {
     TRY_AGAIN,       // back to the WiFi list after a failure
     CANCEL,          // leaves update mode
     OK,              // dismisses a failure and leaves update mode
+    SET_LOCATION,    // label the successfully authenticated network
     BACK,            // out to Settings
 };
 

@@ -399,7 +399,10 @@ void drawWifi(TFT_eSPI& t) {
         case OtaWifi::State::DONE:      drawFinishing(t, "UPDATE INSTALLED", Theme::CYAN, true); break;
         case OtaWifi::State::CONNECTED:
             label(t, 34, Theme::CYAN, "WI-FI CONNECTED");
-            para(t,56,Theme::WHITE,"Time sync attempted. Set a location label to remember it for this verified network. BACK resumes scanning.");backButton(t,"BACK");break;
+            para(t,56,Theme::WHITE,OtaWifi::lastAuthenticatedNetwork());
+            para(t,80,Theme::WHITE,"Time sync attempted. Save a location for this Wi-Fi; scanning resumes when you leave.");
+            Theme::drawButton(t,8,geom(t).backY-BTN_H-8,t.width()-16,BTN_H,"SET LOCATION FOR THIS WI-FI",false);
+            backButton(t,"BACK");break;
         case OtaWifi::State::FAILED:    drawFailed(t, OtaWifi::failureText(), OtaWifi::canTryAgain()); break;
         default: break;
     }
@@ -513,6 +516,7 @@ UpdateHit uiUpdateHitTest(TFT_eSPI& t, int x, int y, int* netIndex) {
                 }
                 return onBack ? UpdateHit::OK : UpdateHit::NONE;
             case OtaWifi::State::CONNECTED:
+                if (s_connectionOnly && in(x,y,8,g.backY-BTN_H-8,t.width()-16,BTN_H)) return UpdateHit::SET_LOCATION;
                 return onBack ? UpdateHit::CANCEL : UpdateHit::NONE;
             case OtaWifi::State::SCANNING:
             case OtaWifi::State::CONNECTING:

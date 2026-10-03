@@ -1,3 +1,5 @@
+#include "firmware_version.h"
+#include "simulation.h"
 #include "care.h"
 #include "ota_core.h"
 #include "research.h"
@@ -69,15 +71,16 @@ static bool writeInstallationGuide(){pathFor("DNSQUACHWATCH INSTALLATION.txt");F
 static const char* confName(Confidence c){return c==Confidence::HIGH_CONF?"high":c==Confidence::MED_CONF?"medium":"low";}
 static __attribute__((noinline)) bool writeCurrentLog(const DetectionEngine& engine){
  pathFor("current-log.csv");File out=SD.open(path,FILE_WRITE);if(!out)return false;
- const char* header="row,type,mac,rssi,channel,hits,active,first_seen_ms,last_seen_ms,confidence,vendor,name,user_label,subtag,location\n";
+ const char* header="row,type,mac,rssi,channel,hits,active,first_seen_ms,last_seen_ms,confidence,vendor,name,user_label,subtag,location,simulated,address_provenance\n";
  bool ok=out.write((const uint8_t*)header,strlen(header))==strlen(header);logRows=0;
  for(uint8_t i=0;ok&&i<engine.logCount();i++){
   const Detection* d=engine.logAt(i);if(!d)continue;
-  char vendor[40],name[40],user[28]="",subtag[32]="";safeCsvText(vendor,sizeof vendor,vendorText(*d),strlen(vendorText(*d)));safeCsvText(name,sizeof name,d->name,sizeof d->name);
+  char vendor[40],name[40],user[28]="",subtag[64]="";safeCsvText(vendor,sizeof vendor,vendorText(*d),strlen(vendorText(*d)));safeCsvText(name,sizeof name,d->name,sizeof d->name);
   UserLabels::Label label{};if(UserLabels::lookup(d->mac,label)){safeCsvText(user,sizeof user,UserLabels::typeName(label.type),strlen(UserLabels::typeName(label.type)));safeCsvText(subtag,sizeof subtag,label.subtag,sizeof label.subtag);}
-  char row[384];int n=snprintf(row,sizeof row,"%u,%s,%02X:%02X:%02X:%02X:%02X:%02X,%d,%u,%u,%s,%lu,%lu,%s,%s,%s,%s,%s,%s\n",
+  char derived[48];Simulation::subtags(derived,sizeof derived,label.subtag,d->mac);safeCsvText(subtag,sizeof subtag,derived,sizeof derived);
+  char row[384];int n=snprintf(row,sizeof row,"%u,%s,%02X:%02X:%02X:%02X:%02X:%02X,%d,%u,%u,%s,%lu,%lu,%s,%s,%s,%s,%s,%s,%u,%s\n",
     (unsigned)(i+1),detectionTypeName(d->type),d->mac[0],d->mac[1],d->mac[2],d->mac[3],d->mac[4],d->mac[5],(int)d->rssi,(unsigned)d->channel,(unsigned)d->hits,d->active?"yes":"no",
-    (unsigned long)d->firstSeen,(unsigned long)d->lastSeen,confName(d->conf),vendor,name,user,subtag,LocationLabel::text(d->locationKey));
+    (unsigned long)d->firstSeen,(unsigned long)d->lastSeen,confName(d->conf),vendor,name,user,subtag,LocationLabel::text(d->locationKey),Simulation::marked(*d),Simulation::roleName(d->addressRole));
   ok=n>0&&size_t(n)<sizeof row&&out.write((const uint8_t*)row,n)==size_t(n);if(ok)logRows++;
  }
  out.flush();out.close();if(!ok)return false;
@@ -85,7 +88,7 @@ static __attribute__((noinline)) bool writeCurrentLog(const DetectionEngine& eng
 }
 static __attribute__((noinline)) bool writeOperational(const DetectionEngine* engine){OperationalState s;s.field=Field::config;s.ignoreN=IgnoreList::count();for(uint8_t i=0;i<s.ignoreN;i++){const uint8_t*m=IgnoreList::macAt(i);if(m)memcpy(s.ignore[i],m,6);s.ignore[i][6]=(uint8_t)IgnoreList::typeAt(i);}s.labelN=UserLabels::count();for(uint8_t i=0;i<s.labelN;i++)UserLabels::at(i,s.labelMac[i],s.labels[i]);s.profile=(uint8_t)ScanProfile::current();s.wifi=ScanProfile::customWifiMs();s.ble=ScanProfile::customBleShare();s.maxMin=ScanProfile::maximumMinutes();s.ruleOn=SketchyRule::enabled();if(engine){s.watchKind=(uint8_t)engine->watchKind();s.huntKind=(uint8_t)engine->huntKind();if(s.watchKind){memcpy(s.watchMac,engine->watchMac(),6);snprintf(s.watchLabel,sizeof s.watchLabel,"%s",engine->watchLabel());}if(s.huntKind){memcpy(s.huntMac,engine->huntMac(),6);snprintf(s.huntLabel,sizeof s.huntLabel,"%s",engine->huntLabel());}}s.crc=0;s.crc=Care::crc(&s,sizeof s);return writeFile("operational-state.bin",&s,sizeof s);}
 // Fixed list and one verified 1 KiB copy/readback operation per tick.
-static const char* historyFiles[]={"ALL-ALERTS.txt","ALERT-HISTORY-v1.2.csv","ALERT-HISTORY.csv","SCAN-HISTORY.txt","SYSTEM-HISTORY.txt","SKETCHY-ENVIRONMENT.txt","EXPORT-SUMMARY.txt"};
+static const char* historyFiles[]={"ALL-ALERTS.txt","ALERT-HISTORY-v1.5.3.csv","ALERT-HISTORY-v1.2.csv","ALERT-HISTORY.csv","SCAN-HISTORY.txt","SYSTEM-HISTORY.txt","SKETCHY-ENVIRONMENT.txt","EXPORT-SUMMARY.txt"};
 constexpr uint8_t HISTORY_COUNT=sizeof historyFiles/sizeof historyFiles[0];
 struct HistorySource {bool read(uint32_t at,uint8_t* data,size_t n){char from[112];snprintf(from,sizeof from,"/DNSP Readable Logs/Current/%s",historyFiles[copyIndex]);File f=SD.open(from,FILE_READ);bool ok=f&&f.seek(at)&&f.read(data,n)==int(n);f.close();return ok;}};
 struct HistoryDest {
@@ -182,7 +185,7 @@ static __attribute__((noinline)) void copyTick(){
  // The app backup deliberately excludes bootloader, NVS, keys, history and
  // partition-table writes. Recovery uses the matching release kit on a PC.
  char manifest[1024];int n=snprintf(manifest,sizeof manifest,
-  "DNSP_BACKUP_V2\nfirmware=DNSquachWatch v1.5.2\nbase=SquachWatch v1.28.0\nbuild=%s\napp_bytes=%lu\nsource_address=0x%lx\nsha256=%s\napp_only=true\npartition_sector_sha256=%s\npreferences=public-v3\noperational_state=operational-state.bin\nlocation_labels=location-labels.bin\nreadable_history=complete\ncurrent_log=current-log.csv\ncurrent_log_rows=%u\nUse the matching board release kit and DNSQUACHWATCH INSTALLATION.txt. Hash is integrity, not authenticity.\nPINs, Duress state and authentication secrets are never included. Device identifiers, manual location labels, associated Wi-Fi network names, user labels and active Watch/Hunt targets are included. Existing microSD research files are not duplicated. Historical logs are readable and are not replayed during restore.\n",
+  "DNSP_BACKUP_V2\nfirmware=DNSquachWatch v" FIRMWARE_VERSION "\nbase=SquachWatch v1.28.0\nbuild=%s\napp_bytes=%lu\nsource_address=0x%lx\nsha256=%s\napp_only=true\npartition_sector_sha256=%s\npreferences=public-v3\noperational_state=operational-state.bin\nlocation_labels=location-labels.bin\nreadable_history=complete\ncurrent_log=current-log.csv\ncurrent_log_rows=%u\nUse the matching board release kit and DNSQUACHWATCH INSTALLATION.txt. Hash is integrity, not authenticity.\nPINs, Duress state and authentication secrets are never included. Device identifiers, manual location labels, associated Wi-Fi network names, user labels and active Watch/Hunt targets are included. Existing microSD research files are not duplicated. Historical logs are readable and are not replayed during restore.\n",
   OtaCore::buildName(),(unsigned long)part->size,(unsigned long)part->address,hex,layoutHash,(unsigned)logRows);
  ok=ok&&writeInstallationGuide();
  ok=ok&&n>0&&size_t(n)<sizeof manifest&&writeFile("COMPLETE.txt",manifest,n);

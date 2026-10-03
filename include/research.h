@@ -16,6 +16,7 @@ struct Stats {
     // burst is counted only when the main per-source detector crosses its
     // threshold. These remain session-level counters; RAW records contain
     // the per-frame addresses needed for field validation.
+    uint32_t simulated=0; // successfully saved observations with DNSP test suffix
     uint32_t deauthFrames=0, deauthBursts=0, deauthMultiTargetBursts=0;
     uint32_t deauthProtected=0, deauthUnprotected=0, deauthReasonKnown=0;
     uint32_t bleMs=0, wifiMs=0, channelMs[14]{}; uint16_t channels=0; uint32_t catalog=BUILTIN_VERSION;

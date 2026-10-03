@@ -14,6 +14,7 @@ jobs:
         with:
           persist-credentials: false
       - run: make -C test -j2
+      - run: python3 test/version_consistency_test.py
       - run: python3 test/installer_test.py
       - run: python3 test/install_tools_test.py
       - run: python3 tools/check_language_content.py
@@ -35,7 +36,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
-      - name: Publish checked v1.5.2 display kits
+      - name: Publish checked display kits for the shared release version
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: python3 tools/publish_release.py

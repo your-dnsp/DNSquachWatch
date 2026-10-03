@@ -1,5 +1,7 @@
 # v1.5 resource audit — ST7789-80MHz
 
+For the current local v1.5.3 receiver revision, see [the new size audit](SIZE-AUDIT-v1.5.3.md). The numbers below describe the earlier releases.
+
 The complete application is **1,949,040 bytes** in the unchanged **1,966,080-byte** slot: **17,040 bytes remain**. The v1.4 image was 1,960,096 bytes. These are complete .bin sizes, including headers, padding and checksum; PlatformIO's smaller ELF figure is not the installation size.
 
 The compiler uses link-time optimization. English text/font stays onboard; extended glyphs and 702 translated strings use version-matched card files, bounded reads and content checks. No detection, Remington, BlackBox, coredump or persistent duress feature was removed. The compiled SDK TLS-server role is rejected because the device only acts as an HTTPS client.

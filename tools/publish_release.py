@@ -6,7 +6,7 @@ ROOT=Path(__file__).resolve().parents[1]
 def main():
  repo=os.environ['GITHUB_REPOSITORY'];commit=os.environ['GITHUB_SHA'];token=os.environ['GITHUB_TOKEN']
  if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+',repo) or not re.fullmatch(r'[0-9a-f]{40}',commit):raise ValueError('Invalid release target')
- version='1.5.2';archives=[];lines=[]
+ version=re.search(r'^#define DNSP_RELEASE_VERSION "([0-9]+\.[0-9]+\.[0-9]+)"$',(ROOT/'include/firmware_version.h').read_text(),re.M).group(1);archives=[];lines=[]
  for board,target in [('ST7789','cyd-fast'),('ILI9341','cyd-ili9341-fast')]:
   folder=ROOT/('firmware/v'+version)/(board+'-80MHz');name='DNSquachWatch-v'+version+'-'+board+'-80MHz.zip'
   manifest=json.loads((folder/'manifest.json').read_text());assert manifest['internal_version']==version and manifest['target']==target

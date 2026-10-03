@@ -14,6 +14,8 @@ bool recalled();
 const char* status();
 bool set(const char* label);
 bool clear();
+void clearSession(); // retains saved network bindings and historical labels
+const char* associatedNetwork(); // network bound to the active label, if any
 bool rememberNetwork(const char* verifiedSsid); // explicit user action after authentication this boot
 bool forgetNetwork(const char* verifiedSsid);
 void wifi(const char* authenticatedSsid); // nullptr/empty means disconnected; never a scan result

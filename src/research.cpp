@@ -1,3 +1,4 @@
+#include "simulation.h"
 #include "research.h"
 #include "location_label.h"
 #include "deauth_tracker.h"
@@ -112,10 +113,10 @@ bool encode(const Record& r,const Stats& s,char* json,size_t jc,char* csv,size_t
         else{strcpy(receiver,"redacted");strcpy(bssid,"redacted");}
     }
     // Redacted records deliberately contain no persistent device token, names, notes or payload.
-    int a=snprintf(json,jc,"{\"schema\":2,\"session\":%lu,\"id\":%lu,\"reference\":%lu,\"uptime_ms\":%lu,\"time_quality\":\"relative\",\"catalog\":%lu,\"radio\":%u,\"address_type\":%u,\"mac\":\"%s\",\"rssi\":%d,\"channel\":%u,\"type\":%u,\"confidence\":%u,\"evidence\":%u,\"rule\":%u,\"ie_fingerprint\":%lu,\"experimental\":true,\"wifi_subtype\":%d,\"deauth\":%s,\"claimed_transmitter\":\"%s\",\"receiver\":\"%s\",\"bssid\":\"%s\",\"deauth_reason\":%d,\"reason_known\":%s,\"protected_management\":%s,\"original_bytes\":%u,\"captured_bytes\":%u,\"payload_hex\":\"%s\",\"verdict\":\"%s\",\"note\":\"%s\",\"location\":\"%s\"}\n",
-        (unsigned long)s.session,(unsigned long)r.id,(unsigned long)r.reference,(unsigned long)r.at,(unsigned long)s.catalog,r.radio,r.addressType,mac,r.rssi,r.channel,(unsigned)r.match.type,(unsigned)r.match.conf,r.match.bits,r.match.rule,(unsigned long)(s.raw?r.match.fingerprint:0),isDeauth?12:-1,isDeauth?"true":"false",isDeauth?mac:"",receiver,bssid,isDeauth&&deauth.reasonValid?deauth.reason:-1,isDeauth&&deauth.reasonValid?"true":"false",isDeauth&&deauth.protectedFrame?"true":"false",r.original,s.raw?r.length:0,payload,verdictName(r.verdict),note,LocationLabel::text(r.locationKey));
-    int b=snprintf(csv,cc,"%lu,%lu,%lu,%lu,%lu,%u,%s,%d,%u,%u,%u,%u,%s,%u,%s,%s,%s,%d,%s,%s\n",(unsigned long)s.session,(unsigned long)r.id,(unsigned long)r.reference,(unsigned long)r.at,(unsigned long)s.catalog,r.radio,mac,r.rssi,r.channel,(unsigned)r.match.type,r.match.bits,r.match.rule,verdictName(r.verdict),(unsigned)r.match.conf,isDeauth?mac:"",receiver,bssid,isDeauth&&deauth.reasonValid?deauth.reason:-1,isDeauth&&deauth.protectedFrame?"protected":isDeauth?"unprotected":"",LocationLabel::text(r.locationKey));
-    return a>=0&&size_t(a)<jc&&b>=0&&size_t(b)<cc;
+    int a=snprintf(json,jc,"{\"schema\":3,\"session\":%lu,\"id\":%lu,\"reference\":%lu,\"uptime_ms\":%lu,\"time_quality\":\"relative\",\"catalog\":%lu,\"radio\":%u,\"address_type\":%u,\"mac\":\"%s\",\"rssi\":%d,\"channel\":%u,\"type\":%u,\"confidence\":%u,\"evidence\":%u,\"rule\":%u,\"ie_fingerprint\":%lu,\"experimental\":true,\"wifi_subtype\":%d,\"deauth\":%s,\"claimed_transmitter\":\"%s\",\"receiver\":\"%s\",\"bssid\":\"%s\",\"deauth_reason\":%d,\"reason_known\":%s,\"protected_management\":%s,\"original_bytes\":%u,\"captured_bytes\":%u,\"payload_hex\":\"%s\",\"verdict\":\"%s\",\"note\":\"%s\",\"location\":\"%s\"",
+        (unsigned long)s.session,(unsigned long)r.id,(unsigned long)r.reference,(unsigned long)r.at,(unsigned long)s.catalog,r.radio,r.addressType,mac,r.rssi,r.channel,(unsigned)r.match.type,(unsigned)r.match.conf,r.match.bits,r.match.rule,(unsigned long)(s.raw?r.match.fingerprint:0),isDeauth?12:-1,isDeauth?"true":"false",isDeauth?mac:"",receiver,bssid,isDeauth&&deauth.reasonValid?deauth.reason:-1,isDeauth&&deauth.reasonValid?"true":"false",isDeauth&&deauth.protectedFrame?"true":"false",r.original,s.raw?r.length:0,payload,verdictName(r.verdict),note,LocationLabel::text(r.locationKey) );
+    int b=snprintf(csv,cc,"%lu,%lu,%lu,%lu,%lu,%u,%s,%d,%u,%u,%u,%u,%s,%u,%s,%s,%s,%d,%s,%s,%u,%s\n",(unsigned long)s.session,(unsigned long)r.id,(unsigned long)r.reference,(unsigned long)r.at,(unsigned long)s.catalog,r.radio,mac,r.rssi,r.channel,(unsigned)r.match.type,r.match.bits,r.match.rule,verdictName(r.verdict),(unsigned)r.match.conf,isDeauth?mac:"",receiver,bssid,isDeauth&&deauth.reasonValid?deauth.reason:-1,isDeauth&&deauth.protectedFrame?"protected":isDeauth?"unprotected":"",LocationLabel::text(r.locationKey),Simulation::marked(r.mac),r.radio?"claimed transmitter":"BLE advertiser");
+    return a>=0&&size_t(a)<jc&&b>=0&&size_t(b)<cc&&Simulation::finishJson(json,jc,size_t(a),r.mac,r.radio?AddressRole::TRANSMITTER:AddressRole::BLE_ADVERTISER);
 }
 void tick(uint32_t now){
     {Guard g;if(s.active){s.elapsed=now-s.start;if(s.elapsed>=s.duration){s.active=false;strcpy(message,"Time limit reached");}}}
@@ -123,20 +124,20 @@ void tick(uint32_t now){
     Stats finalStats;bool finish=false;
     {Guard g;if(!s.active&&!count&&summaryPending&&!s.errors){finalStats=s;summaryPending=false;finish=true;}}
     if(finish){
-        char line[900];int n=snprintf(line,sizeof line,"{\"kind\":\"summary\",\"schema\":2,\"session\":%lu,\"profile\":%u,\"raw\":%s,\"elapsed_ms\":%lu,\"observed\":%lu,\"saved\":%lu,\"omitted\":%lu,\"write_errors\":%lu,\"deauth_frames\":%lu,\"deauth_coherent_bursts\":%lu,\"deauth_multi_target_bursts\":%lu,\"deauth_protected_frames\":%lu,\"deauth_unprotected_frames\":%lu,\"deauth_reason_known\":%lu,\"ble_enabled_ms\":%lu,\"wifi_enabled_ms\":%lu,\"channel_enabled_ms\":[",
-          (unsigned long)finalStats.session,(unsigned)finalStats.profile,finalStats.raw?"true":"false",(unsigned long)finalStats.elapsed,(unsigned long)finalStats.observed,(unsigned long)finalStats.saved,(unsigned long)finalStats.dropped,(unsigned long)finalStats.errors,(unsigned long)finalStats.deauthFrames,(unsigned long)finalStats.deauthBursts,(unsigned long)finalStats.deauthMultiTargetBursts,(unsigned long)finalStats.deauthProtected,(unsigned long)finalStats.deauthUnprotected,(unsigned long)finalStats.deauthReasonKnown,(unsigned long)finalStats.bleMs,(unsigned long)finalStats.wifiMs);
+        char line[900];int n=snprintf(line,sizeof line,"{\"kind\":\"summary\",\"schema\":3,\"session\":%lu,\"profile\":%u,\"raw\":%s,\"elapsed_ms\":%lu,\"observed\":%lu,\"saved\":%lu,\"simulated\":%lu,\"omitted\":%lu,\"write_errors\":%lu,\"deauth_frames\":%lu,\"deauth_coherent_bursts\":%lu,\"deauth_multi_target_bursts\":%lu,\"deauth_protected_frames\":%lu,\"deauth_unprotected_frames\":%lu,\"deauth_reason_known\":%lu,\"ble_enabled_ms\":%lu,\"wifi_enabled_ms\":%lu,\"channel_enabled_ms\":[",
+          (unsigned long)finalStats.session,(unsigned)finalStats.profile,finalStats.raw?"true":"false",(unsigned long)finalStats.elapsed,(unsigned long)finalStats.observed,(unsigned long)finalStats.saved,(unsigned long)finalStats.simulated,(unsigned long)finalStats.dropped,(unsigned long)finalStats.errors,(unsigned long)finalStats.deauthFrames,(unsigned long)finalStats.deauthBursts,(unsigned long)finalStats.deauthMultiTargetBursts,(unsigned long)finalStats.deauthProtected,(unsigned long)finalStats.deauthUnprotected,(unsigned long)finalStats.deauthReasonKnown,(unsigned long)finalStats.bleMs,(unsigned long)finalStats.wifiMs);
         for(int i=1;i<=13;i++)n+=snprintf(line+n,sizeof(line)-n,"%s%lu",i==1?"":",",(unsigned long)finalStats.channelMs[i]);
         snprintf(line+n,sizeof(line)-n,"]}\n");
         bool ok=sink&&sink(line,"",false);if(reportSink&&!reportSink(finalStats))ok=false;Guard g;if(ok)s.bytes+=strlen(line);else{inc(s.errors);strcpy(message,"Summary write failed");}return;
     }
     // One bounded write per loop. Stop accepting captures on storage failure.
     Record r;Stats snap;{Guard g;if(!count)return;r=queue[head];head=(head+1)%12;--count;snap=s;}
-    char json[1100],csv[320];
+    char json[1240],csv[360];
     if(!encode(r,snap,json,sizeof json,csv,sizeof csv)){Guard g;inc(s.errors);s.active=false;s.dropped+=count+1;count=0;strcpy(message,"Record encoding failed");return;}
     const size_t bytes=strlen(json)+strlen(csv);
     if(snap.bytes+bytes>1024*1024-2048){Guard g;s.active=false;s.dropped+=count+1;count=0;strcpy(message,"1 MiB session limit reached");return;}
     if(!sink||!sink(json,csv,false)){Guard g;inc(s.errors);s.active=false;s.dropped+=count+1;count=0;strcpy(message,"microSD write failed; session stopped");return;}
-    Guard g;s.bytes+=bytes;inc(s.saved);if(!r.reference){
+    Guard g;s.bytes+=bytes;inc(s.saved);if(!r.reference){if(Simulation::marked(r.mac))inc(s.simulated);
         DeauthFrameEvidence deauth{};
         if(r.radio==1&&parseDeauthFrame(r.payload,r.length,r.rssi,r.channel,deauth)){
             inc(s.deauthFrames);

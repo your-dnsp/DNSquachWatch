@@ -10,7 +10,13 @@ def get_version():
     forced = os.environ.get("SQW_VERSION", "").strip()
     if forced:
         return forced
-    return "1.5.2"  # do not inherit a parent directory's git tag
+    from pathlib import Path
+    import re
+    header = Path(env.subst('$PROJECT_DIR')) / 'include/firmware_version.h'
+    match = re.search(r'^#define DNSP_RELEASE_VERSION "([0-9]+\.[0-9]+\.[0-9]+)"$', header.read_text(), re.M)
+    if not match:
+        raise RuntimeError('Missing shared DNSP release version')
+    return match.group(1)  # never infer release identity from a directory/tag
 
 
 env.Append(BUILD_FLAGS=['-DFIRMWARE_VERSION=\\"%s\\"' % get_version()])

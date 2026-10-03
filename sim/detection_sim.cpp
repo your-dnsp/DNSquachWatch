@@ -95,7 +95,7 @@ void DetectionEngine::pushLog(const Detection& d) {
 }
 
 // Radio-fed entry points: inert here, nothing calls them in the sim.
-void DetectionEngine::postWiFi(const uint8_t*, int8_t, uint8_t, const char*, bool, bool, bool) {}
+void DetectionEngine::postWiFi(const uint8_t*, int8_t, uint8_t, const char*, bool, bool, bool, AddressRole) {}
 void DetectionEngine::postDeauth(const DeauthFrameEvidence&) {}
 void DetectionEngine::postBle(Detection d) { if(!_stopping.load())pushLog(d); }
 

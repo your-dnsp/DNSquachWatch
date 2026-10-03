@@ -1,3 +1,4 @@
+#include "simulation.h"
 // SquachWatch-CYD — log screen implementation
 #include "ui_log.h"
 #include "location_label.h"
@@ -118,7 +119,7 @@ const Detection* uiLogRow(const DetectionEngine& eng, int idx) {
     row.restored  = 1;
     row.firstSeen = r.epoch;        // a wall-clock second, not a millis() stamp
     row.hits      = r.hits ? r.hits : 1;
-    row.locationKey=BlackBox::locationKey(r);
+    row.locationKey=BlackBox::locationKey(r);row.addressRole=BlackBox::addressRole(r);
     row.prevRssi  = r.rssi;
     memcpy(row.name, r.name, sizeof row.name);
     row.name[sizeof row.name - 1] = '\0';
@@ -261,7 +262,7 @@ static void rowLayout(TFT_eSPI& t, int bodyTop, int& detailY, int& rowH) {
     // own two-pixel gap under that.
     const int topPad = 3;
     detailY = topPad + nameH;
-    rowH = topPad + nameH + detailH + 3 + 2;
+    rowH = topPad + nameH + detailH + 3 + 2 + 10;
     (void)bodyTop;
 }
 
@@ -397,6 +398,7 @@ switch (Settings::background()) {
         t.setTextColor(kept ? dim : Theme::colorFor(shownColorType), Theme::BG);
         t.setCursor(8, y + topPad);
         t.print(shownType);
+        if(Simulation::marked(*d)){t.setTextSize(1);t.setCursor(8,y+detailY+detailH+1);t.print("SIMULATED");t.setTextSize(2);}
         const int labelEnd = 8 + t.textWidth(shownType);
 
         // MAC + RSSI line

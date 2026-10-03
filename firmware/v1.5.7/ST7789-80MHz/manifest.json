@@ -1,0 +1,44 @@
+{
+  "firmware": "DNSquachWatch v1.5.7",
+  "internal_version": "1.5.7",
+  "base": "SquachWatch v1.28.0",
+  "target": "cyd-fast",
+  "board": "2.8-inch classic ESP32 CYD",
+  "display": "ST7789",
+  "display_clock_default_mhz": 80,
+  "runtime_display_clock_mhz": [
+    40,
+    80
+  ],
+  "flash_clock_mhz": 40,
+  "serial_baud": 115200,
+  "content_version": "v1.5",
+  "files": [
+    {
+      "file": "bootloader.bin",
+      "offset": "0x1000",
+      "bytes": 17536,
+      "sha256": "0f65515a7e0dfe9cc4bc78c01bef79c941af1b2deb34d01ddd500ee3d465eedf"
+    },
+    {
+      "file": "partitions.bin",
+      "offset": "0x8000",
+      "bytes": 3072,
+      "sha256": "d2f7657d9ee0763e4fd0c67fd6657fb3e419f1a4eeab2a73fdea30c08e1a9697"
+    },
+    {
+      "file": "boot_app0.bin",
+      "offset": "0xe000",
+      "bytes": 8192,
+      "sha256": "f94c5d786a7a8fab06ac5d10e33bf37711a6697636dc037559ea19cc410a17f0"
+    },
+    {
+      "file": "firmware.bin",
+      "offset": "0x10000",
+      "bytes": 1962096,
+      "sha256": "b745345eae1e61ac55fdf1409aac5ec0471c647c7efd7a6be8bbdbcfe462cc6a"
+    }
+  ],
+  "package_revision": "receiver-simulation-size-audited-local-build",
+  "build_revision": "storage-responsiveness-and-version-consistency"
+}

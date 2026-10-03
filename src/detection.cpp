@@ -1,3 +1,4 @@
+#include "simulation.h"
 // SquachWatch-CYD — DetectionEngine implementation
 #include "detection.h"
 static portMUX_TYPE s_sdMux = portMUX_INITIALIZER_UNLOCKED;
@@ -320,6 +321,7 @@ class BleScanCallbacks : public NimBLEScanCallbacks {
         Detection det;
         memset(&det, 0, sizeof(det));
         memcpy(det.mac, mac, 6);
+        det.addressRole=AddressRole::BLE_ADVERTISER;
         det.rssi   = adv->getRSSI();
         det.channel= 0;
         det.firstSeen = det.lastSeen = millis();
@@ -621,7 +623,7 @@ bool DetectionEngine::init() {
         if (type == 0 && Field::observeWifi(frame,frameLength,millis())) {
             Detection d{};memcpy(d.mac,frame+10,6);d.rssi=pkt->rx_ctrl.rssi;d.channel=pkt->rx_ctrl.channel;
             d.type=DetectionType::DRONE;d.conf=Confidence::MED_CONF;d.vendor="WiFi Remote ID";
-            d.evidence=MatchEvidence::WIFI_REMOTE_ID;d.firstSeen=d.lastSeen=millis();d.hits=1;d.active=true;
+            d.addressRole=AddressRole::TRANSMITTER;d.evidence=MatchEvidence::WIFI_REMOTE_ID;d.firstSeen=d.lastSeen=millis();d.hits=1;d.active=true;
             g_engine->postBle(d);
         }
         if (type == 0) {
@@ -631,7 +633,7 @@ bool DetectionEngine::init() {
             if ((match.bits & Research::FINGERPRINT) && match.type != DetectionType::UNKNOWN) {
                 Detection d{};memcpy(d.mac,frame+10,6);d.rssi=pkt->rx_ctrl.rssi;d.channel=pkt->rx_ctrl.channel;
                 d.type=match.type;d.conf=Confidence::LOW_CONF;d.vendor="IE-class?";d.signature=match.rule; d.evidenceBits=match.bits;
-                d.evidence=MatchEvidence::RESEARCH_COMPOSITE;d.firstSeen=d.lastSeen=millis();d.hits=1;d.active=true;
+                d.addressRole=AddressRole::TRANSMITTER;d.evidence=MatchEvidence::RESEARCH_COMPOSITE;d.firstSeen=d.lastSeen=millis();d.hits=1;d.active=true;
                 g_engine->postBle(d); // bounded cross-task observation queue; channel still identifies WiFi
             }
         }
@@ -678,7 +680,7 @@ bool DetectionEngine::init() {
                 g_engine->postWiFi(frame + 10, pkt->rx_ctrl.rssi,
                                    pkt->rx_ctrl.channel, pwnName, false, true);
             } else {
-                g_engine->postWiFi(frame + 16, pkt->rx_ctrl.rssi, pkt->rx_ctrl.channel, ssid, enc);
+                g_engine->postWiFi(frame + 16, pkt->rx_ctrl.rssi, pkt->rx_ctrl.channel, ssid, enc, false, false, AddressRole::BSSID);
             }
         } else if (type == 0 && subtype == 12) {
             // Copy only fixed-header evidence here. Address 2 is the claimed
@@ -1315,7 +1317,7 @@ void DetectionEngine::clearLog() {
 
 void IRAM_ATTR DetectionEngine::postWiFi(const uint8_t* mac, int8_t rssi, uint8_t channel,
                                          const char* ssid, bool encrypted,
-                                         bool pwnagotchi, bool drone) {
+                                         bool pwnagotchi, bool drone, AddressRole role) {
     if (_stopping.load()) return;
     if (!mac) return;
     // Group-addressed (broadcast/multicast) destinations can never be a
@@ -1348,6 +1350,7 @@ void IRAM_ATTR DetectionEngine::postWiFi(const uint8_t* mac, int8_t rssi, uint8_
     e.encrypted = encrypted;
     e.pwnagotchi = pwnagotchi;
     e.drone = drone;
+    e.role = role;
     _wifiQHead = next;
 }
 
@@ -1385,6 +1388,7 @@ void DetectionEngine::processDeauthQ() {
             d.channel = burst.channel;
             d.type    = DetectionType::DEAUTH;
             d.evidence = MatchEvidence::DEAUTH_BURST;
+            d.addressRole = AddressRole::TRANSMITTER;
             // Multiple receivers make a flood interpretation stronger, but
             // even HIGH here describes the observed pattern, not an
             // authenticated attacker identity.
@@ -1426,6 +1430,7 @@ void DetectionEngine::processDeauthQ() {
                 row.firstSeen = d.firstSeen;
                 row.conf      = d.conf;
                 row.evidence  = d.evidence;
+                row.addressRole = d.addressRole;
                 row.evidenceBits = d.evidenceBits;
                 row.signature = d.signature;
                 row.vendor    = d.vendor;
@@ -1960,6 +1965,7 @@ void DetectionEngine::processWiFiQ() {
         d.rssi    = e.rssi;
         d.channel = e.channel;
         d.type    = t;
+        d.addressRole = e.role;
         d.evidence = evilTwin ? MatchEvidence::EVIL_TWIN
                    : e.pwnagotchi ? MatchEvidence::PWNAGOTCHI
                    : e.drone ? MatchEvidence::WIFI_REMOTE_ID
@@ -2085,18 +2091,18 @@ void logDump() {
     if (!g_engine) { Serial.println("[log] no engine"); return; }
     const uint8_t n = g_engine->logCount();
     Serial.printf("[log] %u rows, newest first\n", (unsigned)n);
-    Serial.println("row,type,mac,rssi,hits,state,when");
+    Serial.println("row,type,mac,rssi,hits,state,when,simulated,address_provenance");
     for (uint8_t i = 0; i < n; i++) {
         const Detection* d = g_engine->logAt(i);
         if (!d) break;
         char when[16];
         if (d->restored) Clock::formatEpochStamp(d->firstSeen, when, sizeof when);
         else             Clock::formatStamp(d->firstSeen, when, sizeof when);
-        Serial.printf("%u,%s,%02x:%02x:%02x:%02x:%02x:%02x,%d,%u,%s,%s\n",
+        Serial.printf("%u,%s,%02x:%02x:%02x:%02x:%02x:%02x,%d,%u,%s,%s,%u,%s\n",
                       (unsigned)i, detectionTypeName(d->type),
                       d->mac[0], d->mac[1], d->mac[2], d->mac[3], d->mac[4], d->mac[5],
                       (int)d->rssi, (unsigned)d->hits,
-                      d->restored ? "KEPT" : (d->active ? "here" : "gone"), when);
+                      d->restored ? "KEPT" : (d->active ? "here" : "gone"), when,Simulation::marked(*d),Simulation::roleName(d->addressRole));
     }
 }
 

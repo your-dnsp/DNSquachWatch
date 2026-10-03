@@ -1,3 +1,4 @@
+#include "firmware_version.h"
 #include "language.h"
 #include "crash_reports.h"
 // SquachWatch-CYD — SYSTEM PROPERTIES. See include/ui_sysprops.h.
@@ -214,7 +215,7 @@ void drawUpdateTab(TFT_eSPI& t, const Geom& g) {
     snprintf(line,sizeof line,"Latest original release heard: %s",version[0]?version:"not checked / none known");add(line);
     const char* source=OtaCore::availableFrom();
     snprintf(line,sizeof line,"Source: %s",!version[0]?"none this boot":source[0]?source:"squachwatch.com");add(line);
-    add("Current DNSP firmware: v1.5.2");
+    add("Current DNSP firmware: v" FIRMWARE_VERSION);
     add("Based on SquachWatch v1.28.0.");
     add("Last flash date: unknown (USB flashing does not record it).");
     add("The system is running custom firmware by DNSP. Updating from SquachWatch directly will remove the customizations.");
@@ -278,7 +279,7 @@ void drawBoardTab(TFT_eSPI& t, const Geom& g) {
     y += LINE;
 
     snprintf(buf, sizeof buf, "%s  %s", OtaCore::runningSlot(), OtaCore::runningVersion());
-    row(t, g, y, "Installed", "DNSP v1.5.2");
+    row(t, g, y, "Installed", "DNSP v" FIRMWARE_VERSION);
     y += LINE;
 
     const char* other = OtaCore::otherVersion();

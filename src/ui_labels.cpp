@@ -1,3 +1,4 @@
+#include "simulation.h"
 #include "ui_labels.h"
 #include "theme.h"
 #include "privacy.h"
@@ -46,7 +47,7 @@ void draw(TFT_eSPI& t){
     const int w=t.width(),h=t.height();t.fillRect(0,0,w,h,Theme::BG);t.setTextWrap(false);
     if(stage==Stage::CHOICE){
         title(t,hadLabel?"EDIT USER LABEL":"CONFIRM OR EDIT ASSUMPTION");
-        char b[96];snprintf(b,sizeof b,"Detected: %s\nCurrent user label: %s%s%s",detectionTypeName(target.original),hadLabel?UserLabels::typeName(label.type):"not set",hadLabel&&label.subtag[0]?" / ":"",hadLabel?label.subtag:"");prose(t,b,40,55);
+        char b[96];snprintf(b,sizeof b,"Detected: %s\nCurrent user label: %s%s%s\n%s",detectionTypeName(target.original),hadLabel?UserLabels::typeName(label.type):"not set",hadLabel&&label.subtag[0]?" / ":"",hadLabel?label.subtag:"",Simulation::marked(target.mac)?"SIMULATED":"");prose(t,b,40,55);
         Theme::drawButton(t,10,100,w-20,30,hadLabel?"EXPORT CURRENT AGAIN":"CONFIRM DETECTED TAG",false);
         Theme::drawButton(t,10,136,w-20,30,"EDIT TAG / SUBTAG",false);
         Theme::drawButton(t,10,172,w-20,24,"RESEARCH REPORT...",false);footer(t,"CANCEL","");
@@ -72,7 +73,7 @@ void draw(TFT_eSPI& t){
         static const char* keys[]={"1","ABC2","DEF3","DEL","GHI4","JKL5","MNO6","SPACE","PQRS7","TUV8","WXYZ9","DONE"};
         for(int i=0;i<12;i++){int col=i%4,rowIx=i/4;Theme::drawButton(t,6+col*(w-8)/4,68+rowIx*38,(w-16)/4,32,keys[i],false);}footer(t,"BACK","");
     }else if(stage==Stage::CONFIRM){
-        title(t,"REVIEW USER OBSERVATION");char mac[24],b[240];snprintf(mac,sizeof mac,"%02X:%02X:%02X:%02X:%02X:%02X",target.mac[0],target.mac[1],target.mac[2],target.mac[3],target.mac[4],target.mac[5]);Privacy::mac(mac,sizeof mac,target.mac);snprintf(b,sizeof b,"MAC: %s\nDetected: %s\nUser label: %s\nSubtag: %s\n\nThis records your observation; it does not prove device identity.",mac,detectionTypeName(target.original),UserLabels::typeName(label.type),label.subtag[0]?label.subtag:"(none)");prose(t,b,40,112);Theme::drawButton(t,10,h-84,w-20,34,"SAVE + EXPORT TO microSD",false);footer(t,"BACK","");
+        title(t,"REVIEW USER OBSERVATION");char sub[48];Simulation::subtags(sub,sizeof sub,label.subtag,target.mac);char mac[24],b[280];snprintf(mac,sizeof mac,"%02X:%02X:%02X:%02X:%02X:%02X",target.mac[0],target.mac[1],target.mac[2],target.mac[3],target.mac[4],target.mac[5]);Privacy::mac(mac,sizeof mac,target.mac);snprintf(b,sizeof b,"MAC: %s\nDetected: %s\nUser label: %s\nSubtag: %s\n\nThis records your observation; it does not prove device identity.",mac,detectionTypeName(target.original),UserLabels::typeName(label.type),sub[0]?sub:"(none)");prose(t,b,40,112);Theme::drawButton(t,10,h-84,w-20,34,"SAVE + EXPORT TO microSD",false);footer(t,"BACK","");
     }else{
         title(t,"EXPORT DID NOT FINISH");prose(t,"The label was not applied because its required microSD record could not be written. Check Storage & Recovery, then retry.",48,90);Theme::drawButton(t,10,h-84,w-20,34,"RETRY EXPORT",false);footer(t,"CANCEL","");
     }

@@ -101,6 +101,8 @@ public:
     uint8_t getUChar(const char* k, uint8_t d = 0) const {
         auto it = _u.find(k); return it == _u.end() ? d : it->second;
     }
+    uint32_t putULong(const char* k,uint32_t v) { return putUInt(k,v); }
+    uint32_t getULong(const char* k,uint32_t d=0) const { return getUInt(k,d); }
     uint32_t putUInt(const char* k, uint32_t v) { _ui[k] = v; save(); return true; }
     uint32_t getUInt(const char* k, uint32_t d = 0) const {
         auto it = _ui.find(k); return it == _ui.end() ? d : it->second;

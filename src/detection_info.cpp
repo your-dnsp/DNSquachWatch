@@ -1,3 +1,4 @@
+#include "simulation.h"
 // SquachWatch-CYD — detection type explanations
 #include "detection_info.h"
 #include "privacy.h"
@@ -106,7 +107,7 @@ const char* titleFor(DetectionType t, const char* vendor, const char* name) {
     return d ? d->title : detectionTypeName(t);
 }
 
-const char* why(const Detection& d) {
+static const char* whyBase(const Detection& d) {
     static char text[256];
     const char* reason = "The original match evidence was not saved. No specific rule can be confirmed for this record.";
     switch (d.evidence) {
@@ -163,6 +164,11 @@ const char* why(const Detection& d) {
         snprintf(text, sizeof text, "%s Prefix: %02X:%02X:%02X. Grade: %s.", reason, d.mac[0], d.mac[1], d.mac[2], confidenceLabel(d.conf));
     else snprintf(text, sizeof text, "%s Grade: %s.", reason, confidenceLabel(d.conf));
     return text;
+}
+
+const char* why(const Detection& d) {
+    const char* base=whyBase(d);if(!Simulation::marked(d))return base;
+    static char text[440];snprintf(text,sizeof text,"%s %s Address: %s.",base,Simulation::note(),Simulation::roleName(d.addressRole));return text;
 }
 
 const char* rssiConfidencePrimer() {

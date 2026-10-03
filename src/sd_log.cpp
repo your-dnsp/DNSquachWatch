@@ -1,3 +1,4 @@
+#include "simulation.h"
 // SquachWatch-CYD — SD log implementation
 #include "sd_log.h"
 #include "blackbox.h"
@@ -217,7 +218,7 @@ bool SdLog::logEvent(const Detection& d) {
     if (!_ready || !_filename[0]) return false;
     File f = SD.open(_filename, FILE_APPEND);
     if (!f) { if (_writeErrors != UINT32_MAX) ++_writeErrors; return false; }
-    char line[320];
+    char line[400];
     char mac[18];
     snprintf(mac, sizeof(mac), "%02X:%02X:%02X:%02X:%02X:%02X",
              d.mac[0], d.mac[1], d.mac[2], d.mac[3], d.mac[4], d.mac[5]);
@@ -246,7 +247,7 @@ bool SdLog::logEvent(const Detection& d) {
                  (unsigned long)millis(), detectionTypeName(d.type), d.rssi, mac,
                  d.channel, vendorSafe, nameSafe,LocationLabel::text(d.locationKey));
     }
-    size_t at=strlen(line);if(at&&line[at-1]=='\n'){--at;snprintf(line+at,sizeof line-at,",session=%lu,epoch=%lu,time=%s\n",(unsigned long)_session,(unsigned long)(Clock::trusted()?Clock::nowEpoch():0),Clock::trusted()?"trusted":"unset");}
+    size_t at=strlen(line);if(at&&line[at-1]=='\n'){--at;snprintf(line+at,sizeof line-at,",session=%lu,epoch=%lu,time=%s,simulated=%u,address=%s\n",(unsigned long)_session,(unsigned long)(Clock::trusted()?Clock::nowEpoch():0),Clock::trusted()?"trusted":"unset",Simulation::marked(d),Simulation::roleName(d.addressRole));}
     bool ok=f.print(line)==strlen(line);
     if(!ok && _writeErrors!=UINT32_MAX)++_writeErrors;
     f.close();return ok;

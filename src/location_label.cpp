@@ -69,13 +69,14 @@ bool set(const char* label){
  for(auto& e:store.labels)if(e.key==key){if(strcmp(e.text,label)){message="Label ID conflict. Choose a different label.";return false;}slot=&e;break;}
  if(!slot)for(auto& e:store.labels)if(!e.key){slot=&e;break;}
  if(!slot){message="64 historical labels used. Reuse an existing label.";return false;}
- Network* network=nullptr;
- if(connected[0]){for(auto& n:store.networks)if(!strcmp(n.ssid,connected)){network=&n;break;}if(!network)for(auto& n:store.networks)if(!n.ssid[0]){network=&n;break;}if(!network){message="Six network labels used. Clear one first.";return false;}}
- const Entry old=*slot;Network oldNet;if(network)oldNet=*network;
- slot->key=key;snprintf(slot->text,sizeof slot->text,"%s",label);if(network){snprintf(network->ssid,sizeof network->ssid,"%s",connected);network->key=key;}
- if(!persist()){*slot=old;if(network)*network=oldNet;message="Label could not be saved. Try again.";return false;}
- active=key;automatic=false;message=network?"Set manually; saved for this authenticated Wi-Fi network.":"Set manually for this session.";return true;
+ const Entry old=*slot;
+ slot->key=key;snprintf(slot->text,sizeof slot->text,"%s",label);
+ if(!persist()){*slot=old;message="Label could not be saved. Try again.";return false;}
+
+ active=key;automatic=false;message="Session label set. SAVE FOR WI-FI remembers it explicitly.";return true;
 }
+void clearSession(){active=0;automatic=false;message="Active label cleared; saved Wi-Fi labels retained.";}
+const char* associatedNetwork(){const uint32_t key=currentKey();if(key)for(const auto& n:store.networks)if(n.key==key)return n.ssid;return "";}
 bool clear(){Network* network=nullptr;for(auto& n:store.networks)if(connected[0]&&!strcmp(n.ssid,connected)){network=&n;break;}if(network){const Network old=*network;*network=Network{};if(!persist()){*network=old;message="Could not forget network label. Try again.";return false;}}active=0;automatic=false;message="Label cleared; current network association forgotten.";return true;}
 bool rememberNetwork(const char* ssid){if(!active||!ssid||!ssid[0]||strlen(ssid)>32){message="Set a label and authenticate to Wi-Fi first.";return false;}Network* slot=nullptr;for(auto& n:store.networks)if(!strcmp(n.ssid,ssid)){slot=&n;break;}if(!slot)for(auto& n:store.networks)if(!n.ssid[0]){slot=&n;break;}if(!slot){message="Six network labels used. Clear one first.";return false;}const Network old=*slot;snprintf(slot->ssid,sizeof slot->ssid,"%s",ssid);slot->key=currentKey();if(!persist()){*slot=old;message="Network label could not be saved.";return false;}message="Label remembered for the Wi-Fi verified this boot.";return true;}
 bool forgetNetwork(const char* ssid){if(!ssid||!ssid[0])return true;for(auto& n:store.networks)if(!strcmp(n.ssid,ssid)){const Network old=n;n=Network{};if(!persist()){n=old;return false;}break;}return true;}

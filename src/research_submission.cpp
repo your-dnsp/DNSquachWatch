@@ -1,3 +1,5 @@
+#include "firmware_version.h"
+#include "simulation.h"
 #include "research_submission.h"
 #include <cstdio>
 #include <cstring>
@@ -25,17 +27,17 @@ bool format(char* out,size_t cap,const UserLabels::Target& t,const UserLabels::L
     if(identifiers)snprintf(mac,sizeof mac,"%02X:%02X:%02X:%02X:%02X:%02X",t.mac[0],t.mac[1],t.mac[2],t.mac[3],t.mac[4],t.mac[5]);
     else snprintf(mac,sizeof mac,"%02X:%02X:%02X:XX:XX:XX",t.mac[0],t.mac[1],t.mac[2]);
     const int n=snprintf(out,cap,
-        "{\n\"schema\":\"dnsp-device-research-v1\",\n\"firmware\":\"DNSquachWatch v1.5\",\n"
+        "{\n\"schema\":\"dnsp-device-research-v2\",\n\"firmware\":\"DNSquachWatch v" FIRMWARE_VERSION "\",\n"
         "\"status\":\"unverified\",\n\"scope\":\"individual-device-observation\",\n"
         "\"radio\":\"%s\",\n\"observed_mac\":\"%s\",\n\"observed_prefix\":\"%02X:%02X:%02X\",\n"
         "\"address_assessment\":\"%s\",\n\"identifiers_included\":%s,\n\"advertised_name_bytes\":%s,\n"
         "\"detected_tag\":%s,\n\"user_label\":%s,\n\"subtag\":%s,\n"
-        "\"signature_id\":%u,\n\"match_evidence_id\":%u,\n\"detector_confidence_id\":%u,\n"
+        "\"simulated\":%s,\n\"simulation_subtag\":\"%s\",\n\"address_provenance\":\"%s\",\n\"signature_id\":%u,\n\"match_evidence_id\":%u,\n\"detector_confidence_id\":%u,\n"
         "\"rssi_dbm\":%d,\n\"channel\":%u,\n\"uptime_ms\":%lu,\n"
-        "\"caution\":\"User labels and detector confidence do not confirm identity. Prefixes may be shared; MACs may be randomized or spoofed. BLE address type is unknown.\",\n"
+        "\"caution\":\"User labels and detector confidence do not confirm identity. Prefixes may be shared; MACs may be randomized or spoofed. BLE address type is unknown. %s\",\n"
         "\"submit_to\":\"https://github.com/your-dnsp/DNSquachWatch/issues/new?template=device_research.yml\"\n}\n",
         t.ble?"BLE":"Wi-Fi",mac,t.mac[0],t.mac[1],t.mac[2],t.ble?"BLE public/random type unknown":(t.mac[0]&1)?"multicast/invalid individual address":(t.mac[0]&2)?"locally administered; not vendor OUI proof":"universally administered; prefix not identity proof",
-        identifiers?"true":"false",name,detected,tag,sub,t.signature,(unsigned)t.evidence,(unsigned)t.confidence,t.rssi,t.channel,(unsigned long)uptime);
+        identifiers?"true":"false",name,detected,tag,sub,Simulation::marked(t.mac)?"true":"false",Simulation::marked(t.mac)?"SIMULATED":"",Simulation::roleName(t.addressRole),t.signature,(unsigned)t.evidence,(unsigned)t.confidence,t.rssi,t.channel,(unsigned long)uptime,Simulation::marked(t.mac)?Simulation::note():"");
     if(n<0||(size_t)n>=cap){out[0]=0;return false;}return true;
 }
 }

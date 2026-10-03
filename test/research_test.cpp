@@ -80,6 +80,13 @@ int main(){
  ck("one MiB ceiling enforced",!active()&&stats().bytes<=1024*1024&&strstr(status(),"limit"));
  discard();r=Record{};strcpy(r.note,"\"\\\n=FORMULA()");Stats raw;raw.raw=true;
  ck("untrusted note cannot escape JSON string",encode(r,raw,j,sizeof j,c,sizeof c)&&!strstr(j,"\\\n")&&strstr(j,"=FORMULA()")&&strstr(c,"FORMULA")==nullptr);
+ suite("Research simulation survives RAW-off redaction");
+ Record simRecord{};memcpy(simRecord.mac,mac,6);simRecord.mac[3]=simRecord.mac[4]=simRecord.mac[5]=0;simRecord.radio=1;
+ Stats masked{};char sj[1240],sc[360];
+ ck("redacted record keeps simulation flag and provenance",encode(simRecord,masked,sj,sizeof sj,sc,sizeof sc)&&strstr(sj,"\"simulated\":true")&&strstr(sj,"claimed transmitter")&&!strstr(sj,"b41e52000000"));
+ simRecord.mac[5]=1;ck("ordinary classification stays unchanged",encode(simRecord,masked,sj,sizeof sj,sc,sizeof sc)&&strstr(sj,"\"simulated\":false")&&simRecord.match.type==DetectionType::UNKNOWN);
+ simRecord.length=PAYLOAD_CAP;simRecord.original=65535;memset(simRecord.payload,0xff,sizeof simRecord.payload);simRecord.id=simRecord.at=simRecord.reference=UINT32_MAX;masked.raw=true;masked.session=masked.catalog=UINT32_MAX;simRecord.match.bits=simRecord.match.rule=65535;memset(simRecord.note,'N',sizeof simRecord.note-1);
+ ck("maximum raw research record fits added metadata",encode(simRecord,masked,sj,sizeof sj,sc,sizeof sc));
  suite("Malformed input corpus");
  uint32_t seed=17;uint8_t bytes[160];for(int trial=0;trial<10000;trial++){for(auto& b:bytes){seed=seed*1664525+1013904223;b=seed>>24;}size_t n=seed%sizeof bytes;matchBle(bytes,n);matchManagement(bytes,n);importPack((const char*)bytes,n);}
  ck("ten thousand bounded packets and packs processed",true);

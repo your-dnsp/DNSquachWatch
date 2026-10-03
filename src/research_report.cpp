@@ -12,6 +12,7 @@ bool formatReport(const Stats& s,char* out,size_t cap){
  add("DEAUTH frames saved: %lu; coherent per-source bursts: %lu; multi-target bursts: %lu\nProtected / unprotected DEAUTH frames: %lu / %lu; readable reason codes: %lu\n",
  (unsigned long)s.deauthFrames,(unsigned long)s.deauthBursts,(unsigned long)s.deauthMultiTargetBursts,(unsigned long)s.deauthProtected,(unsigned long)s.deauthUnprotected,(unsigned long)s.deauthReasonKnown);
  add("\nSaved observations by radio classification (not unique devices):\nType: low / medium / high confidence\n");
+ add("SIMULATED observations: %lu. DNSP zero-suffix test convention; not reserved or authenticated.\n",(unsigned long)s.simulated);
  for(unsigned i=0;i<19;i++)if(s.types[i][0]||s.types[i][1]||s.types[i][2])add("%s: %lu / %lu / %lu\n",detectionTypeName((DetectionType)i),(unsigned long)s.types[i][0],(unsigned long)s.types[i][1],(unsigned long)s.types[i][2]);
  add("\nCoverage: BLE enabled %lu seconds; WiFi enabled %lu seconds.\nWiFi channel enabled time (seconds):",(unsigned long)(s.bleMs/1000),(unsigned long)(s.wifiMs/1000));
  for(int i=1;i<=13;i++)if(s.channels&(1u<<i))add(" %d=%lu",i,(unsigned long)(s.channelMs[i]/1000));

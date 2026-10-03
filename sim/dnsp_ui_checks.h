@@ -26,6 +26,8 @@
 #include "security.h"
 #include "ui_update.h"
 #include "png_writer.h"
+#include "ui_rule_alert.h"
+#include "ui_alert.h"
 extern uint32_t alertStart;
 extern uint32_t lastTouch;
 extern uint32_t transitionStart;
@@ -586,6 +588,10 @@ static int runDnspUiChecks() {
     Lang::button(expectedFrame,12,tft.height()-52,tft.width()-24,38,"REBOOT");
     expectedFrame.pushSprite(0,0);
     ck("shutdown message and single reboot button match full screen",expected.pixelsRGB565()==tft.pixelsRGB565());
+    auto simShot=[](const char* leaf){const char* dir=getenv("DNSP_TEST_SHOTS");if(!dir)return;std::vector<uint8_t> rgb;for(uint16_t v:tft.pixelsRGB565()){rgb.push_back(((v>>11)&31)*255/31);rgb.push_back(((v>>5)&63)*255/63);rgb.push_back((v&31)*255/31);}char path[1024];snprintf(path,sizeof path,"%s/%s.png",dir,leaf);ck("simulation review image written",PngWriter::write(path,tft.width(),tft.height(),rgb.data()));};
+    Detection marked{};marked.type=DetectionType::FLOCK;marked.mac[0]=0xB4;marked.mac[1]=0x1E;marked.mac[2]=0x52;marked.addressRole=AddressRole::BSSID;marked.conf=Confidence::LOW_CONF;marked.evidence=MatchEvidence::OUI;marked.hits=1;marked.rssi=-45;marked.channel=6;marked.vendor="Flock";
+    uiAlertInit(tft,marked);uiAlertSetFirst(true);uiAlertTick(tft,millis(),engine,false,"","");simShot("simulated-alert");
+    SketchyRule::Incident mixed{};mixed.alpr.type=DetectionType::FLOCK;memcpy(mixed.alpr.mac,marked.mac,6);mixed.deauth.mac[5]=1;mixed.gapSeconds=30;uiRuleAlertDraw(tft,mixed);simShot("simulation-mixed-rule");
     return report();
 }
 

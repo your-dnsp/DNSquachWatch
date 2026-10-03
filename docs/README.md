@@ -19,6 +19,8 @@
 ## Development and validation
 
 - [Build instructions](BUILD.md)
+- [Receiver simulation convention and validation](development/RECEIVER-SIMULATION.md)
+- [Current firmware size audit](development/SIZE-AUDIT-v1.5.3.md)
 - [Validation records](validation/)
 - [Known limitations and remaining hardware checks](validation/KNOWN-LIMITATIONS.md)
 - [Translation source strings](translations/TRANSLATION-STRINGS-EN.txt)

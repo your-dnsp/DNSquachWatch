@@ -18,6 +18,7 @@ struct Target {
     Confidence confidence = Confidence::LOW_CONF;
     MatchEvidence evidence = MatchEvidence::UNKNOWN;
     uint16_t signature = 0;
+    AddressRole addressRole = AddressRole::MATCHED;
     char vendor[24]{};
     char name[24]{};
 };
@@ -40,7 +41,7 @@ const char* typeName(uint8_t type);
 void clearSession();
 
 // Device implementation. It creates /User Labeled Device Findings,
-// appends user-labeled-device-findings.csv and writes one text file per save.
+// appends user-labeled-device-findings-v2.csv and writes one text file per save.
 bool storageExport(const Target& target, const Label& label, uint32_t now);
 void storageWipe();
 

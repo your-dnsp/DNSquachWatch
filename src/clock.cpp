@@ -28,8 +28,10 @@ volatile bool g_consoleRuntime = false;
 extern volatile bool g_consoleCharge;   // main.cpp: CHARGE, the CYDs' charge mode
 #endif
 
-// PRIM, on every build: main.cpp runs the primitive benchmark on its next pass.
+// PRIM is a developer tool, retained in BENCH_TOOLS builds only.
+#if defined(BENCH_TOOLS)
 extern volatile bool g_benchPrimNow;
+#endif
 #if defined(ARDUINO_ARCH_ESP32)
 // MEM reads the board itself: FreeRTOS for the stacks, NVS for the store.
 #include <freertos/FreeRTOS.h>
@@ -617,11 +619,14 @@ void pollSerial() {
                               "the epoch, e.g. TIME %lu\n",
                               (unsigned long)e, (unsigned long)kPlausible + 1u);
             }
+
+#if defined(BENCH_TOOLS)
         } else if (strncasecmp(line, "PRIM", 4) == 0) {
             // Times every drawing primitive on the real frame buffer; see
             // runPrimBench() in main.cpp. Runs on the next pass of loop().
             g_benchPrimNow = true;
             Serial.println("[prim] on the next frame");
+#endif
         } else if (strncasecmp(line, "BG ", 3) == 0) {
             // BG N: show background N until the next boot, without saving it.
             // For timing them one after another off the [frame] line.

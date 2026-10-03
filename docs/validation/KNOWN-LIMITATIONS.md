@@ -1,6 +1,6 @@
 # Validation status and known limitations
 
-v1.5.2 builds and host/UI regressions passed; Wi-Fi/label hardware confirmation is pending. ST7789 v1.5.1 boot and backup completion were confirmed on DNSP hardware. Automated checks do not substitute for field validation.
+v1.5.7 builds, all 53 host groups, display/UI checks and signed package checks passed. ST7789 hardware traces through v1.5.6 show improved responsiveness and successful simulated-alert dismissal, with individual microSD pauses still observed. v1.5.7 diagnostic measurements need hardware confirmation. ST7789 v1.5.1 backup completion was confirmed on DNSP hardware. Automated checks do not substitute for field validation.
 
 Still to validate or refine:
 

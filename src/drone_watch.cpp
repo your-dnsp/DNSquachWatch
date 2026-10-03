@@ -1,3 +1,4 @@
+#include "simulation.h"
 #include "drone_watch.h"
 #include "location_label.h"
 #include "remote_id.h"
@@ -149,13 +150,13 @@ bool formatRecord(const Record &r,char *out,size_t cap){
     if(n<0 || size_t(n)+2*r.length+4>cap)return false;
     static const char hex[]="0123456789abcdef";
     for(size_t i=0;i<r.length;i++){out[n++]=hex[r.data[i]>>4];out[n++]=hex[r.data[i]&15];}
-    memcpy(out+n,"\"}\n",4);return true;
+    out[n++]='"';return Simulation::finishJson(out,cap,size_t(n),r.mac,r.wifi?AddressRole::TRANSMITTER:AddressRole::BLE_ADVERTISER);
 }
 void tick(uint32_t now){
     auto s=stats();
     if(s.capture==Capture::STARTING){
         {Guard g;if(!ready)return;}
-        bool ok=(sink?sink:storage)("{\"schema\":1,\"kind\":\"rid_capture\",\"warning\":\"RAW identifiers and broadcast positions; not authenticated\"}\n",true);
+        bool ok=(sink?sink:storage)("{\"schema\":2,\"kind\":\"rid_capture\",\"warning\":\"RAW identifiers and broadcast positions; not authenticated\"}\n",true);
         Guard g;current.capture=ok?Capture::RECORDING:Capture::ERROR;current.started=now;return;
     }
     if(s.capture!=Capture::RECORDING && s.capture!=Capture::SAVING)return;
@@ -173,7 +174,7 @@ void tick(uint32_t now){
         bool ok=(sink?sink:storage)(line,false);Guard g;current.capture=ok?Capture::DONE:Capture::ERROR;
     }
     if(have){
-        char line[2304];bool ok=formatRecord(record,line,sizeof line)&&(sink?sink:storage)(line,false);
+        char line[2496];bool ok=formatRecord(record,line,sizeof line)&&(sink?sink:storage)(line,false);
         Guard g;if(ok)current.saved++;else{current.capture=Capture::ERROR;current.dropped+=count+1;head=count=0;}
     }
 }

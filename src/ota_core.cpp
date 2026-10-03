@@ -43,7 +43,9 @@ bool                   s_open       = false;
 mbedtls_sha256_context s_sha;
 bool                   s_shaOpen    = false;
 uint32_t               s_size       = 0;
-volatile uint32_t      s_written    = 0;
+volatile uint32_t      s_written = 0;
+uint8_t                s_expected[32];
+bool s_hasExpected = false;
 uint8_t                s_sig[80];
 uint8_t                s_sigLen     = 0;
 
@@ -170,9 +172,10 @@ const char* failWords(Fail f) {
         case Fail::RADIO_BUSY:      return "Bluetooth was busy. Leave this screen and try again.";
         case Fail::WIFI_NOT_FOUND:  return "Couldn't find that WiFi network. Move closer to the router and try again.";
         case Fail::WIFI_PASSWORD:   return "Couldn't join that WiFi network. Check the password and try again.";
-        case Fail::NO_SITE:         return "Joined WiFi, but couldn't reach squachwatch.com. Check the internet connection.";
+        case Fail::NO_SITE:         return "Joined WiFi, but couldn't reach the DNSP update service. Check the internet connection.";
         case Fail::NOT_SIGNED:      return "The latest release can't be installed over the air yet. Use the USB flasher.";
         case Fail::TOO_OLD:         return "That firmware is older than the one running. Nothing was changed.";
+        case Fail::CARD_CONTENT: return "Update refused: card content missing, damaged or incompatible. Use the matching USB kit and copy its card content first.";
         case Fail::LOW_MEMORY:      return "Not enough memory to download. Restart the board and try again.";
         default:                    return "";
     }
@@ -368,6 +371,18 @@ bool restartPending() { return s_restart; }
 
 // ---- installer --------------------------------------------------------------
 
+// The signed content contract is bound to this board and the image digest.
+bool verifyManifest(const uint8_t* body,size_t len,const uint8_t* sig,size_t sigLen) {
+ mbedtls_sha256_context ctx;uint8_t hash[32];mbedtls_sha256_init(&ctx);
+ sqw_sha256_starts(&ctx,0);const char prefix[]="DNSP_CONTENT1\n";
+ sqw_sha256_update(&ctx,(const uint8_t*)prefix,sizeof prefix-1);
+ sqw_sha256_update(&ctx,(const uint8_t*)SQW_ENV,strlen(SQW_ENV));
+ sqw_sha256_update(&ctx,(const uint8_t*)"\n",1);sqw_sha256_update(&ctx,body,len);
+ sqw_sha256_finish(&ctx,hash);mbedtls_sha256_free(&ctx);
+ return checkSignature(hash,sig,sigLen)==0;
+}
+void expectImageDigest(const uint8_t hash[32]) {lock();memcpy(s_expected,hash,32);s_hasExpected=true;unlock();}
+
 Fail begin(uint32_t size, const uint8_t* sig, uint8_t sigLen) {
     abort();
     const esp_partition_t* target = esp_ota_get_next_update_partition(nullptr);
@@ -433,7 +448,7 @@ Fail finish() {
     s_shaOpen = false;
     unlock();
 
-    const int rc = checkSignature(hash, s_sig, s_sigLen);
+    const int rc = (s_hasExpected && memcmp(hash,s_expected,32)) ? -1 : checkSignature(hash, s_sig, s_sigLen);
     if (rc != 0) {
         Serial.printf("[ota] signature check failed (-0x%04x)\n", (unsigned)-rc);
         abort();
@@ -553,6 +568,7 @@ const char* testVersionDecision(const char* version) {
 void abort() {
     lock();
     closeLocked();
+    s_hasExpected = false;
     s_written    = 0;
     s_tagMatch   = 0;
     s_verTaking  = false;

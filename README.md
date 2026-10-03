@@ -1,4 +1,4 @@
-# DNSquachWatch v1.5.2
+# DNSquachWatch v1.5.7
 
 DNSquachWatch is **dnsprincess's friends-and-family edition of SquachWatch** for the classic 2.8-inch ESP32 Cheap Yellow Display (CYD), based on **SquachWatch v1.28.0**. It keeps Squachy, the original visual identity, and the spirit of the project while adding device & microSD recovery, additional OUI and device research, labeling and OUI research contribution mechanisms, accessibility tools, security enhancements, additional scanning and logging capabilities, additional drone detection & support for FPV pilots, and whimsical additions.
 
@@ -10,20 +10,20 @@ DNSquachWatch is **dnsprincess's friends-and-family edition of SquachWatch** for
 
 | Your display | Firmware |
 |---|---|
-| ST7789, newer CYD batches | [ST7789-80MHz kit](firmware/v1.5.2/ST7789-80MHz/DNSquachWatch-v1.5.2-ST7789-80MHz.zip) |
-| ILI9341, older CYD batches | [ILI9341-80MHz kit](firmware/v1.5.2/ILI9341-80MHz/DNSquachWatch-v1.5.2-ILI9341-80MHz.zip) |
+| ST7789, newer CYD batches | [ST7789-80MHz kit](firmware/v1.5.7/ST7789-80MHz/DNSquachWatch-v1.5.7-ST7789-80MHz.zip) |
+| ILI9341, older CYD batches | [ILI9341-80MHz kit](firmware/v1.5.7/ILI9341-80MHz/DNSquachWatch-v1.5.7-ILI9341-80MHz.zip) |
 
 Both kits target the **classic 2.8-inch ESP32 CYD** and start with an **80 MHz display clock**. System settings can switch the display to 40 MHz; the flash clock stays at 40 MHz. If you are unsure which controller your CYD has, try ST7789 first. A solid white screen may mean it needs ILI9341: try the other kit. Keep each kit's four flashing binaries together.
 
-Also obtain the [microSD content](firmware/v1.5/DNSquachWatch-v1.5-microSD-content.zip) and copy **DNSP Content/v1.5/** to the card root. **Existing v1.5 card content remains compatible with v1.5.2.** Flashing the ESP32 does not copy files to microSD. The full walkthrough, extended language content, and installation document use the supplied card files; backups require the checked installation document. Boot, scanning, essential recovery, and Remington remain built in. No Wi-Fi content download is used.
+Also obtain the [microSD content](firmware/v1.5/DNSquachWatch-v1.5-microSD-content.zip) and copy **DNSP Content/v1.5/** to the card root. **Existing v1.5 card content remains compatible with v1.5.7.** Flashing the ESP32 does not copy files to microSD. The full walkthrough, extended language content, and installation document use the supplied card files; backups require the checked installation document. Boot, scanning, essential recovery, and Remington remain built in. No Wi-Fi content download is used.
 
-Each firmware ZIP includes all four flashing binaries, image checksums, an optional offline installer, and recovery instructions. See [installation guide](docs/user/INSTALLATION.md) for installation and manual card copying, or [GitHub Releases](https://github.com/your-dnsp/DNSquachWatch/releases/tag/v1.5.2) for both kits and download checksums.
+Each firmware ZIP includes all four flashing binaries, image checksums, an optional offline installer, and recovery instructions. See [installation guide](docs/user/INSTALLATION.md) for installation and manual card copying, or [GitHub Releases](https://github.com/your-dnsp/DNSquachWatch/releases/tag/v1.5.7) for both kits and download checksums.
 
 ## Latest update
 
-**v1.5.2 fixes Wi-Fi navigation and reduces location-label storage**, while integrating SquachWatch v1.28.0's Over 9000 outfit and rendering improvements. Connecting saved Wi-Fi supports time and location recall without opening updates; update checks are explicit. DNSP menus, detection research, Remington and the v1.5.1 backup fixes are preserved. No new microSD content is needed.
+**v1.5.7 improves storage diagnostics and removes repeated card lookups.** Slow history steps now report the operation responsible for the longest delay, making physical-card stalls easier to investigate. Automatic refresh keeps its paced processing and interruption protections. Receiver simulation labeling remains, and device screens and new reports share one version source. Existing v1.5 card content remains compatible.
 
-Both display builds passed compilation and image checks. v1.5.2 Wi-Fi/label behavior still needs hardware confirmation; the successful ST7789 backup test was on v1.5.1. Full release details are in [changelog](CHANGELOG.md).
+Both display builds and host/UI checks are validated before packaging. Physical-card smoothness remains subject to hardware testing; previously confirmed ST7789 backup completion was on v1.5.1. Full release details are in [changelog](CHANGELOG.md).
 
 ## What DNSquachWatch adds
 
@@ -50,6 +50,8 @@ A location assigned to verified Wi-Fi can be recalled when that saved network is
 Research sessions offer **Balanced, Bluetooth-only, and Wi-Fi-only** profiles, explicit RAW/redacted choices, elapsed time, activity and coverage information, and visible save progress. Exported findings can support independent research instead of disappearing with an on-screen popup.
 
 Research reports come in paired **REDACTED / PRIVATE** files with a shared report ID. REDACTED keeps the observed prefix, replaces the device-specific MAC suffix with `XX:XX:XX`, and omits advertised names. **Location labels remain visible: avoid sensitive location names when sharing.** The offline checker and GitHub submission workflow flag complete MAC addresses in pasted reports; they cannot prevent arbitrary attachments from being uploaded. Submissions are unverified until supported by independent observations. See [contribution guide](CONTRIBUTING.md).
+
+Receiver test observations use the **DNSP test-address convention**: the original manufacturer prefix followed by `00:00:00`. Matching detections retain their normal classification and receive a **SIMULATED** subtag, including in history and redacted research reports. This convention is neither reserved nor authenticated; real hardware can use the same suffix. Combined rules distinguish fully simulated incidents from incidents containing one simulated endpoint. See [receiver simulation notes](docs/development/RECEIVER-SIMULATION.md).
 
 ### Readable history, backups, and card recovery
 

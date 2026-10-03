@@ -17,6 +17,7 @@ inline bool mergeObservation(Detection& row, const Detection& seen, uint32_t now
         row.signature = seen.signature;
         row.evidenceBits = seen.evidenceBits;
         row.vendor = seen.vendor;
+        row.addressRole = seen.addressRole;
     } else if (!row.vendor) row.vendor = seen.vendor;
     const uint8_t at = (uint8_t)(now >> 11);
     if (row.prevAt != at) { row.prevRssi = row.rssi; row.prevAt = at; }

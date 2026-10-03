@@ -1,3 +1,4 @@
+#include "simulation.h"
 #include "ui_field.h"
 #include "ui_scratch.h"
 #include "location_label.h"
@@ -215,7 +216,7 @@ void draw(TFT_eSPI &t, uint32_t now, const DetectionEngine &eng) {
         if (!a.used)
             paragraph(t, "NO DATA", 64, 54);
         else {
-            snprintf(b, sizeof b, "ID: %.20s", a.info.haveBasic ? a.info.serial : "--");
+            snprintf(b, sizeof b, "ID: %.20s %s", a.info.haveBasic ? a.info.serial : "--",Simulation::marked(a.mac)?"SIMULATED":"");
             line(t, b, 64, false);
             if (a.info.haveLoc) {
                 snprintf(b, sizeof b, "%.5f, %.5f", (double)a.info.lat, (double)a.info.lon);
@@ -340,12 +341,12 @@ void draw(TFT_eSPI &t, uint32_t now, const DetectionEngine &eng) {
         row(t, 2, "MUTE SELECTED");
         row(t, 3, "CLEAR MUTES");
     } else if(page==RULE_HISTORY){
-        SketchyRule::Incident in{};if(SketchyRule::recent(selected,in)){char a[24],d[24];macText(a,sizeof a,in.alpr.mac);macText(d,sizeof d,in.deauth.mac);snprintf(b,sizeof b,"%u/%u  %s + DEAUTH\nGap: %lus\nALPR: %s\nDeauth: %s\nmicroSD: %s",selected+1,SketchyRule::count(),detectionTypeName(in.alpr.type),(unsigned long)in.gapSeconds,a,d,in.sdExported?"saved":"pending");paragraph(t,b,44,h-94);}else paragraph(t,"No Sketchy Environment rule alerts have been recorded.",48,h-100);
+        SketchyRule::Incident in{};if(SketchyRule::recent(selected,in)){char a[24],d[24];macText(a,sizeof a,in.alpr.mac);macText(d,sizeof d,in.deauth.mac);snprintf(b,sizeof b,"%u/%u  %s + DEAUTH\nGap: %lus\nALPR: %s%s\nDeauth: %s%s\n%s\nmicroSD: %s",selected+1,SketchyRule::count(),detectionTypeName(in.alpr.type),(unsigned long)in.gapSeconds,a,Simulation::marked(in.alpr.mac)?" SIMULATED":"",d,Simulation::marked(in.deauth.mac)?" SIMULATED":"",SketchyRule::simulationLabel(in),in.sdExported?"saved":"pending");paragraph(t,b,44,h-94);}else paragraph(t,"No Sketchy Environment rule alerts have been recorded.",48,h-100);
     } else if(page==RULE_ABOUT){
         paragraph(t,"Rules combine separate observations into a secondary alert. Sketchy Environment watches for Flock, Axon or another ALPR clue and a deauthentication burst within 90 seconds. It is a caution signal, not proof the events are related. Custom rule creation is planned, but is not available in this version.",42,h-92);
     } else if(page==ALERT_HISTORY_SCAN){
         BlackBox::DetRecord r{};uint16_t count=BlackBox::detectionsKept();
-        if(BlackBox::readDetections(historyIndex,1,&r)){char m[24];macText(m,sizeof m,r.mac);snprintf(b,sizeof b,"%u/%u  %s%s\nBoot %u +%lus\nMAC %s\nRSSI %d  CH %u  hits %u\n%s | %s\nLocation: %s",(unsigned)(historyIndex+1),(unsigned)count,detectionTypeName((DetectionType)r.type),(r.flags&BlackBox::DET_AGAIN)?" - REAPPEARED":"",(unsigned)r.boot,(unsigned long)r.upSec,m,(int)r.rssi,(unsigned)r.channel,(unsigned)r.hits,r.conf==(uint8_t)Confidence::HIGH_CONF?"HIGH":r.conf==(uint8_t)Confidence::MED_CONF?"MEDIUM":"LOW",r.name[0]?r.name:r.vendor,LocationLabel::text(BlackBox::locationKey(r)));paragraph(t,b,42,h-90);}else paragraph(t,"No stored scan events. Snoozed and popup-suppressed detections appear here once observed and stored.",44,h-96);
+        if(BlackBox::readDetections(historyIndex,1,&r)){char m[24];macText(m,sizeof m,r.mac);snprintf(b,sizeof b,"%u/%u  %s%s\nBoot %u +%lus\nMAC %s\nRSSI %d  CH %u  hits %u\n%s | %s\nLocation: %s\n%s (%s)",(unsigned)(historyIndex+1),(unsigned)count,detectionTypeName((DetectionType)r.type),(r.flags&BlackBox::DET_AGAIN)?" - REAPPEARED":"",(unsigned)r.boot,(unsigned long)r.upSec,m,(int)r.rssi,(unsigned)r.channel,(unsigned)r.hits,r.conf==(uint8_t)Confidence::HIGH_CONF?"HIGH":r.conf==(uint8_t)Confidence::MED_CONF?"MEDIUM":"LOW",r.name[0]?r.name:r.vendor,LocationLabel::text(BlackBox::locationKey(r)),BlackBox::simulated(r)?"SIMULATED":"",Simulation::roleName(BlackBox::addressRole(r)));paragraph(t,b,42,h-90);}else paragraph(t,"No stored scan events. Snoozed and popup-suppressed detections appear here once observed and stored.",44,h-96);
     } else if(page==ALERT_HISTORY_SYSTEM){
         BlackBox::BootRecord r{};uint16_t count=BlackBox::bootsKept();
         if(BlackBox::readBoots(historyIndex,1,&r)){snprintf(b,sizeof b,"%u/%u  BOOT %u\nReason: %s\nFirmware: %s\nPrior uptime: %lus\nHeap: %lu free / %lu block\nScreen %u  Task: %s",(unsigned)(historyIndex+1),(unsigned)count,(unsigned)r.boot,BlackBox::reasonName(r.reason),r.version,(unsigned long)r.upSec,(unsigned long)r.heapFree,(unsigned long)r.heapBlock,(unsigned)r.screen,r.task[0]?r.task:"--");paragraph(t,b,42,h-90);}else paragraph(t,"No stored device or system records are available.",44,h-96);

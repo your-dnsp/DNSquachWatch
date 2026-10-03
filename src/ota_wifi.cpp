@@ -5,6 +5,8 @@
 #include "settings.h"
 #endif
 #include "security.h"
+#include "card_content.h"
+#include "content_contract.h"
 #include "clock.h"
 #include <Arduino.h>
 #include <WiFi.h>
@@ -99,18 +101,22 @@ void readSaved() {
     p.end();
 }
 
-void writeList() {
+bool writeList() {
+    bool ok=true;
     Preferences p;
     if (p.begin(NVS_NS, false)) {
-        p.putUChar("n", s_n);
-        p.putUChar("use", s_use);
+        ok=p.putUChar("use", s_use)==1 && ok;
         for (uint8_t i = 0; i < s_n; i++) {
             char k[4];
-            key(k, "s", i); p.putString(k, s_list[i].ssid);
-            key(k, "r", i); p.putUChar(k, (uint8_t)s_list[i].result);
+            key(k, "s", i); ok=p.putString(k, s_list[i].ssid)==strlen(s_list[i].ssid) && ok;
+            key(k, "r", i); ok=p.putUChar(k, (uint8_t)s_list[i].result)==1 && ok;
         }
+        if(ok)ok=p.putUChar("n",s_n)==1;
+        ok=ok && p.getUChar("n",255)==s_n && p.getUChar("use",255)==s_use;
+        for(uint8_t i=0;ok&&i<s_n;i++){char k[4];key(k,"s",i);ok=p.getString(k,"")==s_list[i].ssid;key(k,"r",i);ok=ok&&p.getUChar(k,255)==uint8_t(s_list[i].result); }
         p.end();
-    }
+    }else ok=false;
+    return ok;
 }
 
 bool passAt(uint8_t i, char* out, size_t cap) {
@@ -338,6 +344,7 @@ bool join() {
     return true;
 }
 
+uint8_t s_expectedImage[32];
 bool check() {
     s_state = State::CHECKING;
     Serial.printf("[ota] checking %s, largest block %lu\n", OTA_WIFI_BASE,
@@ -350,8 +357,13 @@ bool check() {
         fail(Fail::NO_SITE);
         return false;
     }
-    body[len] = '\0';
+    const size_t bodyLen=len;body[len] = '\0';
+    uint8_t manifestSig[80];size_t manifestSigLen=0;
+    code=getSmall(String("manifest-")+OtaCore::buildName()+".sig",manifestSig,sizeof manifestSig,manifestSigLen);
+    if(code!=200||!OtaCore::verifyManifest(body,bodyLen,manifestSig,manifestSigLen)){fail(Fail::NOT_SIGNED);return false;}
+    if(!ContentContract::imageDigest((const char*)body,s_expectedImage)){fail(Fail::CARD_CONTENT);return false;}
     if (!parseVersion((const char*)body, s_latest, sizeof s_latest)) { fail(Fail::NO_SITE); return false; }
+    if(!ContentContract::supported((const char*)body)||!CardContent::verifyRequired()){fail(Fail::CARD_CONTENT);return false;}
 
     code = getSmall(String(OtaCore::buildName()) + "-firmware.sig", s_sig, sizeof s_sig, len);
     if (code == 404) { fail(Fail::NOT_SIGNED); return false; }
@@ -366,6 +378,7 @@ bool check() {
 }
 
 void download() {
+    if(!CardContent::verifyRequired()){fail(Fail::CARD_CONTENT);return;}
     s_state = State::DOWNLOADING;
     s_downloadStarted = true;
     s_rx = 0;
@@ -387,6 +400,7 @@ void download() {
     }
     Fail f = OtaCore::begin((uint32_t)size, s_sig, s_sigLen);
     if (f != Fail::NONE) { http.end(); fail(f); return; }
+    OtaCore::expectImageDigest(s_expectedImage);
     s_size = (uint32_t)size;
         Serial.printf("[ota] heap after ota begin: %lu free, largest %lu\n", (unsigned long)ESP.getFreeHeap(), (unsigned long)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
 
@@ -596,26 +610,16 @@ int8_t savedIndexOf(const char* ssid) {
 
 bool saveNetwork(const char* ssid, const char* pass) {
     readSaved();
-    if (!ssid || !ssid[0]) return false;
-    int8_t k = savedIndexOf(ssid);
-    if (k < 0) {
-        if (s_n >= SAVED_MAX) return false;
-        k = (int8_t)s_n++;
-        strncpy(s_list[k].ssid, ssid, 32);
-        s_list[k].ssid[32] = '\0';
-        if (s_n == 1) s_use = 0;
-    }
-    s_list[k].result = SavedResult::UNTRIED;
-    Preferences p;
-    if (p.begin(NVS_NS, false)) {
-        char key_[4];
-        key(key_, "p", (uint8_t)k);
-        p.putString(key_, pass ? pass : "");
-        p.end();
-    }
-    writeList();
-    Serial.printf("[ota] wifi: saved %s (%u of %u)\n", ssid, (unsigned)s_n, (unsigned)SAVED_MAX);
-    return true;
+    if(!ssid||!ssid[0]||strlen(ssid)>32||!pass||strlen(pass)>64)return false;
+    int8_t k=savedIndexOf(ssid);const bool fresh=k<0;
+    if(fresh){if(s_n>=SAVED_MAX)return false;k=s_n;}
+    Preferences p;if(!p.begin(NVS_NS,false))return false;
+    char pk[4];key(pk,"p",k);String old=p.getString(pk,"");
+    bool ok=p.putString(pk,pass)==strlen(pass) && p.getString(pk,"")==pass;
+    const Saved before=s_list[k];const uint8_t oldN=s_n;
+    if(ok){snprintf(s_list[k].ssid,sizeof s_list[k].ssid,"%s",ssid);s_list[k].result=SavedResult::UNTRIED;if(fresh)++s_n;ok=writeList();}
+    if(!ok){s_list[k]=before;s_n=oldN;p.putString(pk,old);writeList();}
+    p.end();return ok;
 }
 
 void removeSaved(uint8_t i) {

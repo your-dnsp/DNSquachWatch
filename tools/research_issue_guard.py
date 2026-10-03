@@ -20,7 +20,7 @@ def screen(body):
             problems.append('Too many JSON candidates; manual review needed.');break
         try:r,end=decoder.raw_decode(body[match.start():])
         except (ValueError,RecursionError):continue
-        if isinstance(r,dict) and r.get('schema')=='dnsp-device-research-v1':reports.append(body[match.start():match.start()+end])
+        if isinstance(r,dict) and r.get('schema') in ('dnsp-device-research-v1','dnsp-device-research-v2'):reports.append(body[match.start():match.start()+end])
     if not reports:problems.append('No exported REDACTED report found in the issue body.')
     for text in reports:problems.extend(check(text))
     return list(dict.fromkeys(problems))

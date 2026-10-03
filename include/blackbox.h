@@ -1,3 +1,4 @@
+#include "simulation.h"
 // SquachWatch-CYD — the black box
 //
 // What the board saw and how it last went down, kept across restarts without
@@ -29,7 +30,7 @@ struct __attribute__((packed)) DetRecord {
     uint8_t  kind;          // internal: a sighting, or the mark a CLR leaves
     uint8_t  type;          // DetectionType
     uint8_t  conf;          // Confidence
-    uint8_t  flags;         // DET_AGAIN, DET_PRINTED
+    uint8_t  flags;         // low bits: AGAIN/PRINTED/LOCATION/SIMULATED; bits 4..5: AddressRole
     uint8_t  mac[6];
     int8_t   rssi;
     uint8_t  channel;
@@ -42,6 +43,9 @@ struct __attribute__((packed)) DetRecord {
     uint8_t  pad[3];
     uint8_t  crc;
 };
+static const uint8_t DET_SIMULATED=0x08;
+inline AddressRole addressRole(const DetRecord& r){return (AddressRole)((r.flags>>4)&3);}
+inline bool simulated(const DetRecord& r){return Simulation::marked(r.mac);}
 static const uint8_t DET_AGAIN = 0x01;   // came back after going quiet
 static const uint8_t DET_LOCATION = 0x04; // pad[0..2] holds the 24-bit location ID
 inline uint32_t locationKey(const DetRecord& r){return (r.flags&DET_LOCATION)?uint32_t(r.pad[0])|(uint32_t(r.pad[1])<<8)|(uint32_t(r.pad[2])<<16):0;}

@@ -44,4 +44,12 @@ report['observed_mac']='AA:BB:CC:11:22:33';assert check(json.dumps(report)) and 
 assert screen(text+'\nhttps://github.com/user-attachments/files/1/private.txt')
 report['observed_mac']='AA:BB:CC:XX:XX:XX';report['identifiers_included']=True;assert check(json.dumps(report))
 assert screen('{"schema":"dnsp-device-research-v1"}')
+report.update(schema='dnsp-device-research-v2',identifiers_included=False,simulated=True,simulation_subtag='SIMULATED',address_provenance='claimed transmitter')
+assert not check(json.dumps(report)) and not screen(json.dumps(report))
+del report['simulated']
+assert check(json.dumps(report)) and screen(json.dumps(report))
+report.update(simulated=True,simulation_subtag='')
+assert check(json.dumps(report))
+report.update(simulated=False,simulation_subtag='')
+assert not check(json.dumps(report))
 print('Installer + submission security checks PASS')

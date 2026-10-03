@@ -1,3 +1,5 @@
+#include "simulation.h"
+#include "detection_info.h"
 #include "glyph_decode.h"
 #include "language.h"
 #include "language_data.h"
@@ -276,6 +278,7 @@ const char *detectionNote(DetectionType t) {
     return "A radio pattern matched. Inspect the evidence; this does not prove wrongdoing.";
 }
 const char *why(const Detection &d) {
+    if(Simulation::marked(d))return DetectionInfo::why(d);
     switch (d.evidence) {
     case MatchEvidence::OUI:
         return "Shared manufacturer prefix. This does not confirm the device type.";

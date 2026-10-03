@@ -1,11 +1,1 @@
-{
-  "version": "1.5.2",
-  "target": "cyd-fast",
-  "release_name": "DNSquachWatch v1.5.2",
-  "whats_new": [
-    "Wi-Fi connection-only navigation; explicit update checks",
-    "Compact location-label storage; preserve saved labels",
-    "Upstream v1.28.0 outfit/rendering changes; DNSP preserved",
-    "Keep DNSP Content/v1.5; hardware Wi-Fi/label validation pending"
-  ]
-}
+{"version":"1.5.7","required_content":"v1.5","signed_image_sha256":"d7a326a47af6a93e3f59e3f457a7f12f94922e2527e85d44b77bce8dacf6fa4c"}

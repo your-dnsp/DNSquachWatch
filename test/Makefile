@@ -50,13 +50,17 @@ card_content_test_SRCS := $(SRC)/card_content.cpp
 
 ui_scratch_test_SRCS := $(SRC)/ui_scratch.cpp $(SRC)/pixel_tide.cpp
 
-TESTS := ui_scratch_test card_content_test sd_retry_test research_submission_test location_label_test  installation_guide_test alert_snooze_test duress_test drone_watch_test care_test verified_copy_test breakout_test glyph_test field_test research_test deauth_tracker_test dnsp_detection_test dnsp_csv_test dnsp_settings_test remote_id_test ibeacon_test signatures_test emitter_roundtrip_test ignore_list_test hacker_test pwnagotchi_test shim_fidelity_test squachmesh_test qwerty_test meshmsg_test device_info_test security_test emote_script_test blackbox_test bingo_test hunt_test bgretire_test autoquiet_test framepush_test touchfit_test logindex_test dex_test regulars_test gnss_test user_labels_test sketchy_rule_test
+backup_maintenance_test_FLAGS := -DBACKUP_MAINTENANCE_TEST -Istorage_shim
+backup_maintenance_test_SRCS := $(SRC)/backup_maintenance.cpp
+
+TESTS := backup_maintenance_test ui_scratch_test card_content_test sd_retry_test research_submission_test location_label_test  installation_guide_test alert_snooze_test duress_test drone_watch_test care_test verified_copy_test breakout_test glyph_test field_test research_test deauth_tracker_test dnsp_detection_test dnsp_csv_test dnsp_settings_test remote_id_test ibeacon_test signatures_test emitter_roundtrip_test ignore_list_test hacker_test pwnagotchi_test shim_fidelity_test squachmesh_test qwerty_test meshmsg_test device_info_test security_test emote_script_test blackbox_test bingo_test hunt_test bgretire_test autoquiet_test framepush_test touchfit_test logindex_test dex_test regulars_test gnss_test user_labels_test sketchy_rule_test
 
 dnsp_detection_test_SRCS := $(SIM)/detection_sim.cpp $(SRC)/remote_id.cpp privacy_stub.cpp $(SRC)/detection_info.cpp $(SRC)/device_info.cpp $(SRC)/signatures.cpp
 deauth_tracker_test_SRCS := $(SRC)/deauth_tracker.cpp
 dnsp_settings_test_SRCS := $(SRC)/settings.cpp
 gnss_test_SRCS := $(SRC)/gnss.cpp
 user_labels_test_SRCS := $(SRC)/user_labels.cpp
+sketchy_rule_test_FLAGS := -DSKETCHY_RULE_TEST -Istorage_shim
 sketchy_rule_test_SRCS := $(SRC)/location_label.cpp  $(SRC)/sketchy_rule.cpp $(SIM)/detection_sim.cpp $(SRC)/remote_id.cpp
 
 # Only the units under test get linked in. Pulling the whole firmware
@@ -125,8 +129,8 @@ $(OUT):
 	@mkdir -p $(OUT)
 
 define TEST_rule
-$(OUT)/$(1): $(1).cpp $$($(1)_SRCS) $$(wildcard $$(INC)/*.h) $$(wildcard $$(INC)/*.inc) $$(wildcard $$(SIM)/*.h) Makefile | $(OUT)
-	@$$(CXX) $$(CXXFLAGS) $$($(1)_FLAGS) -o $$@ $$< $$($(1)_SRCS)
+$(OUT)/$(1): $(1).cpp $(SRC)/simulation.cpp $$($(1)_SRCS) $$(wildcard $$(INC)/*.h) $$(wildcard $$(INC)/*.inc) $$(wildcard $$(SIM)/*.h) Makefile | $(OUT)
+	@$$(CXX) $$(CXXFLAGS) $$($(1)_FLAGS) -o $$@ $$< $$($(1)_SRCS) $(SRC)/simulation.cpp
 
 .PHONY: run-$(1)
 run-$(1): $(OUT)/$(1)

@@ -1,3 +1,4 @@
+#include "firmware_version.h"
 #include "frame_config.h"
 #include "alert_snooze.h"
 #include "duress_device.h"
@@ -5,6 +6,7 @@
 #include "ui_breakout.h"
 #include "ui_care.h"
 #include "care.h"
+#include "backup_maintenance.h"
 // SquachWatch-CYD — main firmware
 // Wires the state machine (DESIGN.md §9) across the UI modules
 // and the DetectionEngine.
@@ -208,7 +210,7 @@ static void crashReportInit() {
     if(panicked || r==ESP_RST_BROWNOUT) {
         CrashReports::Record report;
         report.resetReason=uint32_t(r);report.crash=g_lastCrash;
-        snprintf(report.firmware,sizeof report.firmware,"DNSP v1.5.2");
+        snprintf(report.firmware,sizeof report.firmware,"DNSP v" FIRMWARE_VERSION);
         if(g_crumb.magic==CRUMB_MAGIC){report.crash.valid=true;report.crash.uptimeMs=g_crumb.uptimeMs;report.crash.heapFree=g_crumb.heapFree;report.crash.heapBlock=g_crumb.heapBlock;report.crash.screen=g_crumb.screen;report.lightReading=g_crumb.light;report.backlightDuty=g_crumb.duty;report.ldr=g_crumb.ldr;report.displayMhz=g_crumb.displayMhz;}
         if(!CrashReports::enqueue(report))Serial.println("[crash] Could not queue report; see core dump / BlackBox.");
     }
@@ -1211,7 +1213,7 @@ static void labelTargetFromDetection(const Detection& d){
     memset(&s_confirmTarget,0,sizeof s_confirmTarget);memcpy(s_confirmTarget.mac,d.mac,6);
     s_confirmTarget.ble=d.channel==0;s_confirmTarget.original=d.type;s_confirmTarget.rssi=d.rssi;
     s_confirmTarget.channel=d.channel;s_confirmTarget.confidence=d.conf;s_confirmTarget.evidence=d.evidence;
-    s_confirmTarget.signature=d.signature;snprintf(s_confirmTarget.vendor,sizeof s_confirmTarget.vendor,"%s",vendorText(d));
+    s_confirmTarget.addressRole=d.addressRole;s_confirmTarget.signature=d.signature;snprintf(s_confirmTarget.vendor,sizeof s_confirmTarget.vendor,"%s",vendorText(d));
     snprintf(s_confirmTarget.name,sizeof s_confirmTarget.name,"%s",d.name);
 }
 
@@ -1311,6 +1313,7 @@ static void restoreFrameBuffer();
 // An ALERT opened from the desk's small card goes back to the desk when it
 // is dismissed, not to CLEAR. Set in enterAlert(), spent here.
 static bool wifiReturnPending=false;
+static bool locationFromWifi=false;
 // Cancellation is asynchronous. Do not restart channel hopping while the
 // station task still owns Wi-Fi or restore the display into the TLS heap.
 static void finishWifiMode() {
@@ -1934,6 +1937,7 @@ static void startPinFlow(PinFlow f, const char* prompt = nullptr) {
 }
 
 static void enterLocked() {
+    if(uiUpdateConnectionOnly() && OtaWifi::state()!=OtaWifi::State::OFF) finishWifiMode();
     if(state==AppState::BREAKOUT)BreakoutUI::suspend(millis());
     s_backToBreakout=false;
     Settings::deskActive(false);
@@ -2444,18 +2448,15 @@ static void twatchCrownTick(uint32_t now) {
 
 // The serial boot banner. Box-drawing and block characters, so it wants a
 // UTF-8 terminal -- every monitor used with this board is one, and the
-// console runs at 2,000,000 baud where a few hundred extra bytes cost
+// console runs at 115200 baud where a few hundred extra bytes cost
 // nothing. Written out as literal characters rather than \u escapes so the
 // art is legible here, which is the only place anyone will edit it.
 //
 // The version is NOT typed in. The line this replaced said "v1.0" from the
 // day it was written to the day it was deleted, which is what happens to a
-// hand-written version string. FIRMWARE_VERSION is stamped from the git tag
-// at build time by extra_script.py -- the same one the boot screen and the
+// hand-written version string. FIRMWARE_VERSION comes from include/firmware_version.h
+// at build time through tools/build_version.py -- the same one the boot screen and the
 // diary already show.
-#ifndef FIRMWARE_VERSION
-#define FIRMWARE_VERSION "unknown"
-#endif
 static void printBootBanner() {
     Serial.println("╔══════════════════════════════════════════════════╗");
     Serial.println("║   .-\"\"\"-.                                        ║");
@@ -2464,10 +2465,10 @@ static void printBootBanner() {
     // %-13.13s holds the right border in place whatever the tag turns out
     // to be: the fixed text ahead of it is 37 columns and the box is 50.
     // The precision matters as much as the width -- a working tree builds as
-    // "v1.5.26-dirty" and a commit past a tag as "v1.5.26-3-g554330d", both
+    // "v1.5.36-dirty" and a commit past a tag as "v1.5.36-3-g554330d", both
     // of which walk the border off the end of the line. Truncated here only;
     // the boot screen and the diary still show the version in full.
-    Serial.println("DNSquachWatch v1.5.2 by DNSP | SquachWatch base 1.28.0");
+    Serial.println("DNSquachWatch v" FIRMWARE_VERSION " by DNSP | SquachWatch base 1.28.0");
     Serial.printf ("║  |   -   |     TALKING SASQUACH  .  %-13.13s║\n", FIRMWARE_VERSION);
     // Same %-34s trick as the version line above: the reason is variable
     // length ("interrupt watchdog" is the longest at eighteen characters)
@@ -2936,11 +2937,15 @@ void setup() {
 // ---- PRIM: what each drawing primitive costs on the real sprite ----
 // Every framerate conversation before this was a guess about whether a
 // fillCircle is expensive or a gradient is, made without a single number.
+// Diagnostic BENCH_TOOLS builds retain PRIM; production omits the benchmark
+// and its library-reference self-check while retaining all normal rendering.
 // PRIM on the console draws each primitive N times into the frame buffer
 // and prints the microseconds per call. The frame it scribbles on is
 // repainted on the very next pass, so nothing is visible.
+#if defined(BENCH_TOOLS)
 volatile bool g_benchPrimNow = false;
-#if defined(ARDUINO_ARCH_ESP32)   // the board only: the emulator's sprite has none of this
+#endif
+#if defined(ARDUINO_ARCH_ESP32) && defined(BENCH_TOOLS)   // the board only: the emulator's sprite has none of this
 template <typename F>
 static void primTime(const char* name, uint32_t n, F body) {
     const uint32_t t0 = micros();
@@ -3182,7 +3187,7 @@ static void openSettingsRow(SettingsRow row,uint32_t now,int gestureStartX) {
                         case SettingsRow::REMINGTON: state=AppState::REMINGTON;transitionStart=now;Remington::open();break;
                         case SettingsRow::AUTO_HISTORY: Settings::toggleAutoHistory(); break;
                         case SettingsRow::DEVICE_RESEARCH: state=AppState::LOG; transitionStart=now; Theme::showToast("DEVICE RESEARCH", "Hold a row to label / export", Theme::CYAN); break;
-                        case SettingsRow::SET_LOCATION: state=AppState::LOCATION_LABEL;transitionStart=now;break;
+                        case SettingsRow::SET_LOCATION: locationFromWifi=false; state=AppState::LOCATION_LABEL;transitionStart=now;break;
                         case SettingsRow::RANDOMIZER: FieldUI::openPage(FieldUI::RANDOMIZER);state=AppState::FIELD_TOOLS;transitionStart=now;break;
                         case SettingsRow::TIMER_COUNTER: FieldUI::openPage(FieldUI::TIMER_COUNTER);state=AppState::FIELD_TOOLS;transitionStart=now;break;
                         case SettingsRow::POCKET_READER: FieldUI::openPage(FieldUI::POCKET_READER);state=AppState::FIELD_TOOLS;transitionStart=now;break;
@@ -3329,6 +3334,10 @@ static bool s_shutdownReboot=false,s_shutdownDone=false,s_shutdownFailed=false,s
 static uint32_t s_shutdownAt=0;
 static void beginSafeShutdown(bool reboot) {
     Backup::cancel();
+    ReadableLogs::cancel();
+    BackupMaintenance::cancel();
+    CardContent::reset();
+    if(OtaWifi::state()!=OtaWifi::State::OFF) OtaWifi::end();
     Field::telemetryStop();Research::stop("Stopping for shutdown");DroneWatch::stopCapture();DroneWatch::setFocused(false,millis());
     engine.beginShutdown();
     s_shutdownReboot=reboot;s_shutdownDone=false;s_shutdownFailed=false;s_shutdownRedraw=true;s_shutdownAt=millis();
@@ -3391,7 +3400,7 @@ void loop() {
         const uint32_t now=millis();
         if(!s_shutdownDone){
             Research::tick(now);DroneWatch::tick(now);
-            if(engine.shutdownTick() && Research::settled() && DroneWatch::settled()){
+            if(engine.shutdownTick() && Research::settled() && DroneWatch::settled() && OtaWifi::settled()){
                 s_shutdownFailed=engine.sdDropped()!=0 || Research::stats().errors!=0 || DroneWatch::stats().capture==DroneWatch::Capture::ERROR;
                 s_shutdownFailed=!engine.sd().safeEnd()||s_shutdownFailed;
                 Bingo::flush();Dex::flush();Regulars::flush();
@@ -3474,7 +3483,7 @@ void loop() {
 #endif
     // The bingo card: marks the radio task handed over, the week turning
     // over, and the one flash write that follows a batch of marks.
-#if defined(ARDUINO_ARCH_ESP32)
+#if defined(ARDUINO_ARCH_ESP32) && defined(BENCH_TOOLS)
     if (g_benchPrimNow) { g_benchPrimNow = false; runPrimBench(); }
 #endif
     Bingo::tick(now);
@@ -3633,8 +3642,8 @@ void loop() {
     // Authorized backups continue behind the PIN lock. Only an unlocked navigation cancels.
     // Cancellation is explicit in Backup UI or destructive/shutdown workflows.
     if(ReadableLogs::busy()&&!Backup::busy()&&!ReadableLogs::automatic()&&(Security::locked()||(state!=AppState::CARE&&state!=AppState::FIELD_TOOLS)))ReadableLogs::cancel();
-    ReadableLogs::automaticTick(now,engine.sd().ready() && OtaWifi::state()==OtaWifi::State::OFF && OtaBle::state()==OtaBle::State::OFF && !Research::active() && Research::settled() && DroneWatch::settled() && !DroneWatch::focused() && !Backup::busy() && state!=AppState::CARE && state!=AppState::FIELD_TOOLS);
     if(Security::locked()&&ScanProfile::comparing())ScanProfile::stopComparison();
+    BackupMaintenance::tick();
     Backup::tick();
     static uint32_t sdWarnAt=0,sdWarnErrors=0,sdWarnDrops=0;
     if((engine.sd().writeErrors()!=sdWarnErrors || engine.sdDropped()!=sdWarnDrops) && now-sdWarnAt>=10000){sdWarnAt=now;sdWarnErrors=engine.sd().writeErrors();sdWarnDrops=engine.sdDropped();Theme::showToast("STORAGE WARNING", "Check microSD status; events may be missing",Theme::AMBER);}
@@ -5239,6 +5248,11 @@ void loop() {
                         if (OtaCore::switchToOther() != OtaCore::Fail::NONE)
                             Theme::showToast("CAN'T SWITCH", "That version won't start", Theme::AMBER);
                         break;
+                    case UpdateHit::SET_LOCATION:
+                        LocationLabel::wifi(OtaWifi::lastAuthenticatedNetwork());
+                        finishWifiMode();
+                        locationFromWifi=true;state=AppState::LOCATION_LABEL;transitionStart=now;
+                        break;
                     case UpdateHit::CANCEL:
                     case UpdateHit::OK:
                         if (OtaWifi::state() != OtaWifi::State::OFF) {
@@ -5276,10 +5290,11 @@ void loop() {
         case AppState::LOCATION_LABEL: {
             drawTwoBand([&](TFT_eSPI& t,bool){LocationUI::draw(t);});
             if(touchJustDown){const int hit=LocationUI::hit(*canvas,tp.x,tp.y);
-                if(hit==7)returnSettings();
+                if(hit==7){if(locationFromWifi){locationFromWifi=false;enterWifiNets();}else returnSettings();}
                 else if(hit==1){state=AppState::LOCATION_EDIT;transitionStart=now;uiWifiTextInit(*canvas,"24 CHARS MAX",LocationLabel::currentKey()?LocationLabel::current():"");}
-                else if(hit==2){if(LocationLabel::forgetNetwork(OtaWifi::lastAuthenticatedNetwork()))LocationLabel::clear();else Theme::showToast("COULD NOT CLEAR WI-FI LABEL",nullptr,Theme::AMBER);}
-                else if(hit==8)LocationLabel::rememberNetwork(OtaWifi::lastAuthenticatedNetwork());
+                else if(hit==2)LocationLabel::clearSession();
+                else if(hit==9){if(LocationLabel::forgetNetwork(OtaWifi::lastAuthenticatedNetwork()))Theme::showToast("WI-FI LABEL FORGOTTEN",OtaWifi::lastAuthenticatedNetwork(),Theme::CYAN);else Theme::showToast("COULD NOT FORGET WI-FI LABEL",nullptr,Theme::AMBER);}
+                else if(hit==8){if(LocationLabel::rememberNetwork(OtaWifi::lastAuthenticatedNetwork()))Theme::showToast("WI-FI LABEL SAVED",OtaWifi::lastAuthenticatedNetwork(),Theme::CYAN);else Theme::showToast("WI-FI LABEL NOT SAVED",LocationLabel::status(),Theme::AMBER);}
                 else if(hit>=3&&hit<=6){const char* presets[]={"Home","Work","Driving","Con"};if(LocationLabel::set(presets[hit-3]))Theme::showToast("LOCATION SET",LocationLabel::current(),Theme::CYAN);else Theme::showToast("LOCATION NOT SAVED",LocationLabel::status(),Theme::AMBER);}
             }
             break;
@@ -6499,6 +6514,18 @@ void loop() {
         lc.screenDark   = s_screenDimmed && Settings::dimLevel() == 0;
         StatusLight::tick(now, lc);
     }
+    // Service automatic history only after touch and the display have had their turn.
+    const uint32_t historyStartUs=micros();
+    ReadableLogs::automaticTick(now,engine.sd().ready() && OtaWifi::state()==OtaWifi::State::OFF && OtaBle::state()==OtaBle::State::OFF && !Research::active() && Research::settled() && DroneWatch::settled() && !DroneWatch::focused() && !Backup::busy() && !BackupMaintenance::busy() && state!=AppState::CARE && state!=AppState::FIELD_TOOLS, !tp.valid && now-lastTouch>=250u && state!=AppState::ALERT && state!=AppState::WATCH_ALERT && state!=AppState::RULE_ALERT);
+#ifdef ARDUINO_ARCH_ESP32
+    // A slow physical card can still block a single filesystem operation.
+    // Report that separately: it is now outside the pre-drawing profiler lap.
+    static uint32_t historySlowAt=0;
+    const uint32_t historyUs=micros()-historyStartUs;
+    if(historyUs>=50000u && now-historySlowAt>=5000u){historySlowAt=now;Serial.printf("[storage] history %lu ms step %s slowest %s %lu ms\n",(unsigned long)(historyUs/1000u),ReadableLogs::step(),ReadableLogs::operation(),(unsigned long)(ReadableLogs::operationMicros()/1000u));}
+#else
+    (void)historyStartUs;
+#endif
     if(ReadableLogs::busy()&&!Backup::busy())delay(1);
     prevTouchValid = tp.valid;
 }

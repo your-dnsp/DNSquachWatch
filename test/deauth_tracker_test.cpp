@@ -1,5 +1,6 @@
 #include "test_util.h"
 #include "deauth_tracker.h"
+#include "simulation.h"
 #include <cstring>
 
 static DeauthFrameEvidence frame(uint8_t source, uint8_t target=1, uint8_t bssid=9,
@@ -87,5 +88,11 @@ int main() {
     for(uint8_t s=2;s<=13;s++)pressure.note(frame(s),1000u+s);
     ck("oldest entry is evicted deterministically at capacity",!pressure.note(frame(1),1200).alert);
     ck("tracker has a fixed modest RAM bound",DeauthBurstTracker::TABLE_CAP==12&&DeauthBurstTracker::tableBytes()<1600);
+    suite("Simulation follows the claimed transmitter only");
+    DeauthBurstTracker ordinarySource, simulatedSource;DeauthBurstResult a{},s{};
+    for(unsigned i=0;i<6;i++){a=ordinarySource.note(frame(1,0,0),30000+100*i);s=simulatedSource.note(frame(0,1,9),30000+100*i);}
+    ck("zero-suffix receiver and BSSID cannot mark ordinary source",a.alert&&!Simulation::marked(a.source));
+    ck("marked transmitter still requires full ordinary six-frame burst",s.alert&&s.count==6&&Simulation::marked(s.source));
+    ck("marked source retains ordinary cooldown",!simulatedSource.note(frame(0),30600).alert);
     return report();
 }

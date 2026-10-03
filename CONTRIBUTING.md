@@ -2,6 +2,8 @@
 
 Reports begin **unverified** and describe an individual observed device. A user label is not an OUI-wide identification; detector confidence is not independent verification.
 
+Keep the exported `simulated`, `simulation_subtag`, and `address_provenance` fields when sharing a v2 report, including its REDACTED copy. **SIMULATED** denotes the DNSP test-address convention (decoded MAC suffix `00:00:00`); it is not a reserved or authenticated identity, and real hardware may use it. Test observations help exercise the receiver; they do not independently confirm a real device's identity.
+
 1. Open Research & Data > Device Research, hold a LOG row, and label/tag your observation. Raw-scan rows also support labeling.
 2. Choose RESEARCH REPORT... and Export Both. microSD receives `/Research Submissions/report-XXXXXXXX-NNNN-REDACTED.txt` and its matching `/Research Submissions/PRIVATE/report-XXXXXXXX-NNNN-PRIVATE.txt`.
 3. **Retain PRIVATE locally. Submit only REDACTED.** The MAC must end `XX:XX:XX`; advertised names are omitted. Review subtags and all free text yourself.
@@ -21,3 +23,7 @@ GitHub uploads an attachment as soon as it is attached. Issue-form prompts and a
 For build requirements and checks, see [Build instructions](docs/BUILD.md). Keep changes focused, preserve DNSP menu organization and recovery behavior, and include the validation relevant to your change. Describe observed evidence and limitations when proposing detection rules. Never commit credentials, signing keys, private reports or personal device backups.
 
 For independent research review, use the [corroboration guide](docs/research/CORROBORATION.md).
+
+## Release numbering
+
+The current published firmware is v1.5.7. The next changed firmware starts the v1.6.x series at v1.6.0. Never reuse a version for changed firmware. Update the shared version source, device/report labels, documentation, manifests and package names together. Stored schema versions are independent and change only when their formats change.

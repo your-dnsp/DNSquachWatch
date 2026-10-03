@@ -1,3 +1,4 @@
+#include "simulation.h"
 // SquachWatch-CYD — ALERT screen implementation
 #include "ui_alert.h"
 #include "theme.h"
@@ -468,6 +469,8 @@ void uiAlertTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng,
             t.print(src);
         }
     }
+
+    if(Simulation::marked(s_last)){t.setTextSize(1);t.setTextColor(Theme::AMBER,Theme::BG);t.setCursor(PLATE_X+4,PLATE_Y+PLATE_H+3);t.print("SIMULATED");}
 
     // The device's own name, where it has one -- a Flipper's nickname, a
     // Pwnagotchi's, a drone's serial, an iBeacon's deployment. Carried in
