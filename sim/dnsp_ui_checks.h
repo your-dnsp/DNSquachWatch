@@ -190,6 +190,10 @@ static int runDnspUiChecks() {
     suite("Updater warning precedes controls");
     state=AppState::UPDATE;uiUpdateInit(tft);testStep();testShot("update-warning");
     ck("warning blocks unrelated control taps",uiUpdateHitTest(tft,tft.width()/2,80,nullptr)==UpdateHit::NONE);
+    uiUpdateInit(tft,true);testStep();testShot("wifi-connection-only");
+    ck("connection-only screen retains mode",uiUpdateConnectionOnly());
+    ck("connection screen cannot launch updates",uiUpdateHitTest(tft,tft.width()/2,80,nullptr)==UpdateHit::NONE);
+    testTap(tft.width()/2,tft.height()-18);ck("connection Back returns to saved networks",state==AppState::WIFI_NETS);
 
     suite("Research controls and local-only exports");
     Research::discard();Research::setSink([](const char*,const char*,bool){return true;});
@@ -426,7 +430,9 @@ static int runDnspUiChecks() {
     suite("v1.2 location and Remington");
     uiSettingsInit(tft);uiSettingsOpenPage(SettingsPage::ALERTS);testStep();
     ck("location menu reachable",menuTap(SettingsRow::SET_LOCATION)&&state==AppState::LOCATION_LABEL);
+    setenv("SQUACHSIM_NVS_MAX_BLOB_BYTES","256",1);
     testTap(40,106);ck("Home preset applies",!strcmp(LocationLabel::current(),"Home"));testShot("location-home");
+    unsetenv("SQUACHSIM_NVS_MAX_BLOB_BYTES");
     testTap(40,74);ck("label keyboard opens",state==AppState::LOCATION_EDIT);testShot("location-keyboard");
     state=AppState::LOCATION_LABEL;testStep();testTap(tft.width()-40,74);ck("clear label",!strcmp(LocationLabel::current(),"no-label-set"));
     testTap(40,tft.height()-18);ck("location back returns to settings",state==AppState::SETTINGS);

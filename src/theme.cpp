@@ -2697,19 +2697,86 @@ static uint16_t ditherRGB(TFT_eSPI& t, float r, float g, float b, uint8_t cell) 
     return t.color565((uint8_t)rr, (uint8_t)gg, (uint8_t)bb);
 }
 
+// The same dither for colours already worked out in whole numbers.
+static uint16_t ditherRGBi(TFT_eSPI& t, int r, int g, int b, uint8_t cell) {
+    static const int8_t BAYER[16] = { -8,  0, -6,  2,
+                                       4, -4,  6, -2,
+                                      -5,  3, -7,  1,
+                                       7, -1,  5, -3 };
+    const int d = BAYER[cell & 15];
+    int rr = r + d * 2;
+    int gg = g + d * 2;
+    int bb = b + d * 4;
+    if (rr < 0) rr = 0; else if (rr > 255) rr = 255;
+    if (gg < 0) gg = 0; else if (gg > 255) gg = 255;
+    if (bb < 0) bb = 0; else if (bb > 255) bb = 255;
+    return t.color565((uint8_t)rr, (uint8_t)gg, (uint8_t)bb);
+}
+
+// sin() in whole numbers: the angle is a sixteen-bit turn (65536 = once
+// round), the result is sin x 256. A quarter wave of 65 entries and a
+// straight line between them: within half a percent of the real thing.
+//
+// Here because the aquarium calls sin a thousand times a frame -- per row
+// for the light shafts, per column for the waterline, per slice of every
+// fish -- and the ESP32-C5 has no floating-point unit. On it, every one of
+// those was a few hundred instructions of software arithmetic, and the
+// tank drew at eight frames a second (bg 77 ms, 2026-10-02). The Xtensa
+// boards have the unit and never noticed; this costs them nothing either.
+static int isin256(uint16_t a) {
+    static const uint16_t Q[65] = {
+          0,   6,  13,  19,  25,  31,  38,  44,  50,  56,  62,  68,  74,  80,  86,  92,
+         98, 104, 109, 115, 121, 126, 132, 137, 142, 147, 152, 157, 162, 167, 172, 177,
+        181, 185, 190, 194, 198, 202, 206, 209, 213, 216, 220, 223, 226, 229, 231, 234,
+        237, 239, 241, 243, 245, 247, 248, 250, 251, 252, 253, 254, 255, 255, 256, 256, 256 };
+    const uint16_t q = a & 0x3FFF;                        // position within the quarter
+    const uint16_t i = (a & 0x4000) ? (0x3FFF - q) : q;  // second and fourth quarters run back
+    const int lo = Q[i >> 8], hi = Q[(i >> 8) + 1];
+    const int v  = lo + (((hi - lo) * (i & 0xFF)) >> 8);
+    return (a & 0x8000) ? -v : v;
+}
+static inline int icos256(uint16_t a) { return isin256((uint16_t)(a + 0x4000)); }
+// Radians to a sixteen-bit turn, for the small phases the tank keeps in
+// radians. Not for the clock: millis() / 900 in radians overflows this.
+static inline uint16_t turn16(float rad) { return (uint16_t)(int32_t)(rad * 10430.378f); }
+// The clock's angle instead: sin(now / divisor) wants now x 65536 / (divisor x 2 pi),
+// done in 64-bit integers so a board up for weeks wraps cleanly.
+static inline uint16_t turnOf(uint32_t now, float divisor) {
+    const uint32_t k16 = (uint32_t)(4294967296.0f / (divisor * 6.2831853f));
+    return (uint16_t)(((uint64_t)now * k16) >> 16);
+}
+
 // Water colour at a given row. The gradient was being open-coded in
 // four places with the same magic numbers; a fish that hazes toward a
 // slightly different blue than the water it is swimming in stops
 // disappearing into the distance, which is the entire point of the
 // haze, so they have to agree exactly.
 static uint16_t aquaWaterAt(TFT_eSPI& t, int y, int yStart, int bandH) {
-    float d = (float)(y - yStart) / (float)bandH;
-    if (d < 0.0f) d = 0.0f;
-    if (d > 1.0f) d = 1.0f;
-    const float lit = 1.0f - d;
-    return t.color565((uint8_t)(4  + lit *  7),
-                      (uint8_t)(30 + lit * 30),
-                      (uint8_t)(44 + lit * 32));
+    int lit = 256 - ((y - yStart) * 256) / bandH;          // 256 at the surface, 0 on the floor
+    if (lit < 0) lit = 0;
+    if (lit > 256) lit = 256;
+    return t.color565((uint8_t)(4  + ((lit *  7) >> 8)),
+                      (uint8_t)(30 + ((lit * 30) >> 8)),
+                      (uint8_t)(44 + ((lit * 32) >> 8)));
+}
+
+static float fishProfile(uint8_t species, float u);
+// fishProfile() sampled at 33 points per species, x 256, so a fish costs
+// an array read per slice instead of a powf(). Filled on first use.
+static int fishProfile256(uint8_t species, int i, int n) {
+    static int16_t FP[3][33];
+    static bool    inited = false;
+    if (!inited) {
+        for (uint8_t sp = 0; sp < 3; sp++)
+            for (int k = 0; k <= 32; k++) FP[sp][k] = (int16_t)(fishProfile(sp, (float)k / 32.0f) * 256.0f);
+        inited = true;
+    }
+    if (species > 2) species = 0;
+    // u = i / (n - 1), on the 33-point table, straight line between points.
+    const int u32 = (n > 1) ? (i * 32 * 256) / (n - 1) : 0;    // u x 32 x 256
+    int k = u32 >> 8; if (k > 31) k = 31;
+    const int f = u32 & 0xFF;
+    return FP[species][k] + (((FP[species][k + 1] - FP[species][k]) * f) >> 8);
 }
 
 // Body half-height at u (0 = snout, 1 = tail base), per species. Each
@@ -2759,13 +2826,26 @@ static void drawFishAt(TFT_eSPI& t, int cx, int cy, int8_t swim, int s,
     auto xAt    = [&](float u) { return (float)snoutX + (float)aft * u * L; };
     auto yAt    = [&](float u) { return (float)cy + waveAt(u); };
 
-    for (int i = 0; i < NSL; i++) {
-        const float u  = (float)i / (float)(NSL - 1);
-        const float hh = fishProfile(species, u) * (float)s;
-        if (hh < 0.5f) continue;
-        const int x = (int)xAt(u), yc = (int)yAt(u), h = (int)hh;
-        t.drawFastVLine(x, yc - h, h, back);
-        t.drawFastVLine(x, yc, h + 1, belly);
+    // The slices, in whole numbers: a table read for the profile and the
+    // integer sine for the flex, where it was a powf() and a sinf() per
+    // slice (see isin256). The fins and the eye below are a handful of
+    // calls per fish and keep the float forms.
+    {
+        const uint16_t ph16 = (uint16_t)(turnOf(now, 150.0f) + turn16(phase));
+        const uint16_t du16 = (uint16_t)(43808 / (NSL > 1 ? NSL - 1 : 1));  // 4.2 rad per unit of u, per slice
+        const int      L256 = (int)(L * 256.0f);
+        for (int i = 0; i < NSL; i++) {
+            const int hh = (fishProfile256(species, i, NSL) * s) >> 8;
+            if (hh < 1) continue;                                     // the float form skipped under half a pixel
+            // u x 256, then the flex: sin(ph - 4.2u) x (0.25 + u^2 s 0.40).
+            const int u256 = (NSL > 1) ? (i * 256) / (NSL - 1) : 0;
+            const int amp256 = 64 + ((u256 * u256 >> 8) * s * 102 >> 8);
+            const int wave = (isin256((uint16_t)(ph16 - (uint16_t)(i * du16))) * amp256) >> 16;
+            const int x  = snoutX + aft * ((u256 * L256) >> 16);
+            const int yc = cy + wave;
+            t.drawFastVLine(x, yc - hh, hh, back);
+            t.drawFastVLine(x, yc, hh + 1, belly);
+        }
     }
 
     // Forked caudal fin -- two lobes meeting at the peduncle, which is
@@ -3086,9 +3166,21 @@ void drawAquarium(TFT_eSPI& t, uint32_t now, int yStart, int yEnd) {
         }
         rayInited = true;
     }
+    // Each shaft's sway is one sine per FRAME, here, not one per row: it
+    // does not depend on the row. Everything below is whole numbers, most of
+    // them x 256 (see isin256 for why).
+    int rayC256[NRAY];                                    // centre at the surface, x 256
+    for (uint8_t i = 0; i < NRAY; i++)
+        rayC256[i] = (int)((rayX[i] + sinf((float)now * raySpd[i] + (float)i * 1.7f) * 16.0f) * 256.0f);
+    // How far into a shaft each nested span is lit: fade x (1 - frac)^2 x 3
+    // for frac = 1, 0.75, 0.5, 0.25, x 256. The outermost is zero and skipped.
+    static const int KK256[4] = { 0, 48, 192, 432 };
+    // The vignette's five darkenings, (1 - v) x 256 for v = 0.05 + 0.065 k.
+    static const int VIG256[5] = { 243, 227, 210, 193, 177 };
     for (int y = DrawBand::top(yStart); y < DrawBand::bot(yEnd); y++) {
-        const float d   = (float)(y - yStart) / (float)bandH;   // 0 surface, 1 floor
-        const float lit = 1.0f - d;
+        const int dd   = y - yStart;
+        const int d256 = (dd * 256) / bandH;                 // 0 surface, 256 floor
+        const int lit  = 256 - d256;
         // A narrow ramp, deliberately. Widening it to buy quantisation
         // levels backfired: a broad range crosses several RGB332
         // boundaries, and each crossing is a visible plateau -- at one
@@ -3100,36 +3192,34 @@ void drawAquarium(TFT_eSPI& t, uint32_t now, int yStart, int yEnd) {
         // result is nearly flat, which is the correct answer for
         // something whose job is to sit behind the UI: this is a
         // background, not a showpiece gradient.
-        const float baseR =  4.0f + lit *  7.0f;
-        const float baseG = 30.0f + lit * 30.0f;
-        const float baseB = 44.0f + lit * 32.0f;
+        const int baseR =  4 * 256 + lit *  7;              // x 256
+        const int baseG = 30 * 256 + lit * 30;
+        const int baseB = 44 * 256 + lit * 32;
         // One phase per row: the gradient is vertical, so this is where
         // the dither has to act.
         const uint8_t cell = (uint8_t)(y & 15);
-        t.drawFastHLine(0, y, w, ditherRGB(t, baseR, baseG, baseB, cell));
+        t.drawFastHLine(0, y, w, ditherRGBi(t, baseR >> 8, baseG >> 8, baseB >> 8, cell));
 
         // Shafts, as a few nested spans per ray rather than one flat
         // band -- a single span gave each shaft a hard edge that the
         // quantisation then made into a visible rectangle.
-        if (d < 0.60f) {
-            const float dd    = (float)(y - yStart);
-            const float fade  = (1.0f - d / 0.60f) * 0.20f;
+        if (d256 < 154) {                                    // the top 60% of the tank
+            const int fade256 = ((154 - d256) * 256 / 154) * 51 >> 8;   // (1 - d/0.6) x 0.20, x 256
             for (uint8_t i = 0; i < NRAY; i++) {
-                const float rc = rayX[i] + sinf((float)now * raySpd[i] + (float)i * 1.7f) * 16.0f + dd * 0.30f;
-                const float rh = rayW[i] + dd * 0.16f;
-                for (uint8_t k = 0; k < 4; k++) {
-                    const float frac = 1.0f - (float)k * 0.25f;     // outer -> inner
-                    const float kk   = fade * (1.0f - frac) * (1.0f - frac) * 3.0f;
-                    if (kk < 0.02f) continue;
-                    const int hw = (int)(rh * frac);
-                    int xs = (int)rc - hw, xe = (int)rc + hw;
+                const int rc = (rayC256[i] + dd * 77) >> 8;             // leans 0.30 px per row
+                const int rh256 = (int)(rayW[i] * 256.0f) + dd * 41;    // widens 0.16 px per row
+                for (uint8_t k = 1; k < 4; k++) {
+                    const int kk256 = (fade256 * KK256[k]) >> 8;
+                    if (kk256 < 5) continue;                             // under 0.02: too faint to draw
+                    const int hw = (rh256 * (4 - k)) >> 10;             // rh x frac, frac = 1 - k/4
+                    int xs = rc - hw, xe = rc + hw;
                     if (xs < 0) xs = 0;
                     if (xe > w) xe = w;
                     if (xe <= xs) continue;
                     t.drawFastHLine(xs, y, xe - xs,
-                                    ditherRGB(t, baseR + (180.0f - baseR) * kk,
-                                                 baseG + (240.0f - baseG) * kk,
-                                                 baseB + (255.0f - baseB) * kk, cell));
+                                    ditherRGBi(t, (baseR + (((180 * 256 - baseR) * kk256) >> 8)) >> 8,
+                                                  (baseG + (((240 * 256 - baseG) * kk256) >> 8)) >> 8,
+                                                  (baseB + (((255 * 256 - baseB) * kk256) >> 8)) >> 8, cell));
                 }
             }
         }
@@ -3139,10 +3229,9 @@ void drawAquarium(TFT_eSPI& t, uint32_t now, int yStart, int yEnd) {
         for (uint8_t k = 0; k < 5; k++) {
             const int   ww = (w * (6 - k)) / 40;
             if (ww < 1) continue;
-            const float v  = 0.05f + (float)k * 0.065f;
-            const uint16_t vc = ditherRGB(t, baseR * (1.0f - v),
-                                             baseG * (1.0f - v),
-                                             baseB * (1.0f - v), cell);
+            const uint16_t vc = ditherRGBi(t, (baseR * VIG256[k]) >> 16,
+                                              (baseG * VIG256[k]) >> 16,
+                                              (baseB * VIG256[k]) >> 16, cell);
             t.drawFastHLine(0, y, ww, vc);
             t.drawFastHLine(w - ww, y, ww, vc);
         }
@@ -3161,16 +3250,28 @@ void drawAquarium(TFT_eSPI& t, uint32_t now, int yStart, int yEnd) {
     // rates, so the crest never repeats on a fixed pitch. A dead-level
     // top edge is what was reading as "a rectangle of blue" instead of
     // the underside of water.
-    for (int x = 0; x < w; x += 2) {
-        const float surf = sinf((float)x * 0.055f + (float)now / 900.0f) * 1.6f
-                         + sinf((float)x * 0.019f - (float)now / 1500.0f) * 1.1f;
-        const int wy = yStart + 2 + (int)surf;
-        for (uint8_t k = 0; k < 2; k++) {
-            const int yy = wy + k;
-            if (yy < yStart || yy >= yEnd) continue;
-            const float ph  = (float)x * 0.09f + (float)now / (260.0f + k * 90.0f);
-            const uint8_t a = (uint8_t)(26 + 46 * (0.5f + 0.5f * sinf(ph)));
-            t.drawFastHLine(x, yy, 2, blend(t.color565(10, 70, 110), rayCol, a));
+    // Four sines per column became four table reads: the phases that move
+    // with time are worked out once here, as sixteen-bit turns, and the per
+    // column parts are a multiply each.
+    {
+        const uint16_t t900  = turnOf(now, 900.0f);
+        const uint16_t t1500 = turnOf(now, 1500.0f);
+        const uint16_t t260  = turnOf(now, 260.0f);
+        const uint16_t t350  = turnOf(now, 350.0f);
+        const uint16_t waterDark = t.color565(10, 70, 110);
+        for (int x = 0; x < w; x += 2) {
+            // 0.055 and 0.019 rad per pixel are 574 and 198 turn-units.
+            const int surf = (isin256((uint16_t)(x * 574 + t900)) * 410           // x 1.6
+                            + isin256((uint16_t)(x * 198 - t1500)) * 282) >> 16;  // x 1.1
+            const int wy = yStart + 2 + surf;
+            for (uint8_t k = 0; k < 2; k++) {
+                const int yy = wy + k;
+                if (yy < yStart || yy >= yEnd) continue;
+                // 26 + 46 (0.5 + 0.5 sin): 49 + 23 sin.
+                const int sv = isin256((uint16_t)(x * 939 + (k ? t350 : t260)));  // 0.09 rad per pixel
+                const uint8_t a = (uint8_t)(49 + ((23 * sv) >> 8));
+                t.drawFastHLine(x, yy, 2, blend(waterDark, rayCol, a));
+            }
         }
     }
 
@@ -3189,13 +3290,14 @@ void drawAquarium(TFT_eSPI& t, uint32_t now, int yStart, int yEnd) {
         }
         snowInited = true;
     }
+    const uint16_t snowT = turnOf(now, 1400.0f);
     for (uint8_t i = 0; i < NSNOW; i++) {
         snowY[i] += 0.10f + (float)(i % 3) * 0.05f;
         if (snowY[i] > (float)yEnd) {
             snowY[i] = (float)yStart;
             snowX[i] = (float)random(0, w);
         }
-        const int px = (int)(snowX[i] + sinf((float)now / 1400.0f + snowPh[i]) * 5.0f);
+        const int px = (int)snowX[i] + ((isin256((uint16_t)(snowT + turn16(snowPh[i]))) * 5) >> 8);
         const int py = (int)snowY[i];
         if (px < 0 || px >= w) continue;
         const uint16_t waterC = aquaWaterAt(t, py, yStart, bandH);
@@ -3223,6 +3325,7 @@ void drawAquarium(TFT_eSPI& t, uint32_t now, int yStart, int yEnd) {
         // Caustics brighten and dim together as the surface above moves.
         const float breathe = 0.72f + 0.28f * sinf((float)now / 1700.0f);
         const uint16_t causticCol = t.color565(138, 202, 206);
+        const int suI = (int)su;
         for (int y = DrawBand::top(floorTop); y < DrawBand::bot(yEnd); y++) {
             const float near = (float)(y - floorTop) / (float)(yEnd - floorTop); // 0 back, 1 front
             const float z    = 1.0f / (0.20f + near * 0.80f);
@@ -3239,14 +3342,19 @@ void drawAquarium(TFT_eSPI& t, uint32_t now, int yStart, int yEnd) {
             t.drawFastHLine(0, y, w, sand);
 
             const int v = (int)(z * 14.0f + sv) & (CAUSTIC_N - 1);
+            // The per-pixel work in whole numbers: the row's perspective
+            // scale x 256 for the tile lookup, and the row's brightness x 256
+            // for the light. A float row, an integer pixel.
+            const int zq  = (int)(z * 0.42f * 256.0f);
+            const int lit = (int)(breathe * (0.45f + near * 0.55f) * 0.26f * 256.0f);
             for (int x = 0; x < w; x += 2) {
-                const int u = (int)((float)(x - w / 2) * z * 0.42f + su) & (CAUSTIC_N - 1);
+                const int u = ((((x - w / 2) * zq) >> 8) + suI) & (CAUSTIC_N - 1);
                 const uint8_t c = CAUSTIC_TILE[v * CAUSTIC_N + u];
                 if (c < 30) continue;
                 // Light reaching the floor falls off toward the back.
-                const uint8_t a = (uint8_t)(c * breathe * (0.45f + near * 0.55f) * 0.26f);
+                const int a = (c * lit) >> 8;
                 if (a < 8) continue;
-                t.drawFastHLine(x, y, 2, blend(sand, causticCol, a));
+                t.drawFastHLine(x, y, 2, blend(sand, causticCol, (uint8_t)a));
             }
         }
         // Where the floor meets the water, a soft lip rather than a cut.

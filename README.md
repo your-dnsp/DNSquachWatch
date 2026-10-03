@@ -1,6 +1,6 @@
-# DNSquachWatch v1.5.1
+# DNSquachWatch v1.5.2
 
-DNSquachWatch is **dnsprincess's friends-and-family edition of SquachWatch** for the classic 2.8-inch ESP32 Cheap Yellow Display (CYD), based on **SquachWatch v1.27.0**. It keeps Squachy, the original visual identity, and the spirit of the project while adding device & microSD recovery, additional OUI and device research, labeling and OUI research contribution mechanisms, accessibility tools, security enhancements, additional scanning and logging capabilities, additional drone detection & support for FPV pilots, and whimsical additions.
+DNSquachWatch is **dnsprincess's friends-and-family edition of SquachWatch** for the classic 2.8-inch ESP32 Cheap Yellow Display (CYD), based on **SquachWatch v1.28.0**. It keeps Squachy, the original visual identity, and the spirit of the project while adding device & microSD recovery, additional OUI and device research, labeling and OUI research contribution mechanisms, accessibility tools, security enhancements, additional scanning and logging capabilities, additional drone detection & support for FPV pilots, and whimsical additions.
 
 **SquachWatch was created by Talking Sasquach / skizzophrenic.** This edition builds on that work; DNSP is responsible for the modifications. For the original firmware, visit [squachwatch.com](https://squachwatch.com/) or [the upstream project](https://github.com/skizzophrenic/SquachWatch-CYD).
 
@@ -10,20 +10,20 @@ DNSquachWatch is **dnsprincess's friends-and-family edition of SquachWatch** for
 
 | Your display | Firmware |
 |---|---|
-| ST7789, newer CYD batches | [ST7789-80MHz kit](firmware/v1.5.1/ST7789-80MHz/DNSquachWatch-v1.5.1-ST7789-80MHz.zip) |
-| ILI9341, older CYD batches | [ILI9341-80MHz kit](firmware/v1.5.1/ILI9341-80MHz/DNSquachWatch-v1.5.1-ILI9341-80MHz.zip) |
+| ST7789, newer CYD batches | [ST7789-80MHz kit](firmware/v1.5.2/ST7789-80MHz/DNSquachWatch-v1.5.2-ST7789-80MHz.zip) |
+| ILI9341, older CYD batches | [ILI9341-80MHz kit](firmware/v1.5.2/ILI9341-80MHz/DNSquachWatch-v1.5.2-ILI9341-80MHz.zip) |
 
 Both kits target the **classic 2.8-inch ESP32 CYD** and start with an **80 MHz display clock**. System settings can switch the display to 40 MHz; the flash clock stays at 40 MHz. If you are unsure which controller your CYD has, try ST7789 first. A solid white screen may mean it needs ILI9341: try the other kit. Keep each kit's four flashing binaries together.
 
-Also obtain the [microSD content](firmware/v1.5/DNSquachWatch-v1.5-microSD-content.zip) and copy **DNSP Content/v1.5/** to the card root. **Existing v1.5 card content remains compatible with v1.5.1.** Flashing the ESP32 does not copy files to microSD. The full walkthrough, extended language content, and installation document use the supplied card files; backups require the checked installation document. Boot, scanning, essential recovery, and Remington remain built in. No Wi-Fi content download is used.
+Also obtain the [microSD content](firmware/v1.5/DNSquachWatch-v1.5-microSD-content.zip) and copy **DNSP Content/v1.5/** to the card root. **Existing v1.5 card content remains compatible with v1.5.2.** Flashing the ESP32 does not copy files to microSD. The full walkthrough, extended language content, and installation document use the supplied card files; backups require the checked installation document. Boot, scanning, essential recovery, and Remington remain built in. No Wi-Fi content download is used.
 
-Each firmware ZIP includes all four flashing binaries, image checksums, an optional offline installer, and recovery instructions. See [installation guide](docs/user/INSTALLATION.md) for installation and manual card copying, or [GitHub Releases](https://github.com/your-dnsp/DNSquachWatch/releases/tag/v1.5.1) for both kits and download checksums.
+Each firmware ZIP includes all four flashing binaries, image checksums, an optional offline installer, and recovery instructions. See [installation guide](docs/user/INSTALLATION.md) for installation and manual card copying, or [GitHub Releases](https://github.com/your-dnsp/DNSquachWatch/releases/tag/v1.5.2) for both kits and download checksums.
 
 ## Latest update
 
-**v1.5.1 fixes the backup crash reported during v1.5 testing.** Backup completion has been confirmed on DNSP's ST7789 device. Both display kits also show the correct **DNSP v1.5.1** splash label. No new microSD content is needed.
+**v1.5.2 fixes Wi-Fi navigation and reduces location-label storage**, while integrating SquachWatch v1.28.0's Over 9000 outfit and rendering improvements. Connecting saved Wi-Fi supports time and location recall without opening updates; update checks are explicit. DNSP menus, detection research, Remington and the v1.5.1 backup fixes are preserved. No new microSD content is needed.
 
-Use v1.5.1 in place of v1.5. The ILI9341 build passed compilation and integrity checks; its hardware validation is still pending. Full release details are in [changelog](CHANGELOG.md).
+Both display builds passed compilation and image checks. v1.5.2 Wi-Fi/label behavior still needs hardware confirmation; the successful ST7789 backup test was on v1.5.1. Full release details are in [changelog](CHANGELOG.md).
 
 ## What DNSquachWatch adds
 
@@ -45,7 +45,7 @@ Scanning profiles include **Stationary, Balanced, Fast Sweep, Maximum, and Custo
 
 Give individual devices names and tags so repeated observations are easier to interpret. **Alerts & Detections > Set Location** adds a manual label of up to **24 characters**, with Home, Work, Driving, Con, and Clear choices. Events retain the location active when they were stored; unset locations say `no-label-set`.
 
-A location assigned to verified Wi-Fi can be recalled when that saved network is joined again. The interface distinguishes manual labels from recalled labels. Recall uses the network name, so check it when travelling or encountering another network with the same name. Saved Wi-Fi is attempted at normal boot independently of Update Check, including PIN-locked boots, to synchronize time and recall a label before returning the radio to detection. **Wi-Fi Networks > CONNECT** also connects without requesting an update.
+A location assigned to verified Wi-Fi can be recalled when that saved network is joined again. The interface distinguishes manual labels from recalled labels. Recall uses the network name, so check it when travelling or encountering another network with the same name. Saved Wi-Fi is attempted at normal boot, including PIN-locked boots, to synchronize time and recall a label before returning the radio to detection. **Wi-Fi Networks > CONNECT** opens a separate connection screen without checking for updates. Firmware checks require the explicit update action.
 
 Research sessions offer **Balanced, Bluetooth-only, and Wi-Fi-only** profiles, explicit RAW/redacted choices, elapsed time, activity and coverage information, and visible save progress. Exported findings can support independent research instead of disappearing with an on-screen popup.
 

@@ -26,7 +26,8 @@ enum class UpdateHit : uint8_t {
     BACK,            // out to Settings
 };
 
-void      uiUpdateInit(TFT_eSPI& t);
+void      uiUpdateInit(TFT_eSPI& t, bool connectionOnly = false);
+bool      uiUpdateConnectionOnly();
 // `full` false repaints only what moves -- the progress bar and its numbers --
 // over what is already on the panel. For drawing straight to the display once
 // the frame buffer has been released, where a full repaint is a visible flash.

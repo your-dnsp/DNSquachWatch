@@ -35,7 +35,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
-      - name: Publish checked v1.5.1 display kits
+      - name: Publish checked v1.5.2 display kits
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: python3 tools/publish_release.py

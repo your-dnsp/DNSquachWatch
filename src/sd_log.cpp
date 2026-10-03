@@ -32,8 +32,14 @@ extern TFT_eSPI tft;
 // shares its display's VSPI bus too (14/13/12, not 18/19/23) but its
 // real SD-slot CS is unconfirmed -- 5 is a placeholder guess (SD has
 // failed to mount on every real unit tested so far regardless).
+//
+// NM-CYD-C5: CS=10, on the DISPLAY's bus (SCK 6, MISO 2, MOSI 7), from
+// RockBase's connections.md. Not 5 -- GPIO5 on this board is the GPS header's
+// UART, and the card simply never answers.
 #if defined(AWOK)
     #define SD_CS_PIN 14
+#elif defined(NM_CYD_C5)
+    #define SD_CS_PIN 10
 #else
     #define SD_CS_PIN 5
 #endif
@@ -93,6 +99,21 @@ bool SdLog::begin() {
     // no-op, and AWOK's touch chip is apparently more sensitive to
     // that than cyd35's) -- so it keeps the plain no-args SD.begin()
     // below, same as before this fix existed.
+    if (!SD.begin(SD_CS_PIN, tft.getSPIinstance(), 4000000, "/sd", SD_MAX_FILES)) {
+#elif defined(NM_CYD_C5)
+    // Same shape as cyd35 above, and for the same reason: the card is on the
+    // DISPLAY's SPI bus here (SCK 6, MISO 2, MOSI 7), so it gets TFT_eSPI's
+    // already-begun instance and nothing extra is ever attached to the bus.
+    //
+    // It matters more on this board than the comment above suggests, because
+    // -DRLPHANTOM_R sends it to the #else branch otherwise, and that branch
+    // runs SPI.begin(18, 19, 23, 5) -- pins chosen for the original CYD's
+    // dedicated SD bus. Two separate faults on a C5: those are not this
+    // board's SD pins, so the card never answers (observed:
+    // "Card Failed! cmd: 0x00" and then "no card, or it did not answer"
+    // with a working card inserted); and GPIO23 is this board's TFT_CS, so
+    // the additive GPIO-matrix attach the comment above warns about lands on
+    // the display's own chip select.
     if (!SD.begin(SD_CS_PIN, tft.getSPIinstance(), 4000000, "/sd", SD_MAX_FILES)) {
 #elif defined(AWOK)
     if (!SD.begin(SD_CS_PIN, SPI, 4000000, "/sd", SD_MAX_FILES)) {

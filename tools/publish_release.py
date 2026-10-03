@@ -6,14 +6,14 @@ ROOT=Path(__file__).resolve().parents[1]
 def main():
  repo=os.environ['GITHUB_REPOSITORY'];commit=os.environ['GITHUB_SHA'];token=os.environ['GITHUB_TOKEN']
  if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+',repo) or not re.fullmatch(r'[0-9a-f]{40}',commit):raise ValueError('Invalid release target')
- version='1.5.1';archives=[];lines=[]
+ version='1.5.2';archives=[];lines=[]
  for board,target in [('ST7789','cyd-fast'),('ILI9341','cyd-ili9341-fast')]:
   folder=ROOT/('firmware/v'+version)/(board+'-80MHz');name='DNSquachWatch-v'+version+'-'+board+'-80MHz.zip'
   manifest=json.loads((folder/'manifest.json').read_text());assert manifest['internal_version']==version and manifest['target']==target
   for entry in manifest['files']:
    p=folder/entry['file'];assert p.parent==folder and hashlib.sha256(p.read_bytes()).hexdigest()==entry['sha256']
   archive=folder/name;archives.append(archive);lines.append(hashlib.sha256(archive.read_bytes()).hexdigest()+'  '+name+'\n')
- sums=ROOT/'firmware/v1.5.1/RELEASE-SHA256SUMS';sums.write_text(''.join(lines))
+ sums=ROOT/('firmware/v'+version)/'RELEASE-SHA256SUMS';sums.write_text(''.join(lines))
  base='https://api.github.com/repos/'+repo
  def api(path,method='GET',data=None,binary=False):
   url=path if path.startswith('https://uploads.github.com/') else base+path
@@ -25,22 +25,16 @@ def main():
  try:release=api('/releases/tags/v'+version)
  except urllib.error.HTTPError as e:
   if e.code!=404:raise
-  release=api('/releases','POST',dict(tag_name='v'+version,target_commitish=commit,name='DNSquachWatch v'+version+' — ST7789 / ILI9341, 80MHz',body=(ROOT/'.github/release-notes/v1.5.1.md').read_text(),draft=True,prerelease=False))
+  release=api('/releases','POST',dict(tag_name='v'+version,target_commitish=commit,name='DNSquachWatch v'+version+' — ST7789 / ILI9341, 80MHz',body=(ROOT/('.github/release-notes/v'+version+'.md')).read_text(),draft=True,prerelease=False))
  existing=api('/releases/'+str(release['id'])+'/assets');upload=release['upload_url'].split('{')[0]
  for p in archives+[sums]:
   digest='sha256:'+hashlib.sha256(p.read_bytes()).hexdigest()
   old=next((a for a in existing if a['name']==p.name),None)
   if old and old.get('digest')==digest and old['size']==p.stat().st_size:continue
-  # One explicitly authorized splash-label correction may replace these exact old kits.
-  # Any other firmware mismatch still fails instead of silently overwriting a release.
-  prior_splash_assets={
-   'DNSquachWatch-v1.5.1-ST7789-80MHz.zip':'sha256:e745bcabfa9f8442f7b35cc750706613034d353af7d5c74ab7234441fffcdb47',
-   'DNSquachWatch-v1.5.1-ILI9341-80MHz.zip':'sha256:10e4a6d2267e19ce7e51a9629453fc27b043e2130a2c5fbd962d413806b4298b'}
   if old:
-   if p!=sums and old.get('digest')!=prior_splash_assets.get(p.name):raise ValueError('Published firmware differs: '+p.name)
-   api('/releases/assets/'+str(old['id']),'DELETE')
+   raise ValueError('Published asset differs: '+p.name)
   asset=api(upload+'?name='+p.name,'POST',p.read_bytes(),True);assert asset['size']==p.stat().st_size
   if asset.get('digest'):assert asset['digest']==digest
- api('/releases/'+str(release['id']),'PATCH',dict(draft=False,name='DNSquachWatch v'+version+' — ST7789 / ILI9341, 80MHz',body=(ROOT/'.github/release-notes/v1.5.1.md').read_text()))
+ api('/releases/'+str(release['id']),'PATCH',dict(draft=False,name='DNSquachWatch v'+version+' — ST7789 / ILI9341, 80MHz',body=(ROOT/('.github/release-notes/v'+version+'.md')).read_text()))
  print('Published v'+version+' with checked ST7789 and ILI9341 ZIPs and SHA256.')
 if __name__=='__main__':main()

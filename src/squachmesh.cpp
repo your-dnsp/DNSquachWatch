@@ -37,6 +37,7 @@ size_t encode(const Peer& p, uint8_t* out) {
     uint16_t word = 0;
     word |= (uint16_t)((p.nick   & maskOf(NICK_BITS))   << NICK_SHIFT);
     word |= (uint16_t)((p.outfit & maskOf(OUTFIT_BITS)) << OUTFIT_SHIFT);
+    if (p.outfit & (1u << OUTFIT_BITS)) word |= OUTFIT_HI_BIT;
     word |= (uint16_t)((p.shade  & maskOf(SHADE_BITS))  << SHADE_SHIFT);
     if (custom) word |= CUSTOM_BIT;
 
@@ -83,6 +84,7 @@ bool decode(const uint8_t* in, size_t len, Peer& out) {
     Peer p;
     p.nick   = (uint8_t)((word >> NICK_SHIFT)   & maskOf(NICK_BITS));
     p.outfit = (uint8_t)((word >> OUTFIT_SHIFT) & maskOf(OUTFIT_BITS));
+    if (word & OUTFIT_HI_BIT) p.outfit |= (uint8_t)(1u << OUTFIT_BITS);
     p.shade  = (uint8_t)((word >> SHADE_SHIFT)  & maskOf(SHADE_BITS));
     p.custom = custom;
     p.name[0] = '\0';

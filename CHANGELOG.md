@@ -1,5 +1,16 @@
 # DNSquachWatch changelog
 
+## v1.5.2
+
+- Wi-Fi connection has its own screen, returns to saved networks, and preserves connection-only mode across password entry. Startup joins saved networks for time and location recall; firmware checks require the explicit update action.
+- Location-label persistence stores only populated entries. Existing saved labels load and migrate after a successful save; failed saves preserve the previous label/mapping. Success/failure is shown explicitly.
+- Integrates compatible SquachWatch v1.28.0 changes: Over 9000, leaner aquarium/character rendering and five-bit squad outfit sharing. DNSP menus, research signatures, per-source DEAUTH, security/duress, Remington and v1.5.1 backup fixes remain in place. The new ESP32-C5 hardware target is outside this classic-CYD release.
+- Splash, System Info and new backup metadata display v1.5.2 / base v1.28.0.
+
+Both ST7789 and ILI9341 80MHz kits include all four flashing binaries. **Keep DNSP Content/v1.5 unchanged.** Normal flashing retains settings, PIN/duress state and history; no erase or card format is needed. Diagnostic serial is 115200 baud.
+
+Compilation, host regressions, landscape/portrait/reboot/banded UI checks, checksums and image integrity passed. On-device Wi-Fi connection, label save/recall and backup regression checks are still required for v1.5.2. The prior hardware-confirmed backup was v1.5.1 ST7789. The recorded label failure did not establish the exact physical NVS error.
+
 ## v1.5.1
 
 Corrects the v1.5 backup crash confirmed as a loopTask stack-canary failure. History preparation and copying now use separate stack frames; a bounded cursor reads captured flash history without repeated full rescans. Backup yields between steps. Fresh empty readable collections skip unnecessary legacy duplicate scans; existing and interrupted collections retain recovery checks.

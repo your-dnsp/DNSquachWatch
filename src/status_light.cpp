@@ -17,9 +17,19 @@
 //
 // The CrowPanel 7 gets nothing either: its 4, 16 and 17 are the card slot's
 // data line, the touch clock and a panel data line (crowpanel7_board.h).
-#if defined(ESP32) && !defined(CYD35) && !defined(AWOK) && !defined(SQW_S3) && !defined(CROWPANEL7)
+//
+// The NM-CYD-C5 has one too, and like the Freenove S3 it is a single WS2812 --
+// on GPIO27, from RockBase's pins_arduino.h (PIN_RGB_LED 27, WS2812, GRB).
+// It has to be excluded from the three-pin branch explicitly: the C5 defines
+// ESP32 like every other board in the family, so without this it would fall
+// into HW 1 and drive 5 kHz PWM onto 4, 16 and 17 -- pins that on this board
+// are the GPS UART's RX, and two of the exposed I2C/IR lines. The same class
+// of mistake as the backlight pins in main.cpp, and silent in the same way:
+// the light would simply never come on, which reads as "this board has no
+// status LED" rather than as a bug.
+#if defined(ESP32) && !defined(CYD35) && !defined(AWOK) && !defined(SQW_S3) && !defined(CROWPANEL7) && !defined(NM_CYD_C5)
 #define STATUS_LIGHT_HW 1
-#elif defined(FREENOVE_S3)
+#elif defined(FREENOVE_S3) || defined(NM_CYD_C5)
 #define STATUS_LIGHT_HW 2
 #else
 #define STATUS_LIGHT_HW 0
@@ -38,7 +48,11 @@ static const int     PIN_R = 4, PIN_G = 16, PIN_B = 17;
 #endif
 static const uint8_t CH_R  = 3, CH_G  = 4,  CH_B  = 5;
 #if STATUS_LIGHT_HW == 2
+#if defined(NM_CYD_C5)
+static const uint8_t PIN_WS2812 = 27;
+#else
 static const uint8_t PIN_WS2812 = 42;
+#endif
 #endif
 
 static const uint32_t TICK_MS        = 20;

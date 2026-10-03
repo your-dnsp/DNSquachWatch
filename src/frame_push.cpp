@@ -1,5 +1,8 @@
 #include "frame_push.h"
 #include <TFT_eSPI.h>
+#if defined(NM_CYD_C5)
+#include <soc/pcr_reg.h>
+#endif
 
 namespace FramePush {
 
@@ -62,6 +65,13 @@ bool begin() {
     for (int i = 0; i < 256; i++) s_lut[i] = rgb332Wire((uint8_t)i);
     s_ready = true;
     Serial.println("[push] overlapped frame push on, unchanged rows skipped");
+#if defined(SQW_PUSH_PROBE)
+    // Bring-up probe: is the frame push slow because of the wire or the CPU?
+    Serial.printf("[probe] cpu %u MHz, apb %u Hz, SPI_CLOCK_REG=0x%08X SPI_USER_REG=0x%08X\n",
+                  (unsigned)ESP.getCpuFreqMHz(), (unsigned)getApbFrequency(),
+                  (unsigned)READ_PERI_REG(SPI_CLOCK_REG(SPI_PORT)),
+                  (unsigned)READ_PERI_REG(SPI_USER_REG(SPI_PORT)));
+#endif
     return true;
 }
 
@@ -88,6 +98,36 @@ static inline uint32_t rowHash(const uint8_t* row, int32_t w) {
     for (int32_t n = w >> 2; n > 0; n--) { h ^= *p++; h *= 16777619u; }
     return h;
 }
+
+// Latching the transfer registers, which is not free on every ESP32.
+//
+// On the original ESP32 and the S3, writing SPI_USR is enough: the length in
+// SPI_MOSI_DLEN_REG and the words in SPI_W0.. are read straight out by the
+// transfer that bit starts. The ESP32-C5's GPSPI2 does not work that way. Its
+// configuration registers are staged, and SPI_UPDATE has to be raised (and
+// seen to clear) to commit them before SPI_USR starts anything -- otherwise the
+// transfer runs on whatever the peripheral last latched.
+//
+// The symptom is not a blank screen, which is what makes it worth this comment.
+// The panel initialises, answers its ID registers, reports display-on and 16
+// bits per pixel, and the firmware happily reports 70 fps -- while the glass
+// shows dashed, torn runs of pixels with most rows missing, because some bursts
+// go out with a stale length and some do not go out at all.
+//
+// RockBase's TFT_eSPI C5 port does exactly this in its own TFT_WRITE_BITS, and
+// that is why plain TFT_eSPI drawing works on this board while this file, which
+// deliberately bypasses the library to overlap conversion with the wire, did
+// not. Cost is one register write and one poll per 32-pixel burst, on the one
+// chip that needs it; every other board compiles this away to nothing.
+#if defined(CONFIG_IDF_TARGET_ESP32C5)
+    #define SQW_SPI_LATCH()                                            \
+        do {                                                           \
+            WRITE_PERI_REG(SPI_CMD_REG(SPI_PORT), SPI_UPDATE);         \
+            while (READ_PERI_REG(SPI_CMD_REG(SPI_PORT)) & SPI_UPDATE) {} \
+        } while (0)
+#else
+    #define SQW_SPI_LATCH() do { } while (0)
+#endif
 
 // 32 pixels into 16 words, in the order the FIFO sends them: two pixels per
 // word, the first pixel in the low half.
@@ -116,6 +156,101 @@ static void pushPixels(const uint8_t* p, uint32_t total) {
     }
     while (READ_PERI_REG(SPI_CMD_REG(SPI_PORT)) & SPI_USR) {}
 }
+
+// The ESP32-C5's SPI clock, raised from inside the transaction.
+//
+// WHAT THE DEFAULT COSTS. Measured on an NM-CYD-C5: a full 320x240 push takes
+// 82.2 ms, which is 0.343 ms per row and an effective 14.9 Mbit/s. Splitting
+// that budget showed the CPU is barely in it -- the LUT conversion is 0.011 ms
+// per row and all sixteen SPI_W register writes together are 0.012 ms (75 ns
+// each) -- so 93% of the time is spent waiting for the wire.
+//
+// WHY IT IS SLOW, from the C5 TRM rather than by experiment. Ch.33.7 gives
+// f_SPI = f_clk_spi_mst / ((SPI_CLKCNT_N + 1)(SPI_CLKDIV_PRE + 1)), and
+// PCR_SPI2_CLKM_SEL (ch.9) defaults to XTAL_CLK, which is 48 MHz on this chip.
+// The bus comes up at N=2: 48/3 = 16 MHz, which is exactly the 14.9 Mbit/s
+// measured. Setting SPI_CLK_EQU_SYSCLK instead takes the module clock
+// undivided.
+//
+// WHY IT HAS TO BE HERE, rather than in the board's user setup. SPI_FREQUENCY
+// genuinely does nothing on this path: TFT_eSPI's begin_tft_write() calls
+// spi.beginTransaction(SPISettings(SPI_FREQUENCY, ..)), which REWRITES
+// SPI_CLOCK_REG -- so a divisor set before tft.startWrite() is overwritten
+// before a single pixel moves. Built at 20, 40 and 80 MHz the register came
+// back 0x00002001 every time. Set inside the transaction, it holds, and the
+// next beginTransaction anywhere else (touch, SD) restores its own setting, so
+// nothing outside this push is affected.
+//
+// MEASURED, same board, same frame, divisor set here:
+//     N=3  12 MHz  107.9 ms   9.3 fps
+//     N=2  16 MHz   82.2 ms  12.2 fps   <- the default
+//     N=1  24 MHz   56.6 ms  17.7 fps
+//     N=0  48 MHz   30.9 ms  32.4 fps   <- this
+// Linear in the divisor, which is the proof that the wire was the ceiling.
+//
+// If a panel ever turns out not to like 48 MHz -- the symptom is torn or
+// speckled rows, not a blank screen -- build with -DSQW_C5_SPI_DIV=1 for
+// 24 MHz. Do not raise it further: 0 is already the undivided module clock.
+// GOING FURTHER THAN THE DIVIDER: the module clock's SOURCE.
+// PCR_SPI2_CLKM_CONF_REG (soc/pcr_reg.h, TRM ch.9) selects it at bits [21:20]
+// -- 0 = XTAL_CLK, which is the 48 MHz default and the ceiling everything
+// above runs into, 1 = PLL_F160M_CLK -- with an 8-bit divider at [19:12].
+// PLL_F160M over two is an 80 MHz module clock, and undivided that is 80 MHz
+// on the wire. Measured on the same frame: 20.5 ms, 48.8 fps, 60.0 Mbit/s,
+// against 82.2 ms and 12.2 fps as shipped. Two different routes to 80 MHz
+// (PLL/2 with N=0, and PLL/1 with N=1) gave identical times, which is the
+// cross-check that the number is real.
+//
+// THE SOURCE IS RESTORED BEFORE THIS FUNCTION RETURNS, and that is not
+// tidiness. PCR_SPI2_CLKM_SEL is global to SPI2, and on this board the
+// XPT2046 touch controller and the SD card are on that same peripheral.
+// Arduino's beginTransaction() works out its divisors believing the source is
+// the crystal, so leaving the PLL selected would silently run every later
+// transaction at 3.3x its requested frequency -- touch at 8 MHz against a
+// rated 2.5 MHz, and an SD card at 13 MHz instead of 4. Nothing would report
+// an error; touch would just start missing presses. Raised here, restored
+// here, and only ever while this file owns the bus.
+#if defined(NM_CYD_C5)
+
+// 0 selects the undivided module clock; 1..63 divide it by N+1.
+#ifndef SQW_C5_SPI_DIV
+#define SQW_C5_SPI_DIV 0
+#endif
+// 1 sources the module clock from PLL_F160M/2 (80 MHz) instead of the 48 MHz
+// crystal. Set to 0 to stay on the crystal: still 3x stock, and the fallback
+// if a panel turns out not to like 80 MHz. The symptom of too fast is torn or
+// speckled rows, never a blank screen.
+#ifndef SQW_C5_SPI_PLL
+#define SQW_C5_SPI_PLL 1
+#endif
+
+static inline uint32_t sqwC5SpiClockRaise() {
+    const uint32_t pcr = READ_PERI_REG(PCR_SPI2_CLKM_CONF_REG);
+#if SQW_C5_SPI_PLL
+    WRITE_PERI_REG(PCR_SPI2_CLKM_CONF_REG,
+                   (pcr & ~(0x3u << 20) & ~(0xFFu << 12)) | (1u << 20) | (1u << 12));
+#endif
+#if SQW_C5_SPI_DIV == 0
+    WRITE_PERI_REG(SPI_CLOCK_REG(SPI_PORT), 1u << 31);   // SPI_CLK_EQU_SYSCLK
+#else
+    WRITE_PERI_REG(SPI_CLOCK_REG(SPI_PORT),
+                   (((uint32_t)SQW_C5_SPI_DIV & 0x3F) << 12) |
+                   ((((uint32_t)SQW_C5_SPI_DIV / 2) & 0x3F) << 6) |
+                   ((uint32_t)SQW_C5_SPI_DIV & 0x3F));
+#endif
+    SQW_SPI_LATCH();
+    return pcr;
+}
+
+static inline void sqwC5SpiClockRestore(uint32_t pcr) {
+#if SQW_C5_SPI_PLL
+    WRITE_PERI_REG(PCR_SPI2_CLKM_CONF_REG, pcr);
+#else
+    (void)pcr;
+#endif
+}
+
+#endif
 
 static uint32_t gcd32(uint32_t a, uint32_t b) { while (b) { uint32_t t = a % b; a = b; b = t; } return a; }
 
@@ -161,13 +296,38 @@ bool push(TFT_eSPI& tft, const uint8_t* src, int32_t w, int32_t h, int32_t x, in
         for (int i = 0; i < n; i++)
             if (((uint32_t)(spans[i].r1 - spans[i].r0) * (uint32_t)w) % PX_PER_BURST) { spans[0].r0 = 0; spans[0].r1 = h; n = 1; break; }
         tft.startWrite();
+#if defined(NM_CYD_C5)
+        // Inside the transaction, after beginTransaction has had its say.
+        const uint32_t c5pcr = sqwC5SpiClockRaise();
+#endif
         for (int i = 0; i < n; i++) {
             const int32_t r0 = spans[i].r0, r1 = spans[i].r1;
             tft.setAddrWindow(x, y + r0, w, r1 - r0);
             WRITE_PERI_REG(SPI_MOSI_DLEN_REG(SPI_PORT), 511);
+            // Once per span, not once per burst. Per the C5 TRM (ch.33, SPI
+            // Controller): SPI_UPDATE "synchronize[s] SPI registers from APB
+            // clock domain into SPI module clock domain", i.e. CONFIGURATION.
+            // The only configuration changing here is the burst length just
+            // written above -- setAddrWindow's own commands left it at 8, 16
+            // or 32 bits, so it genuinely must be re-latched. The data buffer
+            // SPI_W0..W15 is not configuration: the TRM has the SPI module
+            // reading TX data straight out of it during the transfer, so the
+            // per-burst refills below need no latch of their own.
+            //
+            // Measured: moving the latch here from inside the burst loop cost
+            // and saved nothing -- 0.378 ms per 320-pixel row either way. It
+            // stays here because it is the placement the TRM justifies, not
+            // because it is faster. The row time is dominated by the wire:
+            // 320 px x 16 bits at the 20 MHz this board's setup asks for is
+            // 0.256 ms of pure SPI, so roughly two thirds of it is unavoidable
+            // at that clock.
+            SQW_SPI_LATCH();
             pushPixels(src + (size_t)r0 * (size_t)w, (uint32_t)(r1 - r0) * (uint32_t)w);
             s_lastRows += r1 - r0;
         }
+#if defined(NM_CYD_C5)
+        sqwC5SpiClockRestore(c5pcr);
+#endif
         tft.endWrite();
         SQW_PUSH_CHARGE(s_wireUs, tWire);
     }

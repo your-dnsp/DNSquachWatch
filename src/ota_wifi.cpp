@@ -502,7 +502,7 @@ int8_t bestSavedInScan();   // below, with the rest of the list
 
 bool begin(bool checkUpdates) {
     if (s_state != State::OFF) return true;
-    if (Security::locked() || !OtaCore::available()) return false;
+    if (Security::locked() || (checkUpdates && !OtaCore::available())) return false;
     // A cancelled attempt's task can still be unwinding an HTTP request it is
     // waiting on. One at a time: it clears s_task on its way out.
     if (s_task) return false;
@@ -905,4 +905,3 @@ uint32_t    bytesExpected() { return s_size; }
 const char* failureText()   { return OtaCore::failWords(s_fail); }
 
 }  // namespace OtaWifi
-

@@ -491,6 +491,9 @@ private:
 // TFT_eSprite: overrides the same 6 virtuals to target its own buffer
 // instead of the parent TFT_eSPI's, and inherits every shape/text method
 // above unchanged -- exactly the mechanism real TFT_eSPI/TFT_eSprite use.
+// Pixels written into any sprite, for the `solo` screen's bench.
+inline unsigned long long g_simPix = 0;
+
 class TFT_eSprite : public TFT_eSPI {
 public:
     explicit TFT_eSprite(TFT_eSPI* parent) : TFT_eSPI(0, 0), _parent(parent) {}
@@ -583,6 +586,7 @@ public:
             if (x >= _vpW + _vpX || y >= _vpH + _vpY) return;
         }
         if (x < 0 || y < 0 || x >= _w || y >= _h) return;
+        g_simPix++;
         _buf[(size_t)y * _w + x] =
             (_depth == 8) ? quantise332((uint16_t)color) : (uint16_t)color;
     }

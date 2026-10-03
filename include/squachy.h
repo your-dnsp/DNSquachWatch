@@ -198,6 +198,9 @@ namespace Squachy {
     // emulator, the console's LEGEND, and builds that are not a release.
     void previewLegend(bool on);
     bool legendPreview();
+    // The console's OUTFIT n: wear costume n until the next boot, unowned and
+    // unsaved, so one can be timed on a board. -1 takes it off.
+    void wearForBench(int8_t idx);
     bool petEnabled();         // any companion at all: what pet.cpp asks
     void togglePet();          // kept for callers that only want on/off
 

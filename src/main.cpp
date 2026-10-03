@@ -208,7 +208,7 @@ static void crashReportInit() {
     if(panicked || r==ESP_RST_BROWNOUT) {
         CrashReports::Record report;
         report.resetReason=uint32_t(r);report.crash=g_lastCrash;
-        snprintf(report.firmware,sizeof report.firmware,"DNSP v1.5.1");
+        snprintf(report.firmware,sizeof report.firmware,"DNSP v1.5.2");
         if(g_crumb.magic==CRUMB_MAGIC){report.crash.valid=true;report.crash.uptimeMs=g_crumb.uptimeMs;report.crash.heapFree=g_crumb.heapFree;report.crash.heapBlock=g_crumb.heapBlock;report.crash.screen=g_crumb.screen;report.lightReading=g_crumb.light;report.backlightDuty=g_crumb.duty;report.ldr=g_crumb.ldr;report.displayMhz=g_crumb.displayMhz;}
         if(!CrashReports::enqueue(report))Serial.println("[crash] Could not queue report; see core dump / BlackBox.");
     }
@@ -1551,11 +1551,11 @@ static void enterDiagnostics() {
     uiDiagnosticsInit(*canvas);
 }
 
-static void enterUpdate() {
+static void enterUpdate(bool connectionOnly = false) {
     Theme::releaseClockBackdrop();   // the download wants every byte
     state = AppState::UPDATE;
     transitionStart = millis();
-    uiUpdateInit(*canvas);
+    uiUpdateInit(*canvas, connectionOnly);
 }
 
 #if SQUACH_MESH
@@ -1618,6 +1618,8 @@ static void enterInvite() {
 
 // INVERT and ROT on the console -- see clock.cpp. Consumed in loop().
 volatile bool g_consoleXyzzy=false, g_consoleLegend=false, g_consoleCharge=false;
+volatile bool g_consoleOutfitSet=false, g_consoleAura=false;
+volatile int8_t g_consoleOutfit=-1;
 volatile bool g_consoleInvert = false;
 volatile bool g_consoleRotate = false;
 volatile bool g_consoleWatchTest = false;
@@ -2462,10 +2464,10 @@ static void printBootBanner() {
     // %-13.13s holds the right border in place whatever the tag turns out
     // to be: the fixed text ahead of it is 37 columns and the box is 50.
     // The precision matters as much as the width -- a working tree builds as
-    // "v1.5.16-dirty" and a commit past a tag as "v1.5.16-3-g554330d", both
+    // "v1.5.26-dirty" and a commit past a tag as "v1.5.26-3-g554330d", both
     // of which walk the border off the end of the line. Truncated here only;
     // the boot screen and the diary still show the version in full.
-    Serial.println("DNSquachWatch v1.5.1 by DNSP | SquachWatch base 1.27.0");
+    Serial.println("DNSquachWatch v1.5.2 by DNSP | SquachWatch base 1.28.0");
     Serial.printf ("║  |   -   |     TALKING SASQUACH  .  %-13.13s║\n", FIRMWARE_VERSION);
     // Same %-34s trick as the version line above: the reason is variable
     // length ("interrupt watchdog" is the longest at eighteen characters)
@@ -2680,17 +2682,12 @@ void setup() {
     StatusLight::begin();
     StatusLight::boot(millis());
 
-    // The boot check: a few seconds on the saved WiFi asking the site whether
-    // there is a newer release, and only ever HERE, before Bluetooth exists.
-    // Joining WiFi on a running board means giving Bluetooth up until the
-    // next restart, so on a running board the same question is a whole mode
-    // (UPDATE OVER WIFI). And before the frame buffer, too: the TLS
-    // handshake wants about 40 KB in one piece, and with the buffer in place
-    // the largest block is 35 KB -- measured, the first try returned -1.
-    // Saved networks join even with PIN locked or Update Check disabled.
-    // Only the manifest lookup follows Update Check; boot never installs.
+    // Join saved Wi-Fi before Bluetooth and the display buffer consume RAM.
+    // This synchronizes time and remembers the authenticated SSID for location
+    // recall, including PIN-locked boots. It never requests firmware updates.
+    // Runtime joining temporarily pauses detection until the radio is returned.
     bool bootCheckRan = false;
-    const bool skipUpdateCheck=takeBootCheckSkip();
+    (void)takeBootCheckSkip(); // Consume legacy recovery flag; boot only joins Wi-Fi.
     if(OtaWifi::hasSaved()){
         bootCheckRan = true;
         // The backlight down first, for the same reason it goes down at the
@@ -2702,10 +2699,10 @@ void setup() {
         tft.setTextSize(1);
         tft.setTextWrap(false);
         tft.setTextColor(Theme::CYAN, Theme::BG);
-        const char* m = Settings::updateCheck() ? "CONNECTING / CHECKING..." : "CONNECTING SAVED WI-FI...";
+        const char* m = "CONNECTING SAVED WI-FI...";
         tft.setCursor((tft.width() - tft.textWidth(m)) / 2, tft.height() / 2 - 4);
         tft.print(m);
-        OtaWifi::bootCheck(9000, Settings::updateCheck() && !skipUpdateCheck);
+        OtaWifi::bootCheck(9000, false); // Updates require the explicit update action.
         tft.fillScreen(Theme::BG);
     }
 
@@ -3732,6 +3729,8 @@ void loop() {
     }
 #endif
     if(g_consoleLegend){g_consoleLegend=false;Squachy::previewLegend(!Squachy::legendPreview());}
+    if(g_consoleAura){g_consoleAura=false;Settings::toggleAura();}
+    if(g_consoleOutfitSet){g_consoleOutfitSet=false;Squachy::wearForBench(g_consoleOutfit);}
     if(g_consoleXyzzy){g_consoleXyzzy=false;Theme::summonXyzzy();}
     if (g_consoleInvert) {
         g_consoleInvert = false;
@@ -5252,10 +5251,12 @@ void loop() {
                             OtaBle::end();
                             engine.stopUpdateRadio();
                         }
-                        uiUpdateInit(*canvas);
+                        if (uiUpdateConnectionOnly()) enterWifiNets();
+                        else uiUpdateInit(*canvas);
                         break;
                     case UpdateHit::BACK:
                         if(OtaWifi::state()!=OtaWifi::State::OFF)finishWifiMode();
+                        if (uiUpdateConnectionOnly()) { enterWifiNets(); break; }
                         enterSettings();
                         uiSettingsOpenPage(SettingsPage::SYSTEM);
                         break;
@@ -5279,7 +5280,7 @@ void loop() {
                 else if(hit==1){state=AppState::LOCATION_EDIT;transitionStart=now;uiWifiTextInit(*canvas,"24 CHARS MAX",LocationLabel::currentKey()?LocationLabel::current():"");}
                 else if(hit==2){if(LocationLabel::forgetNetwork(OtaWifi::lastAuthenticatedNetwork()))LocationLabel::clear();else Theme::showToast("COULD NOT CLEAR WI-FI LABEL",nullptr,Theme::AMBER);}
                 else if(hit==8)LocationLabel::rememberNetwork(OtaWifi::lastAuthenticatedNetwork());
-                else if(hit>=3&&hit<=6){const char* presets[]={"Home","Work","Driving","Con"};LocationLabel::set(presets[hit-3]);}
+                else if(hit>=3&&hit<=6){const char* presets[]={"Home","Work","Driving","Con"};if(LocationLabel::set(presets[hit-3]))Theme::showToast("LOCATION SET",LocationLabel::current(),Theme::CYAN);else Theme::showToast("LOCATION NOT SAVED",LocationLabel::status(),Theme::AMBER);}
             }
             break;
         }
@@ -5290,7 +5291,7 @@ void loop() {
             else if(tp.valid)uiWifiPassTouch(tp.x,tp.y,now,WifiPassTouch::MOVE);
             else if(touchJustUp)uiWifiPassTouch(tp.x,tp.y,now,WifiPassTouch::UP);
             const auto result=uiWifiPassResult();
-            if(result!=WifiPassResult::NONE){if(result==WifiPassResult::OK)LocationLabel::set(uiWifiPassText());uiWifiPassClear();state=AppState::LOCATION_LABEL;transitionStart=now;}
+            if(result!=WifiPassResult::NONE){if(result==WifiPassResult::OK){if(LocationLabel::set(uiWifiPassText()))Theme::showToast("LOCATION SET",LocationLabel::current(),Theme::CYAN);else Theme::showToast("LOCATION NOT SAVED",LocationLabel::status(),Theme::AMBER);}uiWifiPassClear();state=AppState::LOCATION_LABEL;transitionStart=now;}
             break;
         }
         case AppState::WIFI_PASS: {
@@ -5319,10 +5320,10 @@ void loop() {
             } else if (r == WifiPassResult::OK) {
                 OtaWifi::connect(uiWifiPassSsid(), uiWifiPassText(), true);
                 uiWifiPassClear();
-                enterUpdate();
+                enterUpdate(uiUpdateConnectionOnly());
             } else if (r == WifiPassResult::BACK) {
                 uiWifiPassClear();
-                enterUpdate();
+                enterUpdate(uiUpdateConnectionOnly());
             }
             break;
         }
@@ -5337,10 +5338,10 @@ void loop() {
                         const int s = uiWifiNetsSelected();
                         if (s >= 0 && s < OtaWifi::savedCount()) {
                             OtaWifi::useSaved((uint8_t)s);
-                            enterUpdate();
+                            enterUpdate(true);
                             uiUpdateWarningSeen();
                             engine.startUpdateRadio();
-                            if(!OtaWifi::begin(false)){engine.stopUpdateRadio();Theme::showToast("CONNECTION UNAVAILABLE", "Try again after current work finishes", Theme::AMBER);}
+                            if(!OtaWifi::begin(false)){engine.stopUpdateRadio();enterWifiNets();Theme::showToast("CONNECTION UNAVAILABLE", "Try again after current work finishes", Theme::AMBER);}
                         }
                         break;
                     }

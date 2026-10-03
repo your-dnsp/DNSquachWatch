@@ -137,3 +137,47 @@ $(foreach t,$(TESTS),$(eval $(call TEST_rule,$(t))))
 
 clean:
 	@rm -rf $(OUT)
+
+# ---- the real cipher, opt-in ------------------------------------------------
+# meshcrypto.cpp against the host's own mbedtls. NOT in TESTS above and not run
+# by plain `make`, because it needs libmbedtls-dev and CI does not have it. A
+# test that quietly skipped itself when the header was missing would report
+# green for a check that never ran, which is worse than not having it.
+#
+#   sudo apt-get install libmbedtls-dev
+#   make -C test crypto
+#
+# It is meaningful only for the mbedtls 3 path -- which is exactly the one the
+# ESP32-C5 environment introduced and which no other test compiles. See the
+# header comment in meshcrypto_test.cpp.
+CRYPTO_SRCS := meshcrypto_test.cpp $(SRC)/meshcrypto.cpp $(SRC)/meshmsg.cpp $(SRC)/meshwords.cpp
+CRYPTO_OBJS := $(addprefix $(OUT)/crypto/,$(notdir $(CRYPTO_SRCS:.cpp=.o)))
+
+crypto: $(OUT)/meshcrypto_test
+	@$(OUT)/meshcrypto_test
+
+# Each source gets its OWN object and its own .d, which is the only way the
+# header dependencies are correct. Compiling all four in one g++ call writes a
+# single .d that every translation unit overwrites in turn, so it ends up
+# listing the last file's headers and nothing else -- meshmsg_vectors.h and
+# mbedtls_compat.h were both invisible that way, and both mutation tests of
+# this suite passed against a stale binary until it was split up.
+#
+# The TEST_rule above has the same gap (it lists only .cpp prerequisites), so
+# editing a header and re-running `make` re-runs the previous build there too.
+# Not changed here: that would alter how every other test builds.
+$(OUT)/crypto:
+	@mkdir -p $(OUT)/crypto
+
+$(OUT)/crypto/%.o: %.cpp | $(OUT)/crypto
+	$(CXX) $(CXXFLAGS) -MMD -MP -DSQUACH_MESH=1 -c -o $@ $<
+
+$(OUT)/crypto/%.o: $(SRC)/%.cpp | $(OUT)/crypto
+	$(CXX) $(CXXFLAGS) -MMD -MP -DSQUACH_MESH=1 -c -o $@ $<
+
+$(OUT)/meshcrypto_test: $(CRYPTO_OBJS)
+	$(CXX) -o $@ $^ -lmbedcrypto
+
+-include $(CRYPTO_OBJS:.o=.d)
+
+.PHONY: crypto

@@ -1,11 +1,11 @@
 {
-  "version": "1.5.1",
+  "version": "1.5.2",
   "target": "cyd-fast",
-  "release_name": "DNSquachWatch v1.5.1",
+  "release_name": "DNSquachWatch v1.5.2",
   "whats_new": [
-    "Corrected splash version label to DNSP v1.5.1",
-    "Backup stack overflow corrected; ST7789 hardware backup confirmed by DNSP",
-    "Bounded history scan and scheduler yields",
-    "Keep existing DNSP Content/v1.5; diagnostic serial 115200"
+    "Wi-Fi connection-only navigation; explicit update checks",
+    "Compact location-label storage; preserve saved labels",
+    "Upstream v1.28.0 outfit/rendering changes; DNSP preserved",
+    "Keep DNSP Content/v1.5; hardware Wi-Fi/label validation pending"
   ]
 }

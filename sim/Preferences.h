@@ -121,6 +121,9 @@ public:
         // bugs the emulator exists to find -- this one shipped for eleven
         // releases because emptying the ignore list worked in the sim.
         if (!k || !v || !len) return 0;
+        // Optional bounded-capacity failure injection for persistence tests.
+        const char* limit = getenv("SQUACHSIM_NVS_MAX_BLOB_BYTES");
+        if (limit && len > strtoul(limit, nullptr, 10)) return 0;
         static const char* HEX = "0123456789abcdef";
         const uint8_t* p = (const uint8_t*)v;
         std::string out;

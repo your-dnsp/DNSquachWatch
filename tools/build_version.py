@@ -10,7 +10,7 @@ def get_version():
     forced = os.environ.get("SQW_VERSION", "").strip()
     if forced:
         return forced
-    return "1.5.1"  # do not inherit a parent directory's git tag
+    return "1.5.2"  # do not inherit a parent directory's git tag
 
 
 env.Append(BUILD_FLAGS=['-DFIRMWARE_VERSION=\\"%s\\"' % get_version()])

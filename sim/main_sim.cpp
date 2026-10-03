@@ -301,7 +301,7 @@ static void usage() {
         "  --frames N        animation warm-up frames before capture (default 90)\n"
         "  --onboard         let Squachy's first-boot walkthrough run\n"
         "  --sequence N      capture N consecutive frames instead of one\n"
-        "  --tap F:X:Y       tap the BACKGROUND at x,y on warm-up frame F (repeatable)\n"
+        "  --tap F:X:Y       tap x,y on frame F: Squachy if he is there, else the background\n"
         "  --raw PATH        write raw RGB888 frames to PATH instead of PNGs --\n"
         "                    what the GUI consumes, no encode/decode on either side\n");
 }
@@ -717,6 +717,33 @@ int main(int argc, char** argv) {
             Squachy::drawWaving(frame, W / 2, H - 12, tt, 2.0f, nullptr, false, 0,
                                 /*waving*/ pi == 1, 34, false, false, false, kPoses[pi]);
         }
+        else if (screen == "solo") {
+            // Him alone on the key colour at the main screen's scale, on the
+            // real clock, in one pose picked by --pose: for looking at a
+            // costume, and with SQUACHSIM_BENCH=1 for weighing one -- he is
+            // drawn 4000 times on a moving clock and the pixels written per
+            // frame are printed. That count is what a costume costs a board;
+            // host time is not (see the costume notes in squachy.cpp).
+            using VP = Squachy::VisitPose;
+            static const VP kP[] = { VP::NONE, VP::NONE, VP::HANDS_UP, VP::CHEER, VP::DANCE,
+                                     VP::BOW, VP::STARTLED, VP::CROUCH, VP::COVER, VP::HIGH_FIVE };
+            const int pi = poseIdx < 0 ? 0 : poseIdx % 10;
+            frame.fillRect(0, 0, W, H, 0x024A);
+            if (getenv("SQUACHSIM_BENCH")) {
+                static bool done = false;
+                if (!done) {
+                    done = true;
+                    const int N = 4000;
+                    g_simPix = 0;
+                    for (int i = 0; i < N; i++)
+                        Squachy::drawWaving(frame, W / 2, H - 14, t + 7000u + (uint32_t)i * 33u, 2.2f, nullptr, false, 0,
+                                            pi == 1, 34, false, false, false, kP[pi]);
+                    printf("BENCH pix %.0f\n", (double)g_simPix / N);
+                }
+            }
+            Squachy::drawWaving(frame, W / 2, H - 14, t, 2.2f, nullptr, false, 0,
+                                /*waving*/ pi == 1, 34, false, false, false, kP[pi]);
+        }
         else return false;
         return true;
     };
@@ -1005,6 +1032,22 @@ int main(int argc, char** argv) {
         else                             uiSettingsScroll(1);
     }
 
+    // SQUACHSIM_XYZZY=1 keeps the magic word up on the TERMINAL background and
+    // passes each tap on to Squachy, the way main.cpp does on a board -- so
+    // three --tap flags can play the whole YZZERD unlock.
+    const bool xyzzy = getenv("SQUACHSIM_XYZZY") != nullptr;
+    // A tap that lands on Squachy is his, as main.cpp has it: noted where it
+    // landed, then a pet (or, on his shades with the aura lit, a reading).
+    // Anything else is the background's.
+    auto tapAt = [&](int x, int y, uint32_t when) {
+        if (Squachy::hitTest(x, y)) { Squachy::noteTapAt(x, y); Squachy::trigger(Squachy::Event::PETTED); }
+        else Theme::backgroundTap(x, y, when);
+    };
+    auto xyzzyStep = [&]() {
+        if (!xyzzy) return;
+        Theme::summonXyzzy();
+        if (const uint8_t said = Theme::consumeXyzzy()) Squachy::magicWord(said);
+    };
     for (int i = 0; i < frames; i++) {
         const uint32_t tNow = now + (uint32_t)i * STEP_MS;
         if (!tick(tNow)) { usage(); return 2; }
@@ -1012,7 +1055,8 @@ int main(int argc, char** argv) {
         // backgroundTap() hit-tests published positions and ignores anything
         // that has not been refreshed in the last few frames.
         for (int k = 0; k < tapN; k++)
-            if (taps[k].f == i) Theme::backgroundTap(taps[k].x, taps[k].y, tNow);
+            if (taps[k].f == i) tapAt(taps[k].x, taps[k].y, tNow);
+        xyzzyStep();
     }
 
     // Capture runs on from where the warm-up left off, so a sequence is
@@ -1031,7 +1075,8 @@ int main(int argc, char** argv) {
         // --tap frame numbers run straight on through the capture, so a tap
         // can land on a frame you can actually look at afterwards.
         for (int k = 0; k < tapN; k++)
-            if (taps[k].f == frames + s) Theme::backgroundTap(taps[k].x, taps[k].y, sNow);
+            if (taps[k].f == frames + s) tapAt(taps[k].x, taps[k].y, sNow);
+        xyzzyStep();
         frame.pushSprite(0, 0);
         std::vector<uint8_t> rgb = toRgb888(tft.pixelsRGB565());
 

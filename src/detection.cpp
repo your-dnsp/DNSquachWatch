@@ -36,7 +36,20 @@ static portMUX_TYPE s_sdMux = portMUX_INITIALIZER_UNLOCKED;
 #include "settings.h"
 #endif
 #include <esp_bt.h>
-#include <esp_gap_bt_api.h>
+// esp_gap_bt_api.h was here and is not any more. It is a Bluetooth Classic
+// header and does not exist on BLE-only silicon -- on the ESP32-C5 the build
+// dies at "fatal error: esp_gap_bt_api.h: No such file or directory" before
+// anything in this file compiles. Nothing here ever used a symbol from it:
+// the only Classic reference in the file is esp_bt_controller_get_status()
+// below, and that is declared in esp_bt.h, included above.
+//
+// Removing it rather than guarding it is deliberate. The obvious guard,
+// #if SOC_BT_CLASSIC_SUPPORTED, is WRONG: that macro is in neither
+// toolchain's soc_caps.h -- not IDF 4.4's for the ESP32, nor IDF 5.5's for
+// the C5 -- so it evaluates to 0 everywhere. On the C5 that happens to give
+// the right answer; on the ESP32 it silently compiled the status check out
+// and shrank [env:cyd]'s .text by 8 bytes. A guard that is right by accident
+// on one target and wrong on another is worse than no guard.
 #include <esp_heap_caps.h>
 #include <string.h>
 #include <SD.h>

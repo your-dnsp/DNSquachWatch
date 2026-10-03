@@ -9,7 +9,12 @@
 #include "mbedtls/ecdh.h"
 #include "mbedtls/sha256.h"
 #include <esp_system.h>
+// esp_fill_random moved out of esp_system.h in IDF 5; on IDF 4 this header
+// exists too and re-including it is harmless, so it needs no version guard.
+#include <esp_random.h>
 #include <string.h>
+
+#include "mbedtls_compat.h"
 
 namespace {
 
@@ -23,6 +28,17 @@ bool s_keyed   = false;
 
 bool pbkdf2Derive(const char* phrase, size_t plen, const uint8_t* salt, size_t slen,
                   uint32_t iters, uint8_t key[MeshMsg::KEY_LEN]) {
+#if MBEDTLS_VERSION_MAJOR >= 3
+    // Same PBKDF2-HMAC-SHA256, same inputs, same output. The _ext form sets up
+    // and tears down the HMAC context internally, so the allocation the comment
+    // below describes still happens -- it is just no longer this file's to own,
+    // and a failure inside it still comes back as a non-zero return and so
+    // still means a failed derive rather than a key made of stack contents.
+    return mbedtls_pkcs5_pbkdf2_hmac_ext(MBEDTLS_MD_SHA256,
+                                         (const unsigned char*)phrase, plen,
+                                         salt, slen, iters,
+                                         (uint32_t)MeshMsg::KEY_LEN, key) == 0;
+#else
     const mbedtls_md_info_t* info = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
     if (!info) return false;
     mbedtls_md_context_t md;
@@ -36,6 +52,7 @@ bool pbkdf2Derive(const char* phrase, size_t plen, const uint8_t* salt, size_t s
                                         (uint32_t)MeshMsg::KEY_LEN, key) == 0;
     mbedtls_md_free(&md);
     return ok;
+#endif
 }
 
 bool ccmSetKey(const uint8_t key[MeshMsg::KEY_LEN]) {
@@ -73,7 +90,7 @@ int hwRng(void*, unsigned char* out, size_t n) {
 } // namespace
 
 void MeshCrypto::sha256(const uint8_t* in, size_t len, uint8_t out[32]) {
-    mbedtls_sha256_ret(in, len, out, 0);
+    sqw_sha256(in, len, out, 0);
 }
 
 bool MeshCrypto::dhKeypair(uint8_t priv[DH_LEN], uint8_t pub[DH_LEN]) {
@@ -86,7 +103,7 @@ bool MeshCrypto::dhKeypair(uint8_t priv[DH_LEN], uint8_t pub[DH_LEN]) {
     bool ok = mbedtls_ecp_group_load(&grp, MBEDTLS_ECP_DP_CURVE25519) == 0 &&
               mbedtls_ecdh_gen_public(&grp, &d, &Q, hwRng, nullptr) == 0 &&
               mbedtls_mpi_write_binary(&d, priv, DH_LEN) == 0 &&
-              mbedtls_mpi_write_binary(&Q.X, pub, DH_LEN) == 0;
+              mbedtls_mpi_write_binary(&SQW_ECP_X(Q), pub, DH_LEN) == 0;
     mbedtls_ecp_point_free(&Q);
     mbedtls_mpi_free(&d);
     mbedtls_ecp_group_free(&grp);
@@ -103,8 +120,8 @@ bool MeshCrypto::dhShared(const uint8_t priv[DH_LEN], const uint8_t peerPub[DH_L
     mbedtls_ecp_point_init(&Qp);
     bool ok = mbedtls_ecp_group_load(&grp, MBEDTLS_ECP_DP_CURVE25519) == 0 &&
               mbedtls_mpi_read_binary(&d, priv, DH_LEN) == 0 &&
-              mbedtls_mpi_read_binary(&Qp.X, peerPub, DH_LEN) == 0 &&
-              mbedtls_mpi_lset(&Qp.Z, 1) == 0 &&
+              mbedtls_mpi_read_binary(&SQW_ECP_X(Qp), peerPub, DH_LEN) == 0 &&
+              mbedtls_mpi_lset(&SQW_ECP_Z(Qp), 1) == 0 &&
               mbedtls_ecdh_compute_shared(&grp, &z, &Qp, &d, hwRng, nullptr) == 0 &&
               mbedtls_mpi_write_binary(&z, out, DH_LEN) == 0;
     mbedtls_ecp_point_free(&Qp);
@@ -121,10 +138,10 @@ void MeshCrypto::dhSessionKey(const uint8_t shared[DH_LEN], uint8_t key[MeshMsg:
     uint8_t h[32];
     mbedtls_sha256_context c;
     mbedtls_sha256_init(&c);
-    mbedtls_sha256_starts_ret(&c, 0);
-    mbedtls_sha256_update_ret(&c, (const unsigned char*)LABEL, sizeof LABEL - 1);
-    mbedtls_sha256_update_ret(&c, shared, DH_LEN);
-    mbedtls_sha256_finish_ret(&c, h);
+    sqw_sha256_starts(&c, 0);
+    sqw_sha256_update(&c, (const unsigned char*)LABEL, sizeof LABEL - 1);
+    sqw_sha256_update(&c, shared, DH_LEN);
+    sqw_sha256_finish(&c, h);
     mbedtls_sha256_free(&c);
     memcpy(key, h, MeshMsg::KEY_LEN);
     memset(h, 0, sizeof h);
@@ -135,10 +152,10 @@ uint16_t MeshCrypto::dhCode(const uint8_t pubA[DH_LEN], const uint8_t pubB[DH_LE
     uint8_t h[32];
     mbedtls_sha256_context c;
     mbedtls_sha256_init(&c);
-    mbedtls_sha256_starts_ret(&c, 0);
-    mbedtls_sha256_update_ret(&c, aFirst ? pubA : pubB, DH_LEN);
-    mbedtls_sha256_update_ret(&c, aFirst ? pubB : pubA, DH_LEN);
-    mbedtls_sha256_finish_ret(&c, h);
+    sqw_sha256_starts(&c, 0);
+    sqw_sha256_update(&c, aFirst ? pubA : pubB, DH_LEN);
+    sqw_sha256_update(&c, aFirst ? pubB : pubA, DH_LEN);
+    sqw_sha256_finish(&c, h);
     mbedtls_sha256_free(&c);
     return (uint16_t)(((uint32_t)h[0] << 24 | (uint32_t)h[1] << 16 | (uint32_t)h[2] << 8 | h[3]) % 10000u);
 }

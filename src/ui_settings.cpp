@@ -111,7 +111,7 @@ static const SettingsRow SYSTEM_ROWS[] = {
 #endif
     SettingsRow::CALIBRATE, SettingsRow::CHECK_COLORS,
     SettingsRow::LANGUAGE, SettingsRow::ACCESSIBILITY,
-    SettingsRow::SYSTEM_INFO, SettingsRow::CREDITS, SettingsRow::DEVICE_HELP, SettingsRow::CRASH_REPORTS, SettingsRow::DIAGNOSTICS, SettingsRow::DEVICE_HEALTH, SettingsRow::POWER_SAVER, SettingsRow::UPDATE_FIRMWARE, SettingsRow::UPDATE_CHECK, SettingsRow::WIFI_NETWORKS,
+    SettingsRow::SYSTEM_INFO, SettingsRow::CREDITS, SettingsRow::DEVICE_HELP, SettingsRow::CRASH_REPORTS, SettingsRow::DIAGNOSTICS, SettingsRow::DEVICE_HEALTH, SettingsRow::POWER_SAVER, SettingsRow::UPDATE_FIRMWARE, SettingsRow::WIFI_NETWORKS,
     SettingsRow::RESET_STATS,
 };
 static const uint8_t SYSTEM_ROWS_N = sizeof(SYSTEM_ROWS) / sizeof(SYSTEM_ROWS[0]);

@@ -1,8 +1,8 @@
-# Flashing and microSD content — firmware v1.5.1 / content v1.5
+# Flashing and microSD content — firmware v1.5.2 / content v1.5
 
 Download and extract the firmware kit for your display. The four binaries are together at the top of the extracted folder. Firmware is flashed to the ESP32; esptool does not copy anything onto microSD.
 
-If DNSP Content/v1.5 is already on your card, keep it: v1.5.1 changes no content files. For a new installation, download and extract the existing v1.5 microSD-content ZIP. Copy its **DNSP Content** folder to the card root. The supported path is **/DNSP Content/v1.5/**; Use the v1.5 content so the walkthrough describes this release. Eject the card safely and insert it with the CYD powered off. Missing content does not prevent boot, scanning or essential recovery, but the full walkthrough and backup installation document need it.
+If DNSP Content/v1.5 is already on your card, keep it: v1.5.2 changes no content files. For a new installation, download and extract the existing v1.5 microSD-content ZIP. Copy its **DNSP Content** folder to the card root. The supported path is **/DNSP Content/v1.5/**; Use the v1.5 content so the walkthrough describes this release. Eject the card safely and insert it with the CYD powered off. Missing content does not prevent boot, scanning or essential recovery, but the full walkthrough and backup installation document need it.
 
 ## Manual flashing
 

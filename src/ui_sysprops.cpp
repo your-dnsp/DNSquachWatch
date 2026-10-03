@@ -209,13 +209,13 @@ void drawUpdateTab(TFT_eSPI& t, const Geom& g) {
             if(count>=s_creditScroll&&count<s_creditScroll+visible)
                 text(t,g.px+8,g.py+5+(count-s_creditScroll)*LINE,lines[i],Theme::BLACK);
     };
-    add("Original SquachWatch base: 1.27.0");
+    add("Original SquachWatch base: 1.28.0");
     const char* version=OtaCore::availableVersion();char line[100];
     snprintf(line,sizeof line,"Latest original release heard: %s",version[0]?version:"not checked / none known");add(line);
     const char* source=OtaCore::availableFrom();
     snprintf(line,sizeof line,"Source: %s",!version[0]?"none this boot":source[0]?source:"squachwatch.com");add(line);
-    add("Current DNSP firmware: v1.5.1");
-    add("Based on SquachWatch v1.27.0.");
+    add("Current DNSP firmware: v1.5.2");
+    add("Based on SquachWatch v1.28.0.");
     add("Last flash date: unknown (USB flashing does not record it).");
     add("The system is running custom firmware by DNSP. Updating from SquachWatch directly will remove the customizations.");
     add("If you need a newer DNSP firmware update, contact dnsp@duck.com.");
@@ -278,7 +278,7 @@ void drawBoardTab(TFT_eSPI& t, const Geom& g) {
     y += LINE;
 
     snprintf(buf, sizeof buf, "%s  %s", OtaCore::runningSlot(), OtaCore::runningVersion());
-    row(t, g, y, "Installed", "DNSP v1.5.1");
+    row(t, g, y, "Installed", "DNSP v1.5.2");
     y += LINE;
 
     const char* other = OtaCore::otherVersion();

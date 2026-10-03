@@ -1,7 +1,14 @@
 # DNSP firmware downloads
 
-**Current: v1.5.1 ST7789-80MHz and ILI9341-80MHz.** Hardware backup test reported successful by DNSP on ST7789; ILI9341 hardware validation is pending. Download [the complete kit](v1.5.1/ST7789-80MHz/DNSquachWatch-v1.5.1-ST7789-80MHz.zip) or use [GitHub Releases](https://github.com/your-dnsp/DNSquachWatch/releases).
+**Current: v1.5.2**, based on SquachWatch v1.28.0.
 
-Keep existing **DNSP Content/v1.5**. New installations can use [the existing content ZIP](v1.5/DNSquachWatch-v1.5-microSD-content.zip). Firmware flashing does not install card content. All four flashing binaries are together in each firmware kit.
+- [ST7789 80MHz complete flashing kit](v1.5.2/ST7789-80MHz/DNSquachWatch-v1.5.2-ST7789-80MHz.zip)
+- [ILI9341 80MHz complete flashing kit](v1.5.2/ILI9341-80MHz/DNSquachWatch-v1.5.2-ILI9341-80MHz.zip)
 
-v1.5 is retained for history but is superseded because backup could crash. The [ILI9341 kit](v1.5.1/ILI9341-80MHz/DNSquachWatch-v1.5.1-ILI9341-80MHz.zip) contains its own four flashing binaries. Use your display's matching driver. See the [installation guide](../docs/user/INSTALLATION.md) and [changelog](../CHANGELOG.md).
+Both kits contain all four flashing binaries, checksums, the optional installer and recovery instructions. If your classic CYD shows a solid white screen with one driver, try the other kit. Display starts at 80MHz; System can switch it to 40MHz. Flash bus remains 40MHz.
+
+Keep existing **DNSP Content/v1.5**. New installations use [the existing content ZIP](v1.5/DNSquachWatch-v1.5-microSD-content.zip). Firmware flashing does not install card content. Card packages are only regenerated when their content changes.
+
+Host tests and both builds passed. v1.5.2 hardware Wi-Fi/label confirmation is pending. ST7789 backup completion was confirmed on v1.5.1; ILI9341 hardware validation remains pending. Earlier kits are retained in version folders. v1.5 is superseded because backup could crash.
+
+See [GitHub Releases](https://github.com/your-dnsp/DNSquachWatch/releases), [installation](../docs/user/INSTALLATION.md) and [changelog](../CHANGELOG.md).

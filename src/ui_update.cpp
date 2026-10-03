@@ -14,6 +14,7 @@ namespace {
 
 bool s_askSwitch = false;
 bool s_dnspWarning = true;
+bool s_connectionOnly = false;
 
 const int BTN_H   = 28;
 const int SLOP    = 6;
@@ -397,7 +398,8 @@ void drawWifi(TFT_eSPI& t) {
         case OtaWifi::State::VERIFYING: drawFinishing(t, "CHECKING SIGNATURE...", Theme::AMBER, false); break;
         case OtaWifi::State::DONE:      drawFinishing(t, "UPDATE INSTALLED", Theme::CYAN, true); break;
         case OtaWifi::State::CONNECTED:
-            para(t,36,Theme::CYAN,"Saved Wi-Fi connected. Time sync attempted. Location recall is available. No update was checked. BACK resumes scanning.");backButton(t,"BACK");break;
+            label(t, 34, Theme::CYAN, "WI-FI CONNECTED");
+            para(t,56,Theme::WHITE,"Time sync attempted. Set a location label to remember it for this verified network. BACK resumes scanning.");backButton(t,"BACK");break;
         case OtaWifi::State::FAILED:    drawFailed(t, OtaWifi::failureText(), OtaWifi::canTryAgain()); break;
         default: break;
     }
@@ -405,12 +407,15 @@ void drawWifi(TFT_eSPI& t) {
 
 }  // namespace
 
-void uiUpdateInit(TFT_eSPI& t) {
-    OtaCore::refreshOther();
+void uiUpdateInit(TFT_eSPI& t, bool connectionOnly) {
+    s_connectionOnly = connectionOnly;
+    if (!connectionOnly) OtaCore::refreshOther();
     s_askSwitch = false;
-    s_dnspWarning = true;
+    s_dnspWarning = !connectionOnly;
     t.fillRect(0, 0, t.width(), t.height(), Theme::BG);
 }
+
+bool uiUpdateConnectionOnly() { return s_connectionOnly; }
 
 void uiUpdateWarningSeen() { s_dnspWarning = false; }
 
@@ -428,9 +433,15 @@ void uiUpdateTick(TFT_eSPI& t, uint32_t now, bool full) {
         return;
     }
     t.fillRect(0, 0, t.width(), t.height(), Theme::BG);
-    Theme::drawTitleBar(t, ">> UPDATE FIRMWARE <<");
+    Theme::drawTitleBar(t, s_connectionOnly ? ">> WI-FI CONNECTION <<" : ">> UPDATE FIRMWARE <<");
     t.setTextSize(1);
     t.setTextWrap(false);
+
+    if (s_connectionOnly) {
+        if (OtaWifi::state() != OtaWifi::State::OFF) drawWifi(t);
+        else { label(t, 36, Theme::AMBER, "CONNECTION STOPPED"); backButton(t, "BACK"); }
+        return;
+    }
 
     if (s_dnspWarning) {
         label(t, 34, Theme::AMBER, "DNSP CUSTOM FIRMWARE");
@@ -473,6 +484,7 @@ UpdateHit uiUpdateHitTest(TFT_eSPI& t, int x, int y, int* netIndex) {
     const bool onBack = in(x, y, g.backX, g.backY, g.backW, BTN_H);
 
     const OtaWifi::State ws = OtaWifi::state();
+    if (s_connectionOnly && (ws == OtaWifi::State::OFF || ws == OtaWifi::State::READY || ws == OtaWifi::State::CHECKING)) return onBack ? UpdateHit::CANCEL : UpdateHit::NONE;
     if (ws != OtaWifi::State::OFF) {
         switch (ws) {
             case OtaWifi::State::PICK: {

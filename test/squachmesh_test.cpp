@@ -186,14 +186,28 @@ int main() {
 
     suite("Unknown indices clamp rather than refuse");
     {
-        // Four bits hold 0..15; this build has 10 nicknames and 16 outfits.
-        // A peer on newer firmware is a wrong hat, not an attack.
-        size_t n = encode(mk(15, 15, 3, nullptr), buf);
-        ck("a payload with nickname out-of-range still decodes", decode(buf, n, p));
+        // Five bits hold 0..31 and this build has 17 outfits, so a peer on
+        // newer firmware can send one we do not have: a wrong hat, not an
+        // attack.
+        size_t n = encode(mk(15, 31, 3, nullptr), buf);
+        ck("a payload with out-of-range indices still decodes", decode(buf, n, p));
         ck("nickname lands in range", p.nick < NICK_N);
         ck("outfit lands in range",   p.outfit < OUTFIT_N);
-        ck("the last real outfit is not clamped", OUTFIT_N == 16);
         ck("shades land in range",    p.shade < 4);
+    }
+
+    suite("The seventeenth outfit, and boards from before it");
+    {
+        ck("seventeen outfits", OUTFIT_N == 17);
+        size_t n = encode(mk(3, 16, 1, nullptr), buf);
+        ck("outfit 16 survives the trip", decode(buf, n, p) && p.outfit == 16);
+        ck("its fifth bit is a spare bit, not a new byte", n == LEN_INDEXED);
+        // What a board from before reads: the low four bits only.
+        const uint16_t w = (uint16_t)(buf[5] | ((uint16_t)buf[6] << 8));
+        ck("an older board sees outfit 0, plain Squachy", ((w >> 8) & 0x0F) == 0);
+        ck("and the rest of the word is unchanged", ((w >> 12) & 0x0F) == 3 && ((w >> 6) & 0x03) == 1);
+        n = encode(mk(3, 15, 1, nullptr), buf);
+        ck("outfit 15 sets no fifth bit", decode(buf, n, p) && p.outfit == 15 && !(buf[5] & 0x10));
     }
 
     suite("A rejected payload leaves the output alone");

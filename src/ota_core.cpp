@@ -11,6 +11,7 @@
 #include <string.h>
 #include "mbedtls/sha256.h"
 #include "mbedtls/ecdsa.h"
+#include "mbedtls_compat.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 
@@ -137,10 +138,10 @@ void unlock() { xSemaphoreGive(s_lock); }
 int checkSignature(const uint8_t hash[32], const uint8_t* sig, size_t sigLen) {
     mbedtls_ecdsa_context ctx;
     mbedtls_ecdsa_init(&ctx);
-    int rc = mbedtls_ecp_group_load(&ctx.grp, MBEDTLS_ECP_DP_SECP256R1);
-    if (rc == 0) rc = mbedtls_ecp_point_read_binary(&ctx.grp, &ctx.Q,
+    int rc = mbedtls_ecp_group_load(&SQW_ECDSA_GRP(ctx), MBEDTLS_ECP_DP_SECP256R1);
+    if (rc == 0) rc = mbedtls_ecp_point_read_binary(&SQW_ECDSA_GRP(ctx), &SQW_ECDSA_Q(ctx),
                                                     OTA_PUBKEY_POINT, sizeof OTA_PUBKEY_POINT);
-    if (rc == 0) rc = mbedtls_ecp_check_pubkey(&ctx.grp, &ctx.Q);
+    if (rc == 0) rc = mbedtls_ecp_check_pubkey(&SQW_ECDSA_GRP(ctx), &SQW_ECDSA_Q(ctx));
     if (rc == 0) rc = mbedtls_ecdsa_read_signature(&ctx, hash, 32, sig, sigLen);
     mbedtls_ecdsa_free(&ctx);
     return rc;
@@ -392,12 +393,12 @@ Fail begin(uint32_t size, const uint8_t* sig, uint8_t sigLen) {
         memcpy(s_sig, sig, sigLen);
         s_sigLen  = sigLen;
         mbedtls_sha256_init(&s_sha);
-        mbedtls_sha256_starts_ret(&s_sha, 0);
+        sqw_sha256_starts(&s_sha, 0);
         s_shaOpen = true;
         static const char PREFIX[] = "SQWOTA1\n";
-        mbedtls_sha256_update_ret(&s_sha, (const uint8_t*)PREFIX, sizeof PREFIX - 1);
-        mbedtls_sha256_update_ret(&s_sha, (const uint8_t*)SQW_ENV, strlen(SQW_ENV));
-        mbedtls_sha256_update_ret(&s_sha, (const uint8_t*)"\n", 1);
+        sqw_sha256_update(&s_sha, (const uint8_t*)PREFIX, sizeof PREFIX - 1);
+        sqw_sha256_update(&s_sha, (const uint8_t*)SQW_ENV, strlen(SQW_ENV));
+        sqw_sha256_update(&s_sha, (const uint8_t*)"\n", 1);
     }
     unlock();
     if (e != ESP_OK) {
@@ -414,7 +415,7 @@ bool write(const uint8_t* data, size_t len) {
     if (ok && s_written == 0 && len && data[0] != 0xE9) ok = false;   // not an ESP32 image
     if (ok) ok = esp_ota_write(s_handle, data, len) == ESP_OK;
     if (ok) {
-        mbedtls_sha256_update_ret(&s_sha, data, len);
+        sqw_sha256_update(&s_sha, data, len);
         s_written += len;
     }
     unlock();
@@ -427,7 +428,7 @@ Fail finish() {
     lock();
     if (!s_open || s_written != s_size) { closeLocked(); unlock(); return Fail::DAMAGED; }
     uint8_t hash[32];
-    mbedtls_sha256_finish_ret(&s_sha, hash);
+    sqw_sha256_finish(&s_sha, hash);
     mbedtls_sha256_free(&s_sha);
     s_shaOpen = false;
     unlock();
