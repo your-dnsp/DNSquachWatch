@@ -1,0 +1,2 @@
+DURESS PIN
+Optional Duress appears after PIN Lock. It works only on the lock screen, attempts erasure, then starts persistent PIXEL

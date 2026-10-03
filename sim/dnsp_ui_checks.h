@@ -1,5 +1,6 @@
 // Opt-in desktop integration checks against the real firmware setup()/loop().
 #pragma once
+#include "location_label.h"
 #include "../test/test_util.h"
 #include "settings.h"
 #include "ui_device.h"
@@ -320,11 +321,11 @@ static int runDnspUiChecks() {
     const int propsY=(tft.height()-windowH)/2;
     auto creditPixels=[&](){uint32_t h=2166136261u;for(int y=propsY+49;y<propsY+windowH-38;++y)for(int x=windowX+12;x<windowX+windowW-12;++x)h=(h^tft.readPixel(x,y))*16777619u;return h;};
     const auto creditTop=creditPixels();
-    testTap(windowX+100,propsY+windowH-18);testStep(200);
+    testTap(windowX+52,propsY+windowH-18);testStep(200);
     ck("credits Down scrolls when needed",tft.width()>240 || creditPixels()!=creditTop);
     testTap(windowX+30,propsY+windowH-18);testStep(200);
     ck("credits Up restores top",creditPixels()==creditTop);
-    for(int i=0;i<12;++i)testTap(windowX+100,propsY+windowH-18);
+    for(int i=0;i<60;++i)testTap(windowX+52,propsY+windowH-18);
     testShot("credits-bottom");
     testTap(windowX+windowW-12,(tft.height()-windowH)/2+10);
     ck("info close returns to settings",state==AppState::SETTINGS);
@@ -422,6 +423,16 @@ static int runDnspUiChecks() {
         uiSettingsInit(tft);uiSettingsOpenPage(pg);testStep();
         char label[32];snprintf(label,sizeof label,"new-menu-%u",unsigned(pg));testShot(label);
     }
+    suite("v1.2 location and Remington");
+    uiSettingsInit(tft);uiSettingsOpenPage(SettingsPage::ALERTS);testStep();
+    ck("location menu reachable",menuTap(SettingsRow::SET_LOCATION)&&state==AppState::LOCATION_LABEL);
+    testTap(40,106);ck("Home preset applies",!strcmp(LocationLabel::current(),"Home"));testShot("location-home");
+    testTap(40,74);ck("label keyboard opens",state==AppState::LOCATION_EDIT);testShot("location-keyboard");
+    state=AppState::LOCATION_LABEL;testStep();testTap(tft.width()-40,74);ck("clear label",!strcmp(LocationLabel::current(),"no-label-set"));
+    testTap(40,tft.height()-18);ck("location back returns to settings",state==AppState::SETTINGS);
+    uiSettingsOpenPage(SettingsPage::DNSP);testStep();
+    ck("Remington menu reachable",menuTap(SettingsRow::REMINGTON)&&state==AppState::REMINGTON);testShot("remington-photo");
+    testTap(100,100);testTap(100,100);ck("Remington double tap returns",state==AppState::SETTINGS);
     suite("Device help, credits, light setting and crash reader");
     uiSettingsInit(tft);uiSettingsOpenPage(SettingsPage::SYSTEM);testStep();
     ck("direct Credits entry opens",menuTap(SettingsRow::CREDITS)&&state==AppState::SYS_PROPS);testShot("direct-credits");

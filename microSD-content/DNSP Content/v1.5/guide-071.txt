@@ -1,0 +1,2 @@
+CHARGE VS SHUTDOWN (CONT.)
+does not unmount the card.

@@ -1,5 +1,6 @@
 // SquachWatch-CYD — the PIN lock. See include/security.h.
 #include "security.h"
+#include "location_label.h"
 #include "dnsp_sha256.h"
 #include "field_tools.h"
 #include "ignore_list.h"
@@ -206,6 +207,7 @@ const char* lockAlertsLabel() {
 }
 
 void wipeSecrets() {
+    LocationLabel::wipe();
     Field::wipePrivate();
     clearNamespace("meshtalk");
     clearNamespace("otawifi");       // the saved WiFi password for updates

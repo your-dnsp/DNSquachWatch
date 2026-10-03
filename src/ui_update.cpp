@@ -5,6 +5,7 @@
 #include "ota_ble.h"
 #include "ota_wifi.h"
 #include "theme.h"
+#include "privacy.h"
 #include <Arduino.h>
 #include <stdio.h>
 #include <string.h>
@@ -330,7 +331,8 @@ void drawPick(TFT_eSPI& t) {
         const int tagW = tag[0] ? t.textWidth(tag) + 6 : 0;
         const int maxChars = (w - 16 - 12 - 20 - tagW) / t.textWidth("M");
         char name[40];
-        snprintf(name, sizeof name, "%.*s", maxChars > 32 ? 32 : maxChars, net->ssid);
+        char pv[40];
+        snprintf(name, sizeof name, "%.*s", maxChars > 32 ? 32 : maxChars, Privacy::name(net->ssid, pv, sizeof pv));
         t.setTextColor(Theme::WHITE, Theme::TASKBAR);
         t.setCursor(14, y + (ROW_H - t.fontHeight()) / 2);
         t.print(name);
@@ -394,6 +396,8 @@ void drawWifi(TFT_eSPI& t) {
             break;
         case OtaWifi::State::VERIFYING: drawFinishing(t, "CHECKING SIGNATURE...", Theme::AMBER, false); break;
         case OtaWifi::State::DONE:      drawFinishing(t, "UPDATE INSTALLED", Theme::CYAN, true); break;
+        case OtaWifi::State::CONNECTED:
+            para(t,36,Theme::CYAN,"Saved Wi-Fi connected. Time sync attempted. Location recall is available. No update was checked. BACK resumes scanning.");backButton(t,"BACK");break;
         case OtaWifi::State::FAILED:    drawFailed(t, OtaWifi::failureText(), OtaWifi::canTryAgain()); break;
         default: break;
     }
@@ -431,7 +435,7 @@ void uiUpdateTick(TFT_eSPI& t, uint32_t now, bool full) {
     if (s_dnspWarning) {
         label(t, 34, Theme::AMBER, "DNSP CUSTOM FIRMWARE");
         para(t, 58, Theme::WHITE,
-             Backup::verifiedThisBoot()?"Upstream updates replace DNSP. A backup was verified this boot; copy it to a computer. USB recovery needs the matching DNSP release kit.":"Upstream updates replace DNSP. No backup verified this boot. Use Settings > Storage & Recovery first, or keep a DNSP release kit from your-dnsp.");
+             "DNSP updates use your-dnsp/DNSquachWatch and verify a DNSP signature for this display. Back up first. Install matching card content manually; keep a USB recovery kit.");
         const Row r = bottomRow(t, 2);
         Theme::drawButton(t, r.x[0], r.y, r.w, BTN_H, "CONTINUE", false);
         Theme::drawButton(t, r.x[1], r.y, r.w, BTN_H, "BACK", false);
@@ -440,7 +444,7 @@ void uiUpdateTick(TFT_eSPI& t, uint32_t now, bool full) {
     const bool wifiOn = OtaWifi::state() != OtaWifi::State::OFF;
     const bool btOn   = OtaBle::state()  != OtaBle::State::OFF;
     const bool busyInstalling = (wifiOn && OtaWifi::state() >= OtaWifi::State::VERIFYING &&
-                                 OtaWifi::state() != OtaWifi::State::FAILED) ||
+                                 OtaWifi::state() != OtaWifi::State::FAILED && OtaWifi::state() != OtaWifi::State::CONNECTED) ||
                                 (btOn && OtaBle::state() == OtaBle::State::DONE);
     if (OtaCore::restartPending() && !busyInstalling) {
         label(t, 24, Theme::CYAN, "RESTARTING");
@@ -496,6 +500,8 @@ UpdateHit uiUpdateHitTest(TFT_eSPI& t, int x, int y, int* netIndex) {
                     return UpdateHit::NONE;
                 }
                 return onBack ? UpdateHit::OK : UpdateHit::NONE;
+            case OtaWifi::State::CONNECTED:
+                return onBack ? UpdateHit::CANCEL : UpdateHit::NONE;
             case OtaWifi::State::SCANNING:
             case OtaWifi::State::CONNECTING:
             case OtaWifi::State::CHECKING:

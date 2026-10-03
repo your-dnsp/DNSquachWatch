@@ -1,4 +1,5 @@
 #include "duress_device.h"
+#include "location_label.h"
 #include <string.h>
 #if __has_include(<esp_flash.h>)
 #include <esp_flash.h>

@@ -5,6 +5,9 @@
 #include "theme.h"
 #include <cstring>
 #include <algorithm>
+#if defined(ARDUINO_ARCH_ESP32)
+#include <SD.h>
+#endif
 namespace Lang {
 static uint8_t taps = 0;
 static uint32_t lastTap = 0;
@@ -12,6 +15,23 @@ const char *name(uint8_t n) {
     static const char *names[] = {"English", "Español",  "Français", "Deutsch",
                                   "日本語",  "简体中文", "עברית"};
     return names[n < 7 ? n : 0];
+}
+// Card reads run only on the UI path, never radio callbacks. Translation
+// text has a 511-byte limit and per-record checksum; English remains built in.
+static const char* translated(size_t row,uint8_t language) {
+#if defined(ARDUINO_ARCH_ESP32)
+    static char text[512];
+    File f=SD.open("/DNSP Content/v1.5/translations.bin",FILE_READ);
+    uint8_t header[6];
+    if(!f||!f.seek(translationOffsets[row][language-1])||f.read(header,6)!=6){f.close();return catalog[row][0];}
+    const size_t n=header[0]|(size_t(header[1])<<8);
+    const uint32_t expected=uint32_t(header[2])|(uint32_t(header[3])<<8)|(uint32_t(header[4])<<16)|(uint32_t(header[5])<<24);
+    if(n>=sizeof text||f.read(reinterpret_cast<uint8_t*>(text),n)!=int(n)){f.close();return catalog[row][0];}
+    f.close();uint32_t h=2166136261u;for(size_t i=0;i<n;++i)h=(h^uint8_t(text[i]))*16777619u;
+    if(h!=expected)return catalog[row][0];text[n]=0;return text;
+#else
+    return catalog[row][language];
+#endif
 }
 const char *lookup(const char *s) {
     if (!s)
@@ -29,7 +49,7 @@ const char *lookup(const char *s) {
             hi = m;
     }
     if (lo < sizeof catalog / sizeof catalog[0] && !strcmp(s, catalog[lo][0]))
-        return catalog[lo][n];
+        return translated(lo,n);
     size_t len = strlen(s);
     if (len > 4 && s[0] == '[' && s[len - 1] == ']') {
         const char *a = s + 1;
@@ -40,7 +60,7 @@ const char *lookup(const char *s) {
             z--;
         for (const auto &r : catalog)
             if (strlen(r[0]) == z && !strncmp(a, r[0], z))
-                return r[n];
+                return translated(size_t(&r-catalog),n);
     }
     return s;
 }
@@ -142,11 +162,34 @@ static void reorder(uint16_t *a, int n) {
 static void ink(TFT_eSPI &t, uint16_t cp, int x, int y, uint16_t color) {
     const auto &g = glyph(cp);
     uint8_t b[32];
-    if (!GlyphDecode::decode(glyphBits, sizeof glyphBits,
-                            Field::config.language == 4 ? g.jpOffset : g.offset, g.width, b)) return;
-    int stride = g.width / 8;
+    const size_t offset=Field::config.language==4?g.jpOffset:g.offset;
+    bool ok=false;
+    if(g.cp<=126)ok=GlyphDecode::decode(glyphBits,sizeof glyphBits,offset,g.width,b);
+#if defined(ARDUINO_ARCH_ESP32)
+    else {
+        // Verify the small external font once, then fetch at most 64 bytes for
+        // each glyph. A Huffman glyph consumes at most 34*15 bits (64 bytes).
+        // No persistent file handle competes with backup/logging handles.
+        static bool checked=false;
+        File f=SD.open("/DNSP Content/v1.5/glyphs.bin",FILE_READ);
+        uint8_t encoded[64];
+        if(f && f.size()==19757) {
+            if(!checked){uint32_t h=2166136261u;size_t total=0;int n;
+                while((n=f.read(encoded,sizeof encoded))>0){for(int i=0;i<n;++i)h=(h^encoded[i])*16777619u;total+=n;}
+                checked=total==19757&&h==0x59f7ea02u;
+            }
+            if(checked&&f.seek(offset)){int n=f.read(encoded,sizeof encoded);if(n>0)ok=GlyphDecode::decode(encoded,n,0,g.width,b);}
+        } else checked=false;
+        f.close();
+    }
+#else
+    else ok=GlyphDecode::decode(glyphBits,sizeof glyphBits,offset,g.width,b);
+#endif
+    if(!ok){const auto& fallback=glyph('?');if(!GlyphDecode::decode(glyphBits,sizeof glyphBits,fallback.offset,8,b))return;}
+    const int renderedWidth=ok?g.width:8;
+    int stride = renderedWidth / 8;
     for (int r = 0; r < 16; r++)
-        for (int c = 0; c < g.width; c++)
+        for (int c = 0; c < renderedWidth; c++)
             if (b[r * stride + c / 8] & (0x80 >> (c % 8)))
                 t.drawPixel(x + c, y + r, color);
 }

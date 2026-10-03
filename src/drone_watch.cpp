@@ -1,4 +1,5 @@
 #include "drone_watch.h"
+#include "location_label.h"
 #include "remote_id.h"
 #include <cstring>
 #include <cstdio>
@@ -121,7 +122,7 @@ void observe(bool wifi,const uint8_t *mac,const uint8_t *p,size_t n,int8_t rssi,
     if(current.capture!=Capture::RECORDING)return;
     if(count==3){current.dropped++;return;}
     Record &r=queue[(head+count)%3];
-    r.at=now;r.original=n>65535?65535:n;r.length=n>sizeof r.data?sizeof r.data:n;
+    r.at=now;r.locationKey=LocationLabel::currentKey();r.original=n>65535?65535:n;r.length=n>sizeof r.data?sizeof r.data:n;
     r.wifi=wifi;r.channel=channel;r.rssi=rssi;r.verdict=verdict;memcpy(r.mac,mac,6);memcpy(r.data,p,r.length);
     if(n>r.length)current.truncated++;
     count++;
@@ -144,7 +145,7 @@ bool settled(){auto s=stats().capture;return s==Capture::IDLE||s==Capture::DONE|
 void setSink(Sink value){sink=value;}
 bool formatRecord(const Record &r,char *out,size_t cap){
     if(!out || r.length>sizeof r.data || r.length>r.original || cap<256u+2u*r.length)return false;
-    int n=snprintf(out,cap,"{\"uptime_ms\":%lu,\"radio\":\"%s\",\"mac\":\"%02x%02x%02x%02x%02x%02x\",\"rssi\":%d,\"channel\":%u,\"verdict\":%u,\"original_bytes\":%u,\"captured_bytes\":%u,\"hex\":\"",(unsigned long)r.at,r.wifi?"wifi":"ble",r.mac[0],r.mac[1],r.mac[2],r.mac[3],r.mac[4],r.mac[5],r.rssi,r.channel,unsigned(r.verdict),r.original,r.length);
+    int n=snprintf(out,cap,"{\"uptime_ms\":%lu,\"location\":\"%s\",\"radio\":\"%s\",\"mac\":\"%02x%02x%02x%02x%02x%02x\",\"rssi\":%d,\"channel\":%u,\"verdict\":%u,\"original_bytes\":%u,\"captured_bytes\":%u,\"hex\":\"",(unsigned long)r.at,LocationLabel::text(r.locationKey),r.wifi?"wifi":"ble",r.mac[0],r.mac[1],r.mac[2],r.mac[3],r.mac[4],r.mac[5],r.rssi,r.channel,unsigned(r.verdict),r.original,r.length);
     if(n<0 || size_t(n)+2*r.length+4>cap)return false;
     static const char hex[]="0123456789abcdef";
     for(size_t i=0;i<r.length;i++){out[n++]=hex[r.data[i]>>4];out[n++]=hex[r.data[i]&15];}

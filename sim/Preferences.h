@@ -175,13 +175,13 @@ private:
     // native path share one format -- the only thing that differs below
     // is where the blob is put.
     std::string serialize() const {
+        char line[128];
         std::string out;
-        char line[576];
         for (auto& kv : _b)  { snprintf(line, sizeof(line), "b %s %d\n", kv.first.c_str(), kv.second ? 1 : 0);   out += line; }
         for (auto& kv : _u)  { snprintf(line, sizeof(line), "u %s %u\n", kv.first.c_str(), (unsigned)kv.second); out += line; }
         for (auto& kv : _ui) { snprintf(line, sizeof(line), "i %s %u\n", kv.first.c_str(), (unsigned)kv.second); out += line; }
         for (auto& kv : _sh) { snprintf(line, sizeof(line), "h %s %d\n", kv.first.c_str(), (int)kv.second);      out += line; }
-        for (auto& kv : _s)  { snprintf(line, sizeof(line), "s %s %s\n", kv.first.c_str(), kv.second.c_str());   out += line; }
+        for (auto& kv : _s)  { out += "s " + kv.first + " " + kv.second + "\n"; }
         return out;
     }
 
@@ -200,14 +200,12 @@ private:
 
     void deserialize(const std::string& blob) {
         size_t pos = 0;
-        char line[576];
         while (pos < blob.size()) {
             size_t nl = blob.find('\n', pos);
             if (nl == std::string::npos) nl = blob.size();
             size_t n = nl - pos;
-            if (n >= sizeof(line)) n = sizeof(line) - 1;
-            memcpy(line, blob.data() + pos, n);
-            line[n] = 0;
+            std::string storage = blob.substr(pos, n);
+            char* line = storage.data();
             pos = nl + 1;
             while (n && (line[n - 1] == '\n' || line[n - 1] == '\r')) line[--n] = 0;
             if (n < 4 || line[1] != ' ') continue;

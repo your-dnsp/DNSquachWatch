@@ -23,9 +23,10 @@ CXX      ?= g++
 CXXFLAGS := -std=c++17 -O1 -g -Wall -Wextra -Wno-unused-parameter \
             -I$(SIM) -I$(INC)
 
+installation_guide_test_FLAGS := -DINSTALLATION_GUIDE_TEST -Istorage_shim
 installation_guide_test_SRCS := $(SRC)/installation_guide.cpp
 
-research_test_SRCS := $(SRC)/research_report.cpp $(SRC)/research.cpp $(SRC)/deauth_tracker.cpp $(SRC)/signatures.cpp $(SRC)/field_tools.cpp $(SRC)/remote_id.cpp
+research_test_SRCS := $(SRC)/location_label.cpp  $(SRC)/research_report.cpp $(SRC)/research.cpp $(SRC)/deauth_tracker.cpp $(SRC)/signatures.cpp $(SRC)/field_tools.cpp $(SRC)/remote_id.cpp
 
 field_test_SRCS := $(SRC)/field_tools.cpp $(SRC)/remote_id.cpp
 
@@ -33,20 +34,30 @@ breakout_test_SRCS := $(SRC)/breakout.cpp
 
 care_test_SRCS := $(SRC)/care.cpp $(SRC)/field_tools.cpp $(SRC)/remote_id.cpp
 
-drone_watch_test_SRCS := $(SRC)/drone_watch.cpp $(SRC)/remote_id.cpp
+drone_watch_test_SRCS := $(SRC)/location_label.cpp $(SRC)/drone_watch.cpp $(SRC)/remote_id.cpp
 
-duress_test_SRCS := $(SRC)/duress_core.cpp $(SRC)/pixel_tide.cpp
+duress_test_SRCS := $(SRC)/ui_scratch.cpp  $(SRC)/duress_core.cpp $(SRC)/pixel_tide.cpp
 
 alert_snooze_test_SRCS := $(SRC)/alert_snooze.cpp
 
-TESTS := installation_guide_test alert_snooze_test duress_test drone_watch_test care_test verified_copy_test breakout_test glyph_test field_test research_test deauth_tracker_test dnsp_detection_test dnsp_csv_test dnsp_settings_test remote_id_test ibeacon_test signatures_test emitter_roundtrip_test ignore_list_test hacker_test pwnagotchi_test shim_fidelity_test squachmesh_test qwerty_test meshmsg_test device_info_test security_test emote_script_test blackbox_test bingo_test hunt_test bgretire_test autoquiet_test framepush_test touchfit_test logindex_test dex_test regulars_test gnss_test user_labels_test sketchy_rule_test
+location_label_test_SRCS := $(SRC)/location_label.cpp
 
-dnsp_detection_test_SRCS := $(SIM)/detection_sim.cpp $(SRC)/remote_id.cpp $(SRC)/detection_info.cpp $(SRC)/device_info.cpp $(SRC)/signatures.cpp
+research_submission_test_FLAGS := -DRESEARCH_SUBMISSION_TEST -Istorage_shim
+research_submission_test_SRCS := $(SRC)/research_submission.cpp $(SRC)/user_labels.cpp $(SRC)/user_labels_storage.cpp
+
+card_content_test_FLAGS := -DCARD_CONTENT_TEST -Istorage_shim
+card_content_test_SRCS := $(SRC)/card_content.cpp
+
+ui_scratch_test_SRCS := $(SRC)/ui_scratch.cpp $(SRC)/pixel_tide.cpp
+
+TESTS := ui_scratch_test card_content_test sd_retry_test research_submission_test location_label_test  installation_guide_test alert_snooze_test duress_test drone_watch_test care_test verified_copy_test breakout_test glyph_test field_test research_test deauth_tracker_test dnsp_detection_test dnsp_csv_test dnsp_settings_test remote_id_test ibeacon_test signatures_test emitter_roundtrip_test ignore_list_test hacker_test pwnagotchi_test shim_fidelity_test squachmesh_test qwerty_test meshmsg_test device_info_test security_test emote_script_test blackbox_test bingo_test hunt_test bgretire_test autoquiet_test framepush_test touchfit_test logindex_test dex_test regulars_test gnss_test user_labels_test sketchy_rule_test
+
+dnsp_detection_test_SRCS := $(SIM)/detection_sim.cpp $(SRC)/remote_id.cpp privacy_stub.cpp $(SRC)/detection_info.cpp $(SRC)/device_info.cpp $(SRC)/signatures.cpp
 deauth_tracker_test_SRCS := $(SRC)/deauth_tracker.cpp
 dnsp_settings_test_SRCS := $(SRC)/settings.cpp
 gnss_test_SRCS := $(SRC)/gnss.cpp
 user_labels_test_SRCS := $(SRC)/user_labels.cpp
-sketchy_rule_test_SRCS := $(SRC)/sketchy_rule.cpp $(SIM)/detection_sim.cpp $(SRC)/remote_id.cpp
+sketchy_rule_test_SRCS := $(SRC)/location_label.cpp  $(SRC)/sketchy_rule.cpp $(SIM)/detection_sim.cpp $(SRC)/remote_id.cpp
 
 # Only the units under test get linked in. Pulling the whole firmware
 # would drag in TFT_eSPI, NimBLE and the UI, and a test that needs a
@@ -73,13 +84,13 @@ emote_script_test_FLAGS      := -DSQUACH_MESH=1
 # The pages against the signature tables and the emulator's profiles.
 device_info_test_SRCS        := $(SRC)/device_info.cpp $(SRC)/signatures.cpp
 # The lock's arithmetic, through the sim's Preferences shim.
-security_test_SRCS           := $(SRC)/security.cpp $(SRC)/ignore_list.cpp $(SRC)/field_tools.cpp $(SRC)/remote_id.cpp
+security_test_SRCS           := $(SRC)/location_label.cpp  $(SRC)/security.cpp $(SRC)/ignore_list.cpp $(SRC)/field_tools.cpp $(SRC)/remote_id.cpp
 # The rings, on the emulator's RAM flash. The two clock calls it makes are
 # stubbed in the test.
-blackbox_test_SRCS           := $(SRC)/blackbox.cpp
+blackbox_test_SRCS           := $(SRC)/location_label.cpp  $(SRC)/blackbox.cpp
 blackbox_test_FLAGS          := -DBLACKBOX_TEST
 # One LOG row per device, over the same RAM flash.
-logindex_test_SRCS           := $(SRC)/blackbox.cpp $(SRC)/log_index.cpp
+logindex_test_SRCS           := $(SRC)/location_label.cpp  $(SRC)/blackbox.cpp $(SRC)/log_index.cpp
 # The DEX's cards and the record, through the Preferences shim; the clock is stubbed.
 dex_test_SRCS                := $(SRC)/dex.cpp $(SIM)/detection_sim.cpp $(SRC)/remote_id.cpp
 # The neighbours table; the clock is stubbed.
@@ -101,7 +112,10 @@ shim_fidelity_test_SRCS      :=
 # The touch mapping is plain arithmetic in touch_fit.h.
 touchfit_test_SRCS           :=
 
-TESTS += ble_advert_fields_test ambient_light_test crash_reports_test spam_test
+readable_storage_test_SRCS := $(SRC)/readable_logs.cpp $(SRC)/blackbox.cpp $(SRC)/location_label.cpp $(SRC)/care.cpp $(SRC)/field_tools.cpp $(SRC)/remote_id.cpp
+readable_storage_test_FLAGS := -DREADABLE_LOGS_TEST -DBLACKBOX_TEST -Istorage_shim
+
+TESTS += readable_storage_test backup_progress_test ble_advert_fields_test ambient_light_test crash_reports_test spam_test
 crash_reports_test_SRCS := $(SRC)/crash_reports.cpp
 
 .PHONY: all clean
@@ -111,7 +125,7 @@ $(OUT):
 	@mkdir -p $(OUT)
 
 define TEST_rule
-$(OUT)/$(1): $(1).cpp $$($(1)_SRCS) $$(wildcard $$(INC)/*.h) $$(wildcard $$(SIM)/*.h) Makefile | $(OUT)
+$(OUT)/$(1): $(1).cpp $$($(1)_SRCS) $$(wildcard $$(INC)/*.h) $$(wildcard $$(INC)/*.inc) $$(wildcard $$(SIM)/*.h) Makefile | $(OUT)
 	@$$(CXX) $$(CXXFLAGS) $$($(1)_FLAGS) -o $$@ $$< $$($(1)_SRCS)
 
 .PHONY: run-$(1)

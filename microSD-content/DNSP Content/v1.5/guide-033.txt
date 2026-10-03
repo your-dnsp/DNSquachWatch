@@ -1,0 +1,2 @@
+RESEARCH & DATA
+Research & Data contains the research log, radio activity map, session reports, own telemetry and user-pinned sensors.

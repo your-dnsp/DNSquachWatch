@@ -132,10 +132,13 @@ static const Net NETS[] = {
     { "CoffeeShop",    -81, true  },
 };
 
-bool begin() {
+static bool checkUpdates=true;
+bool begin(bool check) {
+    checkUpdates=check;
     if (s_saved) { s_state = State::PICK; connect("SquachNet", "", false); return true; }
     s_state = State::SCANNING; s_t0 = millis(); return true;
 }
+bool settled() { return true; }
 bool end()   { s_state = State::OFF; return false; }
 void rescan() { s_state = State::SCANNING; s_t0 = millis(); }
 
@@ -143,7 +146,7 @@ void tick(uint32_t now) {
     const uint32_t e = now - s_t0;
     switch (s_state) {
         case State::SCANNING:    if (e > 1500) s_state = State::PICK; break;
-        case State::CONNECTING:  if (e > 2000) { if (s_badPass) s_state = State::FAILED; else { s_state = State::CHECKING; s_t0 = now; } } break;
+        case State::CONNECTING:  if (e > 2000) { if (s_badPass) s_state = State::FAILED; else { s_state = checkUpdates?State::CHECKING:State::CONNECTED; s_t0 = now; } } break;
         case State::CHECKING:    if (e > 2000) s_state = State::READY; break;
         case State::DOWNLOADING: if (e > 8000) { s_state = State::VERIFYING; s_t0 = now; } break;
         case State::VERIFYING:   if (e > 1500) { s_state = State::DONE; s_t0 = now; } break;
@@ -163,7 +166,7 @@ static SimSaved s_list[SAVED_MAX] = {
 };
 static uint8_t s_n = 3, s_use = 0;
 bool        hasSaved()  { return s_saved && s_n > 0; }
-bool        bootCheck(uint32_t) { return false; }
+bool        bootCheck(uint32_t, bool) { return false; }
 bool        savedPassAt(uint8_t i, char* out, size_t cap) { if (i >= savedCount() || !cap) return false; snprintf(out, cap, "hunter2"); return true; }
 void        forget()    { s_saved = false; s_n = 0; }
 uint8_t     savedCount()           { return s_saved ? s_n : 0; }
@@ -201,6 +204,8 @@ void connect(const char* ssid, const char*, bool) {
     s_t0 = millis();
 }
 void connectSaved() { connect("SquachNet", "", false); }
+const char* lastAuthenticatedNetwork(){return "";}
+const char* authenticatedNetwork(){return "";}
 const char* network()       { return s_net; }
 const char* latestVersion() { return "v1.7.2"; }
 bool        upToDate()      { return false; }

@@ -1,0 +1,2 @@
+CONNECT NOW
+Wi-Fi Networks > CONNECT joins now without checking updates. It syncs time. BACK resumes detection.

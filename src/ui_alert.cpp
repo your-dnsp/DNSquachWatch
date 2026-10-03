@@ -1,6 +1,7 @@
 // SquachWatch-CYD — ALERT screen implementation
 #include "ui_alert.h"
 #include "theme.h"
+#include "privacy.h"
 #include "signatures.h"
 #include "detection.h"
 #include "ignore_list.h"
@@ -474,17 +475,17 @@ void uiAlertTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng,
     t.setTextSize(readSz);
     t.setTextColor(Theme::WHITE, Theme::BG);
     if (s_last.name[0] && !s_redacted) {
-        t.setCursor(PLATE_X + (PLATE_W - t.textWidth(s_last.name)) / 2, PLATE_Y + NAME_DY);
-        t.print(s_last.name);
+        char pv[40];
+        const char* nm = Privacy::name(s_last.name, pv, sizeof pv);
+        t.setCursor(PLATE_X + (PLATE_W - t.textWidth(nm)) / 2, PLATE_Y + NAME_DY);
+        t.print(nm);
     }
 
     char mac[24];
     if (s_redacted)
         snprintf(mac, sizeof(mac), "%s", "-- LOCKED --");
     else
-        snprintf(mac, sizeof(mac), "%02X:%02X:%02X:%02X:%02X:%02X",
-                 s_last.mac[0], s_last.mac[1], s_last.mac[2],
-                 s_last.mac[3], s_last.mac[4], s_last.mac[5]);
+        Privacy::mac(mac, sizeof mac, s_last.mac);
     t.setCursor(PLATE_X + (PLATE_W - t.textWidth(mac)) / 2, PLATE_Y + MAC_DY);
     t.print(mac);
 

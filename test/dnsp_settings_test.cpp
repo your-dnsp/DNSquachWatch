@@ -3,6 +3,7 @@
 #include "settings.h"
 #include "theme.h"
 #include "clock.h"
+#include "privacy.h"
 #include <Preferences.h>
 #include <cstdlib>
 #include <sys/stat.h>
@@ -35,5 +36,15 @@ int main() {
     Settings::cycleDisplayMhz();Settings::load();ck("40 MHz survives reload",Settings::displayMhz()==40);
     p.begin("settings",false);p.putUChar("dispMHz",60);p.end();Settings::load();
     ck("invalid display speed falls back to 40",Settings::displayMhz()==40);
+    ck("privacy defaults off and aura defaults lit",!Settings::privacyMode()&&Settings::auraShown());
+    const uint8_t mac[6]={0xA4,0xC1,0x38,0xAA,0xBB,0xCC};char shown[24],name[24];
+    Settings::togglePrivacyMode();Settings::load();Privacy::mac(shown,sizeof shown,mac);
+    ck("privacy choice persists and MAC is masked",Settings::privacyMode()&&!strcmp(shown,"A4:C1:38:XX:XX:XX"));
+    ck("privacy masks name",!strcmp(Privacy::name("Friends network",name,sizeof name),"Fri***"));
+    ck("privacy never changes underlying address",mac[3]==0xAA&&mac[5]==0xCC);
+    Settings::toggleAura();Settings::load();ck("aura choice persists",!Settings::auraShown());
+    Settings::noteRunMinutes(1,15);Settings::noteRunMinutes(1,25);Settings::noteRunMinutes(2,5);
+    uint16_t boots[8],minutes[8];uint8_t n=Settings::runHistory(boots,minutes,8);
+    ck("runtime updates same boot and stores newest first",n==2&&boots[0]==2&&minutes[0]==5&&boots[1]==1&&minutes[1]==25);
     return report();
 }

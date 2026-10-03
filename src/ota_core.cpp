@@ -1,3 +1,4 @@
+#include "integer_scan.h"
 // SquachWatch-CYD — the transport-free half of firmware updates. See
 // include/ota_core.h.
 #include "ota_core.h"
@@ -197,7 +198,7 @@ static uint8_t  s_newsN = 0;
 static bool verParts(const char* s, unsigned v[3]) {
     if (!s) return false;
     if (*s == 'v' || *s == 'V') s++;
-    return sscanf(s, "%u.%u.%u", &v[0], &v[1], &v[2]) == 3;
+    return DNSP_INTEGER_SCAN(s, "%u.%u.%u", &v[0], &v[1], &v[2]) == 3;
 }
 static bool verNewer(const char* a, const char* b) {   // a newer than b
     unsigned x[3], y[3];

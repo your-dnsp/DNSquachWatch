@@ -191,9 +191,13 @@ namespace Squachy {
     // reboots -- the fact that the card has been shown is saved.
     bool consumePetUnlockCard();
     bool petUnlocked();
-    // Legend stage, where the top hat comes in -- and so where the
-    // APPEARANCE page's TOP HAT row appears.
-    bool hasTopHat();
+    // Legend stage or the master unlock, where the aura comes in -- and so
+    // where the APPEARANCE page's AURA row appears.
+    bool hasAura();
+    // Wear the Legend look before it is earned, until the next boot: the
+    // emulator, the console's LEGEND, and builds that are not a release.
+    void previewLegend(bool on);
+    bool legendPreview();
     bool petEnabled();         // any companion at all: what pet.cpp asks
     void togglePet();          // kept for callers that only want on/off
 
@@ -240,6 +244,10 @@ namespace Squachy {
     // reacts anyway, because the catch is the game and a silent second catch
     // teaches you to stop playing it.
     void unlockShark();
+    // YZZERD is the sixth. main.cpp passes on Theme::consumeXyzzy(): how many
+    // times in a row XYZZY has been tapped on the TERMINAL background. One
+    // and two get "nothing happens"; three unlocks the outfit.
+    void magicWord(uint8_t said);
 
     // Unlock announcements. Any outfit that becomes available -- by
     // crossing its lifetime-detection threshold, or by the werewolf

@@ -165,6 +165,15 @@ int main() {
         ck("every byte erased", blank);
     }
 
+    suite("Stable export head while live detections arrive");
+    BlackBox::wipe();BlackBox::noteDetection(det(10),false);BlackBox::noteDetection(det(11),false);
+    BlackBox::HistorySnapshot snapshot;BlackBox::captureHistory(snapshot);
+    BlackBox::noteDetection(det(12),false);BlackBox::DetRecord rows[3]{};
+    ck("snapshot excludes subsequent sightings",BlackBox::readDetectionsSnapshot(snapshot,0,3,rows)==2&&macNo(rows[0])==11&&macNo(rows[1])==10);
+    ck("normal history retains live sightings",BlackBox::readDetections(0,1,rows)==1&&macNo(rows[0])==12);
+    for(unsigned i=0;i<2200;i++)BlackBox::noteDetection(det(i+100),false);
+    ck("overwritten snapshot fails visibly",!BlackBox::historyIntact(snapshot)&&BlackBox::readDetectionsSnapshot(snapshot,0,1,rows)==0);
+
     return report();
 }
 

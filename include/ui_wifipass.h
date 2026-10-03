@@ -16,11 +16,14 @@
 enum class WifiPassTouch  : uint8_t { DOWN, MOVE, UP };
 enum class WifiPassResult : uint8_t { NONE, OK, BACK };
 
+void           uiWifiTextInit(TFT_eSPI& t, const char* title, const char* initial);
 void           uiWifiPassInit(TFT_eSPI& t, const char* ssid);
-void           uiWifiPassTick(TFT_eSPI& t, uint32_t now);
+// Cleared band buffers require a complete paint on every draw pass.
+void           uiWifiPassTick(TFT_eSPI& t, uint32_t now, bool repaint = false);
 void           uiWifiPassTouch(int x, int y, uint32_t now, WifiPassTouch phase);
 WifiPassResult uiWifiPassResult();
 const char*    uiWifiPassText();
 const char*    uiWifiPassSsid();
 void           uiWifiPassClear();
 
+void uiWifiPassRedrawAll();

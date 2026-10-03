@@ -1,5 +1,7 @@
 // SquachWatch-CYD — SD log implementation
 #include "sd_log.h"
+#include "blackbox.h"
+#include "clock.h"
 #include "deauth_tracker.h"
 #include "research.h"
 namespace Research { bool storageSink(const char*, const char*, bool); }
@@ -10,6 +12,7 @@ namespace Research { bool storageSink(const char*, const char*, bool); }
 #include "diskio.h"
 #include <esp_heap_caps.h>
 #include "csv_text.h"
+#include "location_label.h"
 #include <stdio.h>
 // The Phantoms define CYD (they ARE a CYD) but still need this reference,
 // because their touch shares the display's bus and SdLog::begin() has to hand
@@ -177,16 +180,23 @@ void SdLog::describe(char* out, size_t cap) {
 
 void SdLog::openDaily() {
     if (!_ready) return;
-    uint32_t t = millis();
-    uint32_t day = t / (24UL * 60UL * 60UL * 1000UL);
-    snprintf(_filename, sizeof(_filename), "/squachwatch-%lu.log", (unsigned long)day);
+    // A checked namespace prevents appending a new outing to an old file,
+    // even with no clock, NVS reset, or a card moved from another device.
+    if(_filename[0])return;
+    if(!_session)_session=BlackBox::bootNumber();
+    for(unsigned attempt=0;attempt<4096;attempt++,++_session){
+        snprintf(_filename,sizeof _filename,"/squachwatch-session-%08lx.log",(unsigned long)_session);
+        if(!SD.exists(_filename))return;
+    }
+    _filename[0]=0;_ready=false;
+
 }
 
-void SdLog::logEvent(const Detection& d) {
-    if (!_ready) return;
+bool SdLog::logEvent(const Detection& d) {
+    if (!_ready || !_filename[0]) return false;
     File f = SD.open(_filename, FILE_APPEND);
-    if (!f) { if (_writeErrors != UINT32_MAX) ++_writeErrors; return; }
-    char line[208];
+    if (!f) { if (_writeErrors != UINT32_MAX) ++_writeErrors; return false; }
+    char line[320];
     char mac[18];
     snprintf(mac, sizeof(mac), "%02X:%02X:%02X:%02X:%02X:%02X",
              d.mac[0], d.mac[1], d.mac[2], d.mac[3], d.mac[4], d.mac[5]);
@@ -203,20 +213,22 @@ void SdLog::logEvent(const Detection& d) {
         else
             snprintf(reason, sizeof reason, "unknown");
         snprintf(line, sizeof(line),
-                 "%lu,%s,%d,%s,%u,%s,%s,count=%u,window_ms=%lu,targets=%u,reason=%s,protected=%u,unprotected=%u\n",
+                 "%lu,%s,%d,%s,%u,%s,%s,count=%u,window_ms=%lu,targets=%u,reason=%s,protected=%u,unprotected=%u,location=%s\n",
                  (unsigned long)millis(), detectionTypeName(d.type), d.rssi, mac,
                  d.channel, vendorSafe, nameSafe, (unsigned)d.hits, duration, targets,
                  reason,
                  (d.evidenceBits & DEAUTH_META_PROTECTED_SEEN) ? 1u : 0u,
-                 (d.evidenceBits & DEAUTH_META_UNPROTECTED_SEEN) ? 1u : 0u);
+                 (d.evidenceBits & DEAUTH_META_UNPROTECTED_SEEN) ? 1u : 0u,LocationLabel::text(d.locationKey));
     } else {
         snprintf(line, sizeof(line),
-                 "%lu,%s,%d,%s,%u,%s,%s\n",
+                 "%lu,%s,%d,%s,%u,%s,%s,location=%s\n",
                  (unsigned long)millis(), detectionTypeName(d.type), d.rssi, mac,
-                 d.channel, vendorSafe, nameSafe);
+                 d.channel, vendorSafe, nameSafe,LocationLabel::text(d.locationKey));
     }
-    if (f.print(line) != strlen(line) && _writeErrors != UINT32_MAX) ++_writeErrors;
-    f.close();
+    size_t at=strlen(line);if(at&&line[at-1]=='\n'){--at;snprintf(line+at,sizeof line-at,",session=%lu,epoch=%lu,time=%s\n",(unsigned long)_session,(unsigned long)(Clock::trusted()?Clock::nowEpoch():0),Clock::trusted()?"trusted":"unset");}
+    bool ok=f.print(line)==strlen(line);
+    if(!ok && _writeErrors!=UINT32_MAX)++_writeErrors;
+    f.close();return ok;
 }
 
 void SdLog::wipe() {
@@ -227,7 +239,7 @@ void SdLog::wipe() {
     SD.remove("/dnsp-health.log");
     SD.remove("/dnsp-health.old");
     // Walk the root and remove every file this firmware writes. Names are
-    // /squachwatch-YYYYMMDD.log; matching on the prefix takes them all rather
+    // /squachwatch-session-XXXXXXXX.log; matching on the prefix takes them all rather
     // than only today's, which is the whole point of a wipe.
     File dir = SD.open("/");
     if (!dir) return;

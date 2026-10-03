@@ -1,0 +1,2 @@
+STORAGE
+Storage & Recovery shows card status, Backup & Restore, and microSD Recovery: remount, repair folders, or

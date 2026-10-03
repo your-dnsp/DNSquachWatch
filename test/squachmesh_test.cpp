@@ -186,13 +186,13 @@ int main() {
 
     suite("Unknown indices clamp rather than refuse");
     {
-        // Four bits hold 0..15; this build has 10 nicknames and 15 outfits.
+        // Four bits hold 0..15; this build has 10 nicknames and 16 outfits.
         // A peer on newer firmware is a wrong hat, not an attack.
         size_t n = encode(mk(15, 15, 3, nullptr), buf);
-        ck("a payload with out-of-range indices still decodes", decode(buf, n, p));
+        ck("a payload with nickname out-of-range still decodes", decode(buf, n, p));
         ck("nickname lands in range", p.nick < NICK_N);
         ck("outfit lands in range",   p.outfit < OUTFIT_N);
-        ck("the last real outfit is not clamped", OUTFIT_N == 15);
+        ck("the last real outfit is not clamped", OUTFIT_N == 16);
         ck("shades land in range",    p.shade < 4);
     }
 

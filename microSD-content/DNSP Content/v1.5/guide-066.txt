@@ -1,0 +1,2 @@
+WI-FI AT BOOT
+Saved Wi-Fi joins at boot with Update Check off or PIN locked. Time and location sync, then scanning resumes.

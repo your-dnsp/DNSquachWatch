@@ -79,6 +79,7 @@ enum class MatchEvidence : uint8_t {
 };
 
 struct Detection {
+    uint32_t       locationKey = 0; // immutable label ID captured with this observation
     uint8_t        mac[6];
     int8_t         rssi;
     uint8_t        channel;        // 0 if N/A
@@ -141,6 +142,7 @@ struct Detection {
 inline const char* vendorText(const Detection& d) { return d.vendor ? d.vendor : ""; }
 
 enum class AppState : uint8_t {
+    LOCATION_LABEL = 240, LOCATION_EDIT = 241, REMINGTON = 242,
     BOOT     = 0,
     CLEAR    = 1,
     ALERT    = 2,

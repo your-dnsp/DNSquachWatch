@@ -1,3 +1,4 @@
+#include "integer_scan.h"
 // SquachWatch-CYD — wall-clock time. See clock.h.
 #include "clock.h"
 #include "serial_flush.h"
@@ -17,6 +18,15 @@
 #include "ui_clear.h"    // PACE, the mascot step clock
 #include "draw_band.h"   // BAND, the 3.5in row gate
 #include "squachy.h"     // TEMPO, his durations
+#if SQUACH_LORA
+#include "lora_sniffer.h"
+#endif
+
+// RUNTIME: main.cpp lists how long the last few boots ran.
+volatile bool g_consoleRuntime = false;
+#if defined(ARDUINO_ARCH_ESP32) && !defined(TWATCH_S3)
+extern volatile bool g_consoleCharge;   // main.cpp: CHARGE, the CYDs' charge mode
+#endif
 
 // PRIM, on every build: main.cpp runs the primitive benchmark on its next pass.
 extern volatile bool g_benchPrimNow;
@@ -49,6 +59,8 @@ extern volatile bool g_benchUpdateStop;
 // INVERT and ROT: the colour-check toggles and the corner rotate button,
 // from the console, for bringing up a panel nobody can read yet.
 extern volatile bool g_consoleInvert;
+extern volatile bool g_consoleXyzzy;
+extern volatile bool g_consoleLegend;
 extern volatile bool g_consoleWatchTest;
 extern volatile bool g_consoleRotate;
 extern volatile bool g_consoleBatt;
@@ -500,7 +512,7 @@ void pollSerial() {
         }
         if (strncasecmp(line, "INTERVAL ", 9) == 0) {
             unsigned ms = 0, win = 0;
-            if (sscanf(line + 9, "%u %u", &ms, &win) == 2) {
+            if (DNSP_INTEGER_SCAN(line + 9, "%u %u", &ms, &win) == 2) {
                 setScanInterval((uint16_t)ms, (uint8_t)win);
                 Serial.printf("[scan] interval %u ms, window %u ms from the next restart\n", ms, win);
             }
@@ -515,7 +527,7 @@ void pollSerial() {
             // look, set from the bench, so its frame time can be measured for
             // each without a finger on the glass.
             int f = -1, z = -1, b = -1;
-            if (sscanf(line + 6, "%d %d %d", &f, &z, &b) == 3 && f >= 0 && f < 2 && z >= 0 && z < 3 && b >= 0 && b < 7) {
+            if (DNSP_INTEGER_SCAN(line + 6, "%d %d %d", &f, &z, &b) == 3 && f >= 0 && f < 2 && z >= 0 && z < 3 && b >= 0 && b < 7) {
                 for (int g = 0; g < 2 && Settings::clockFont() != f; g++)     Settings::cycleClockFont();
                 for (int g = 0; g < 3 && Settings::clockSize() != z; g++)     Settings::cycleClockSize();
                 for (int g = 0; g < 7 && Settings::clockBackdrop() != b; g++) Settings::cycleClockBackdrop();
@@ -531,6 +543,8 @@ void pollSerial() {
             continue;
         }
         if (strcasecmp(line, "INVERT") == 0) { g_consoleInvert = true; continue; }
+        if (strcasecmp(line, "XYZZY") == 0)  { g_consoleXyzzy = true; continue; }
+        if (strcasecmp(line, "LEGEND") == 0) { g_consoleLegend = true; continue; }
         if (strcasecmp(line, "WATCHTEST") == 0) { g_consoleWatchTest = true; continue; }
         if (strcasecmp(line, "ROT") == 0)    { g_consoleRotate = true; continue; }
         if (strcasecmp(line, "BATT") == 0)    { g_consoleBatt = true; continue; }
@@ -546,6 +560,13 @@ void pollSerial() {
             Serial.printf("[radio] duty -> %s\n", Settings::radioDutyName(Settings::radioDutyRaw()));
             continue;
         }
+#if SQUACH_LORA
+        if (Lora::console(line)) continue;
+#endif
+        if (strcasecmp(line, "RUNTIME") == 0) { g_consoleRuntime = true; continue; }
+#if defined(ARDUINO_ARCH_ESP32) && !defined(TWATCH_S3)
+        if (strcasecmp(line, "CHARGE") == 0) { g_consoleCharge = true; continue; }
+#endif
 #if defined(ARDUINO_ARCH_ESP32)   // the radios themselves: nothing to ask in the emulator
         if (strcasecmp(line, "RADIO HEAL") == 0) { g_consoleHeal = true; continue; }
         if (strcasecmp(line, "RADIO FULLCAL") == 0) {

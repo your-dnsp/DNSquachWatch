@@ -57,7 +57,7 @@ static const size_t LEN_MAX     = LEN_NAMED;
 // The appearance word. Field order matches the byte map in the plan doc.
 //
 //   bits 12..15  nickname index   (4)  -- 10 in use
-//   bits  8..11  outfit index     (4)  -- 15 in use
+//   bits  8..11  outfit index     (4)  -- 16 in use, which is all of them
 //   bits  6..7   shades index     (2)  --  4 in use
 //   bit      5   custom-name flag
 //   bits  0..4   spare            (5)
@@ -72,7 +72,7 @@ static const size_t LEN_MAX     = LEN_NAMED;
 // 14 when the shark suit made it 15, and every visiting shark was folded
 // back to index 0 -- NONE -- on arrival.
 static const uint8_t  NICK_N   = 10;
-static const uint8_t  OUTFIT_N = 15;
+static const uint8_t  OUTFIT_N = 16;
 static const uint8_t  SHADE_N  = 4;
 
 static const uint8_t  NICK_SHIFT   = 12, NICK_BITS   = 4;

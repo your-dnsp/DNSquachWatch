@@ -1,0 +1,2 @@
+WELCOME
+DNSquachWatch is DNSP's modified SquachWatch firmware. This optional tour stays in DNSP's Tools.

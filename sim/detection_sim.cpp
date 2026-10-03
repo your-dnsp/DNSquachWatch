@@ -22,7 +22,7 @@
 // ---- SdLog: no card, ever -------------------------------------------
 void SdLog::describe(char* out, size_t cap) { snprintf(out, cap, "No mounted microSD card. The desktop emulator has no card hardware."); }
 bool SdLog::begin() { _ready = false; return false; }
-void SdLog::logEvent(const Detection&) {}
+bool SdLog::logEvent(const Detection&) {return false;}
 void SdLog::tick() {}
 bool SdLog::safeEnd(){_ready=false;return true;}
 void DetectionEngine::beginShutdown(){_stopping.store(true);}

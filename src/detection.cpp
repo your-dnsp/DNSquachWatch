@@ -1,5 +1,7 @@
 // SquachWatch-CYD — DetectionEngine implementation
 #include "detection.h"
+static portMUX_TYPE s_sdMux = portMUX_INITIALIZER_UNLOCKED;
+#include "location_label.h"
 #include "ble_advert_fields.h"
 #include "research.h"
 #include "field_tools.h"
@@ -1217,10 +1219,7 @@ void DetectionEngine::loop() {
     decayChannelActivity();
     saveLifetime(millis());
     drainBlackBox(millis());
-    if (_sdQTail != _sdQHead) {
-        _sd.logEvent(_sdQ[_sdQTail]);
-        _sdQTail = (uint8_t)((_sdQTail + 1) % SD_Q_CAP);
-    }
+    drainSd(millis());
     _sd.logPressure(alerts.dropped(), _blePending.dropped());
     _sd.tick();
     ScanProfile::tick(millis(),wifiFramesSeen(),advertsSeen(),_channelSweeps,_storedEvents,
@@ -1405,6 +1404,7 @@ void DetectionEngine::processDeauthQ() {
                 const uint8_t slot = (_logHead + LOG_CAP - 1 - i) % LOG_CAP;
                 Detection& row = _log[slot];
                 if (row.type != DetectionType::DEAUTH || memcmp(row.mac, burst.source, 6) != 0) continue;
+                row.locationKey=LocationLabel::currentKey();
                 row.prevRssi  = row.rssi;
                 row.rssi      = d.rssi;
                 row.channel   = d.channel;
@@ -1458,6 +1458,7 @@ void DetectionEngine::postBle(Detection d) {
 }
 
 void DetectionEngine::recordObservation(Detection d) {
+    d.locationKey=LocationLabel::currentKey();
     // Disabled types (Settings > DETECTION FILTER) are dropped here,
     // before the dedupe/merge below -- that merge branch re-activates
     // and re-alerts on an already-logged device without ever reaching
@@ -1474,6 +1475,7 @@ void DetectionEngine::recordObservation(Detection d) {
             _log[slot].type == d.type) {
             const bool returning = !_log[slot].active;
             const bool notify = mergeObservation(_log[slot], d, millis());
+            _log[slot].locationKey=d.locationKey;
             Bingo::note(d.type);
             Dex::note(d.type, d.rssi);
             Regulars::note(d.mac, d.type);
@@ -1986,7 +1988,8 @@ void DetectionEngine::processWiFiQ() {
     }
 }
 
-void DetectionEngine::pushLog(const Detection& d) {
+void DetectionEngine::pushLog(const Detection& incoming) {
+    Detection d=incoming;d.locationKey=LocationLabel::currentKey();
     if (!appendLive(d)) return;
     if(d.channel==0 && (uint8_t)d.type<SpamWatch::TYPES)_newBle[(uint8_t)d.type]++;
     // Counted here, on the Bluetooth host task, and written to flash from
@@ -1997,8 +2000,11 @@ void DetectionEngine::pushLog(const Detection& d) {
     _lifetimeDirty = true;
     Bingo::note(d.type);
     Dex::note(d.type, d.rssi);
+    portENTER_CRITICAL(&s_sdMux);
     const uint8_t next = (uint8_t)((_sdQHead + 1) % SD_Q_CAP);
     if (next != _sdQTail) { _sdQ[_sdQHead] = d; _sdQHead = next; }
+    else ++_sdDropped;
+    portEXIT_CRITICAL(&s_sdMux);
     queueBlackBox(d, false);
 }
 
@@ -2016,6 +2022,7 @@ void DetectionEngine::queueBlackBox(const Detection& d, bool again) {
         q.type  = d.type;
         q.again = again;
         q.ms    = millis();
+        q.locationKey=d.locationKey;
         _bbQHead = next;
     }
     portEXIT_CRITICAL(&s_bbMux);
@@ -2050,7 +2057,8 @@ void DetectionEngine::drainBlackBox(uint32_t now) {
     for (uint8_t i = 0; i < _logCount; i++) {
         const Detection& d = _log[(_logHead + LOG_CAP - 1 - i) % LOG_CAP];
         if (d.type == q.type && memcmp(d.mac, q.mac, 6) == 0) {
-            BlackBox::noteDetection(d, q.again);
+            Detection saved=d;saved.locationKey=q.locationKey;
+            BlackBox::noteDetection(saved, q.again);
             return;
         }
     }
@@ -2124,6 +2132,19 @@ const char* macFmt(const uint8_t* mac) {
 }
 
 
+// Three attempts, spaced 500ms, then retire with a counted loss. Internal
+// history remains the recovery source; no unlimited RAM backlog is possible.
+void DetectionEngine::drainSd(uint32_t now){
+ if(!_sdRetry.due(now))return;
+ Detection event;bool have;
+ portENTER_CRITICAL(&s_sdMux);have=_sdQTail!=_sdQHead;if(have)event=_sdQ[_sdQTail];portEXIT_CRITICAL(&s_sdMux);
+ if(!have)return;
+ bool mounted=_sd.ready();bool ok=mounted&&_sd.logEvent(event);
+ if(!_sdRetry.retire(ok,mounted,now))return;
+ if(!ok)++_sdDropped;
+ portENTER_CRITICAL(&s_sdMux);_sdQTail=(uint8_t)((_sdQTail+1)%SD_Q_CAP);portEXIT_CRITICAL(&s_sdMux);
+}
+
 // Shutdown owns the main task after entry. File writes are synchronous and
 // every SdLog/Research write closes its File before this routine advances.
 void DetectionEngine::beginShutdown() {
@@ -2135,11 +2156,7 @@ void DetectionEngine::beginShutdown() {
     processDeauthQ();
 }
 bool DetectionEngine::shutdownTick() {
-    if (_sdQTail != _sdQHead) {
-        _sd.logEvent(_sdQ[_sdQTail]);
-        _sdQTail = (uint8_t)((_sdQTail+1)%SD_Q_CAP);
-        return false;
-    }
+    if (_sdQTail != _sdQHead) {drainSd(millis());return false;}
     BlackBoxQ q;
     bool have;
     portENTER_CRITICAL(&s_bbMux);
@@ -2149,7 +2166,7 @@ bool DetectionEngine::shutdownTick() {
     if (have) {
         for (uint8_t i=0;i<_logCount;i++) {
             const Detection& d=_log[(_logHead+LOG_CAP-1-i)%LOG_CAP];
-            if(d.type==q.type&&!memcmp(d.mac,q.mac,6)){BlackBox::noteDetection(d,q.again);break;}
+            if(d.type==q.type&&!memcmp(d.mac,q.mac,6)){Detection saved=d;saved.locationKey=q.locationKey;BlackBox::noteDetection(saved,q.again);break;}
         }
         return false;
     }

@@ -1,6 +1,7 @@
 // SquachWatch-CYD — the WiFi password keyboard. See include/ui_wifipass.h.
 #include "ui_wifipass.h"
 #include "theme.h"
+#include "privacy.h"
 #include <Arduino.h>
 #include <stdio.h>
 #include <string.h>
@@ -32,6 +33,8 @@ uint8_t  s_len     = 0;
 bool     s_shift   = false;
 bool     s_sym     = false;
 bool     s_show    = false;
+bool s_textMode=false;
+uint8_t s_limit=PASS_MAX;
 uint32_t s_typedAt = 0;               // the last character shows for a moment
 WifiPassResult s_result = WifiPassResult::NONE;
 
@@ -164,7 +167,7 @@ void type(char ch, uint32_t now) {
         case K_OK:    if (s_len) s_result = WifiPassResult::OK; break;
         case K_NONE:  break;
         default:
-            if (s_len < PASS_MAX) { s_buf[s_len++] = ch; s_buf[s_len] = '\0'; s_typedAt = now; }
+            if (s_len < s_limit) { s_buf[s_len++] = ch; s_buf[s_len] = '\0'; s_typedAt = now; }
             break;
     }
 }
@@ -260,12 +263,13 @@ void drawAll(TFT_eSPI& t, uint32_t now) {
     t.setTextSize(1);
     t.setTextColor(Theme::VAPOR_PINK, Theme::BG);
     t.setCursor(BACK_X + BACK_W + 8, BACK_Y + 1);
-    t.print("PASSWORD FOR");
+    t.print(s_textMode?"LOCATION LABEL":"PASSWORD FOR");
     t.setTextColor(Theme::CYAN, Theme::BG);
     t.setCursor(BACK_X + BACK_W + 8, BACK_Y + 11);
     char ssid[40];
     const int maxChars = (w - (BACK_X + BACK_W + 8) - MARGIN) / t.textWidth("M");
-    snprintf(ssid, sizeof ssid, "%.*s", maxChars > 32 ? 32 : maxChars, s_ssid);
+    char pv[40];
+    snprintf(ssid, sizeof ssid, "%.*s", maxChars > 32 ? 32 : maxChars, Privacy::name(s_ssid, pv, sizeof pv));
     t.print(ssid);
     drawField(t, w, now);
     drawShow(t, w);
@@ -276,6 +280,7 @@ void drawAll(TFT_eSPI& t, uint32_t now) {
 }  // namespace
 
 void uiWifiPassInit(TFT_eSPI& t, const char* ssid) {
+    s_textMode=false;s_limit=PASS_MAX;
     strncpy(s_ssid, ssid ? ssid : "", sizeof s_ssid - 1);
     s_ssid[sizeof s_ssid - 1] = '\0';
     uiWifiPassClear();
@@ -288,10 +293,15 @@ void uiWifiPassInit(TFT_eSPI& t, const char* ssid) {
     t.fillRect(0, 0, t.width(), t.height(), Theme::BG);
 }
 
-void uiWifiPassTick(TFT_eSPI& t, uint32_t now) {
+void uiWifiTextInit(TFT_eSPI& t,const char* title,const char* initial){
+    uiWifiPassInit(t,title);s_textMode=true;s_show=true;s_limit=24;
+    snprintf(s_buf,sizeof s_buf,"%.24s",initial?initial:"");s_len=strlen(s_buf);s_full=true;
+}
+
+void uiWifiPassTick(TFT_eSPI& t, uint32_t now, bool repaint) {
     const int w = t.width(), h = t.height();
     layout(w, h);
-    if (s_full || now - s_initAt < SETTLE_MS) { drawAll(t, now); return; }
+    if (repaint || s_full || now - s_initAt < SETTLE_MS) { drawAll(t, now); return; }
     // Every key when the page or SHIFT changes: the labels are different
     // and the SHIFT key lights while it is on.
     if (s_drawnShift != s_shift || s_drawnSym != s_sym) drawKeys(t);
@@ -342,6 +352,8 @@ void uiWifiPassTouch(int x, int y, uint32_t now, WifiPassTouch phase) {
     }
 }
 
+void uiWifiPassRedrawAll() { s_full = true; }
+
 WifiPassResult uiWifiPassResult() { return s_result; }
 const char*    uiWifiPassText()   { return s_buf; }
 const char*    uiWifiPassSsid()   { return s_ssid; }
@@ -350,4 +362,3 @@ void uiWifiPassClear() {
     memset(s_buf, 0, sizeof s_buf);
     s_len = 0;
 }
-

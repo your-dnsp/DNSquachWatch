@@ -208,7 +208,7 @@ static void crashReportInit() {
     if(panicked || r==ESP_RST_BROWNOUT) {
         CrashReports::Record report;
         report.resetReason=uint32_t(r);report.crash=g_lastCrash;
-        snprintf(report.firmware,sizeof report.firmware,"DNSP v1.1.2");
+        snprintf(report.firmware,sizeof report.firmware,"DNSP v1.5");
         if(g_crumb.magic==CRUMB_MAGIC){report.crash.valid=true;report.crash.uptimeMs=g_crumb.uptimeMs;report.crash.heapFree=g_crumb.heapFree;report.crash.heapBlock=g_crumb.heapBlock;report.crash.screen=g_crumb.screen;report.lightReading=g_crumb.light;report.backlightDuty=g_crumb.duty;report.ldr=g_crumb.ldr;report.displayMhz=g_crumb.displayMhz;}
         if(!CrashReports::enqueue(report))Serial.println("[crash] Could not queue report; see core dump / BlackBox.");
     }
@@ -390,12 +390,17 @@ static void drawCrashCard(TFT_eSPI& t) {
 #endif
 #include "touch_cal.h"
 #include "settings.h"
+#include "privacy.h"
+#include "card_content.h"
 #include "signatures.h"
 #include "ota_core.h"
 #include "ota_ble.h"
 #include "ota_wifi.h"
 #include "ui_update.h"
 #include "ui_wifipass.h"
+#include "location_label.h"
+#include "ui_location.h"
+#include "remington.h"
 #include "ui_sysprops.h"
 #if SQUACH_MESH
 #endif
@@ -958,6 +963,7 @@ static bool readTouchRaw(int16_t& a, int16_t& b) {
 // coming back from a reboot into a dimmed screen with no memory of why would
 // look exactly like a broken backlight.
 static bool s_screenDimmed = false;
+static bool s_bootDark = false; // manual CYD screen-off overrides automatic brightness
 #if defined(TWATCH_S3)
 // A watch goes dark, not dim. When the screen timeout lands, the backlight
 // goes off and the ST7789 is put to sleep (DISPOFF, SLPIN: about a milliamp
@@ -986,7 +992,7 @@ static void snapshotLight(uint16_t& light,uint8_t& duty,bool& enabled,uint8_t& m
     light=s_lightReading;duty=s_backlightDuty;enabled=Settings::ambientLight();mhz=Settings::displayMhz();
 }
 static void applyBrightness() {
-    uint8_t duty = s_screenDimmed ? Settings::dimLevel() : s_backlightDuty;
+    uint8_t duty = s_bootDark ? 0 : s_screenDimmed ? Settings::dimLevel() : s_backlightDuty;
 #if defined(TWATCH_S3)
     if (s_screenDimmed) {
         if (!s_panelAsleep) {
@@ -1129,6 +1135,9 @@ static uint8_t s_confirmMac[6];
 // and name off the log entry, which is what device_info.cpp matches on. The
 // alert keeps its own copy for when its MORE INFO is tapped.
 static char s_confirmVendor[16] = "";
+static const char* privLabel(const char* in){static char b[40];return Privacy::name(in,b,sizeof b);}
+static const char* privName(const char* in){static char b[40];return Privacy::name(in,b,sizeof b);}
+
 static char s_confirmName[sizeof(Detection::name)]     = "";
 static char s_alertVendor[16]   = "";
 static char s_alertName[sizeof(Detection::name)]       = "";
@@ -1177,41 +1186,8 @@ static bool s_showWhy = false;
 static bool s_showFlockResources = false;
 static bool s_dnspStorage = false;
 static uint8_t s_dnspPage = 0;
-static char s_sdDescription[320];
-struct DnspGuidePage { const char* title; const char* body; };
-static const DnspGuidePage DNSP_GUIDE[] = {
-    {"WELCOME", "DNSquachWatch v1.1.2 is DNSP-modified firmware based on SquachWatch 1.25.0. This tour is optional and stays in DNSP's Tools."},
-    {"HOME & SETTINGS", "The home screen shows Squachy and recent activity. Tap the menu icon for every feature. LOG opens retained detections."},
-    {"ALERTS", "Alerts & Detection controls popup length, confidence, filters and snoozing. Stored Alert History shows every retained detection; Rules has its own incidents."},
-    {"MATCH EVIDENCE", "A match is a clue, not proof of a camera or owner. Tap WHY THIS MATCHED. LOW means weak evidence. RSSI is not distance."},
-    {"USER LABELS", "Hold a current LOG or raw-scan row to confirm or correct its type and add an optional subtag. Every saved label exports evidence to microSD."},
-    {"RULES", "Rules combine observations. Sketchy Environment warns when an ALPR clue and deauthentication occur within 90 seconds; it does not prove a link."},
-    {"WATCH & HUNT", "WATCH keeps one target prominent. HUNT helps revisit a selected clue. Neither confirms identity, ownership, direction or intent."},
-    {"QUIETING ALERTS", "SNOOZE quiets one device until restart. SNOOZE ALL pauses popups for 10 minutes. IGNORE persists. Logging may continue."},
-    {"FLOCK & ALPR", "ALPR matches are evidence-based leads. Verify visually before reporting. Open the resources panel for ALPR Radar and DeFlock."},
-    {"FPV & DRONES", "FPV & Drones contains a pit board, Remote ID readings, focused search, reception diagnostics, capture and equipment limits."},
-    {"REMOTE ID LIMITS", "This board hears 2.4 GHz Wi-Fi and legacy BLE. It cannot hear 5.8 GHz video or all BLE 5 broadcasts. No match is not clearance."},
-    {"RESEARCH & DATA", "Research & Data contains the research log, radio activity map, session reports, own telemetry and user-pinned sensors."},
-    {"RAW DATA", "RAW research and drone capture can include identifiers and positions. Review before sharing. Redacted exports are safer for general use."},
-    {"STORAGE", "Storage & Recovery shows card status, Backup & Restore, and microSD Recovery: remount, repair folders, or confirmed quick format."},
-    {"BACKUP & RESTORE", "Backups include current LOG, readable history, labels, filters, rules, profiles and active targets. PINs and secrets stay out. Keep the matching release kit."},
-    {"DISPLAY", "Display & Appearance controls theme, background, brightness, Auto Brightness, glitch effects, color order and rotation lock."},
-    {"SYSTEM", "System holds display speed, touch and color checks, language, credits, diagnostics, health exports, updates and troubleshooting."},
-    {"SQUACHY", "Squachy contains size, outfits, pets, sunglasses, banter, Bingo, the Squachy-Dex, diary and original character features."},
-    {"DESK MODE", "Desk Mode provides the clock display, background and clock choices, time zone, and supported Squachy visitors."},
-    {"DNSP'S TOOLS", "DNSP's Tools contains Squach Snacks, Screen Light, Coin & Dowsing Rod, Timer & Counter, Pocket Reader, demos and this tour."},
-    {"SCREEN LIGHT", "Choose white, amber, rainbow, caution, SOS or a short Morse message. Double-tap anywhere to stop the light."},
-    {"ACCESSIBILITY", "Accessibility changes contrast, motion, handedness and control size. Hold the current language button for 3 seconds for Hebrew."},
-    {"PIN LOCK", "Security can require a PIN after boot or lock. Turning PIN Lock off asks for the current PIN. Keep a safe copy outside the device."},
-    {"WIPE AFTER 10", "Wipe After 10 means ten wrong unlock attempts erase protected device data. Read and confirm its warning before enabling it."},
-    {"DURESS PIN", "Optional Duress appears after PIN Lock. It works only on the lock screen, attempts erasure, then starts persistent PIXEL TIDE."},
-    {"DURESS LIMITS", "microSD erasure is best effort and deleted data may be recoverable. Reflashing alone does not clear PIXEL TIDE or saved state."},
-    {"FORGOT PIN", "Forgot PIN uses a deliberate 3-2-1 confirmation before erasing protected settings. Cancel if you did not intend a reset."},
-    {"SAFE MODE", "Hold the screen while powering on for Safe Mode. It can also start after repeated short boots. Use it to recover display or microSD."},
-    {"POWER & UPDATES", "Power offers Safe Shutdown and Reboot. An upstream update replaces DNSP firmware; reinstall DNSP only from a matching image."},
-    {"YOU'RE READY", "Start with Alerts & Detection, then explore. Use help panels when unsure, export useful records, and treat every radio match as a clue."}
-};
-static constexpr uint8_t DNSP_GUIDE_COUNT=sizeof(DNSP_GUIDE)/sizeof(DNSP_GUIDE[0]);
+static union { char description[320]; CardContent::Guide guide; } s_infoText;
+static constexpr uint8_t DNSP_GUIDE_COUNT=CardContent::guideCount;
 
 // The current alert's target, captured in enterAlert(). Kept separate
 // from the s_confirm* trio above on purpose: those belong to LOG's
@@ -1334,6 +1310,14 @@ static void restoreFrameBuffer();
 // to be honoured: while locked, "home" is the lock screen.
 // An ALERT opened from the desk's small card goes back to the desk when it
 // is dismissed, not to CLEAR. Set in enterAlert(), spent here.
+static bool wifiReturnPending=false;
+// Cancellation is asynchronous. Do not restart channel hopping while the
+// station task still owns Wi-Fi or restore the display into the TLS heap.
+static void finishWifiMode() {
+    OtaWifi::end();
+    if(OtaWifi::settled())engine.stopUpdateRadio();
+    else wifiReturnPending=true;
+}
 static bool s_backToDesk = false;
 static bool s_backToBreakout = false;
 static bool s_watchGameArmed = true;
@@ -1633,6 +1617,7 @@ static void enterInvite() {
 }
 
 // INVERT and ROT on the console -- see clock.cpp. Consumed in loop().
+volatile bool g_consoleXyzzy=false, g_consoleLegend=false, g_consoleCharge=false;
 volatile bool g_consoleInvert = false;
 volatile bool g_consoleRotate = false;
 volatile bool g_consoleWatchTest = false;
@@ -1700,7 +1685,7 @@ static void autoUpdateTick(uint32_t now) {
             // The nudge said newer; the site disagrees. Nothing to do, and
             // Bluetooth is already gone, so this restarts the board.
             s_auto.active = false;
-            if (!OtaWifi::end()) { engine.stopUpdateRadio(); enterClear(); }
+            { finishWifiMode(); enterClear(); }
         } else {
             MeshTalk::markNudged();
             lendFrameToDownload();
@@ -1711,8 +1696,7 @@ static void autoUpdateTick(uint32_t now) {
         if (!s_auto.failAt) s_auto.failAt = now;
         else if (now - s_auto.failAt > 60000) {
             s_auto.active = false;
-            if (!OtaWifi::end()) { engine.stopUpdateRadio(); enterClear(); }
-            else uiUpdateInit(*canvas);
+            { finishWifiMode(); enterClear(); }
         }
     } else if (ws == OtaWifi::State::OFF && !OtaCore::restartPending()) {
         s_auto.active = false;      // somebody tapped CANCEL
@@ -1754,7 +1738,7 @@ static void lendFrameToDownload() {
     s_frameLent = true;
 }
 static void restoreFrameBuffer() {
-    if (!s_frameLent) return;
+    if (!s_frameLent || !OtaWifi::settled()) return;
     s_frameLent = false;
     if (frameBufferOk) return;
     frame.setColorDepth(8);
@@ -2481,7 +2465,7 @@ static void printBootBanner() {
     // "v1.5.16-dirty" and a commit past a tag as "v1.5.16-3-g554330d", both
     // of which walk the border off the end of the line. Truncated here only;
     // the boot screen and the diary still show the version in full.
-    Serial.println("DNSquachWatch v1.1.2 by DNSP | SquachWatch base 1.25.0");
+    Serial.println("DNSquachWatch v1.5 by DNSP | SquachWatch base 1.27.0");
     Serial.printf ("║  |   -   |     TALKING SASQUACH  .  %-13.13s║\n", FIRMWARE_VERSION);
     // Same %-34s trick as the version line above: the reason is variable
     // length ("interrupt watchdog" is the longest at eighteen characters)
@@ -2598,6 +2582,9 @@ void setup() {
 
     // Before anything else can allocate: the breadcrumb has to be read out
     // while it is still the previous life's, not this one's.
+#if defined(ARDUINO_ARCH_ESP32) && !defined(TWATCH_S3)
+    pinMode(0,INPUT_PULLUP);
+#endif
     crashReportInit();
     Serial.begin(SERIAL_BAUD);
 #if defined(TWATCH_S3)
@@ -2700,12 +2687,11 @@ void setup() {
     // (UPDATE OVER WIFI). And before the frame buffer, too: the TLS
     // handshake wants about 40 KB in one piece, and with the buffer in place
     // the largest block is 35 KB -- measured, the first try returned -1.
-    // Tells, never installs. Skipped with no saved network, with the board
-    // locked, or with UPDATE CHECK off.
+    // Saved networks join even with PIN locked or Update Check disabled.
+    // Only the manifest lookup follows Update Check; boot never installs.
     bool bootCheckRan = false;
-    if (takeBootCheckSkip()) {
-        Serial.println("[ota] boot check skipped: the frame buffer failed after the last one");
-    } else if (Settings::updateCheck() && !Security::locked() && OtaCore::available() && OtaWifi::hasSaved()) {
+    const bool skipUpdateCheck=takeBootCheckSkip();
+    if(OtaWifi::hasSaved()){
         bootCheckRan = true;
         // The backlight down first, for the same reason it goes down at the
         // radio start below: WiFi's RF calibration plus a full backlight is
@@ -2716,10 +2702,10 @@ void setup() {
         tft.setTextSize(1);
         tft.setTextWrap(false);
         tft.setTextColor(Theme::CYAN, Theme::BG);
-        const char* m = "CHECKING FOR UPDATES...";
+        const char* m = Settings::updateCheck() ? "CONNECTING / CHECKING..." : "CONNECTING SAVED WI-FI...";
         tft.setCursor((tft.width() - tft.textWidth(m)) / 2, tft.height() / 2 - 4);
         tft.print(m);
-        OtaWifi::bootCheck(9000);
+        OtaWifi::bootCheck(9000, Settings::updateCheck() && !skipUpdateCheck);
         tft.fillScreen(Theme::BG);
     }
 
@@ -2916,6 +2902,8 @@ void setup() {
     }
 #endif
     UserLabels::begin();
+    LocationLabel::begin();
+    LocationLabel::wifi(OtaWifi::lastAuthenticatedNetwork());
     UserLabels::setExportSink(UserLabels::storageExport);
     SketchyRule::begin();
     engine.init();
@@ -3164,7 +3152,7 @@ static void openSettingsRow(SettingsRow row,uint32_t now,int gestureStartX) {
                         case SettingsRow::BACKGROUND: Settings::cycleBackground(); break;
                         case SettingsRow::BACKGROUND_LOCK: Settings::toggleBackgroundLocked(); break;
                         case SettingsRow::UPDATE_CHECK:    Settings::toggleUpdateCheck();     break;
-                        case SettingsRow::TIME_ZONE:       Settings::cycleTimeZone();         break;
+                        case SettingsRow::TIME_ZONE: Settings::stepTimeZone(gestureStartX < tft.width()/2 ? -1 : 1); Settings::markTimeZoneChosen(); break;
                         case SettingsRow::DISPLAY_SPEED:
                             // Rendering has completed; the next SPI transaction
                             // uses the new write clock. Read/touch/flash clocks stay fixed.
@@ -3194,6 +3182,10 @@ static void openSettingsRow(SettingsRow row,uint32_t now,int gestureStartX) {
                             BreakoutUI::open(now);state=AppState::BREAKOUT;transitionStart=now;break;
                         case SettingsRow::FIELD_TOOLS: uiSettingsOpenPage(SettingsPage::FPV);break;
                         case SettingsRow::SCREEN_LIGHT: FieldUI::openPage(FieldUI::SCREEN_LIGHT);state=AppState::FIELD_TOOLS;transitionStart=now;break;
+                        case SettingsRow::REMINGTON: state=AppState::REMINGTON;transitionStart=now;Remington::open();break;
+                        case SettingsRow::AUTO_HISTORY: Settings::toggleAutoHistory(); break;
+                        case SettingsRow::DEVICE_RESEARCH: state=AppState::LOG; transitionStart=now; Theme::showToast("DEVICE RESEARCH", "Hold a row to label / export", Theme::CYAN); break;
+                        case SettingsRow::SET_LOCATION: state=AppState::LOCATION_LABEL;transitionStart=now;break;
                         case SettingsRow::RANDOMIZER: FieldUI::openPage(FieldUI::RANDOMIZER);state=AppState::FIELD_TOOLS;transitionStart=now;break;
                         case SettingsRow::TIMER_COUNTER: FieldUI::openPage(FieldUI::TIMER_COUNTER);state=AppState::FIELD_TOOLS;transitionStart=now;break;
                         case SettingsRow::POCKET_READER: FieldUI::openPage(FieldUI::POCKET_READER);state=AppState::FIELD_TOOLS;transitionStart=now;break;
@@ -3211,10 +3203,11 @@ static void openSettingsRow(SettingsRow row,uint32_t now,int gestureStartX) {
                             ResearchUI::open(); state = AppState::RESEARCH; transitionStart = now; break;
                         case SettingsRow::DNSP_GUIDE:
                             if(Field::config.language){FieldUI::openHelp();state=AppState::FIELD_TOOLS;transitionStart=now;break;}
-                            s_dnspStorage = false; s_dnspPage = 0;
+                            s_dnspStorage = false; s_dnspPage = 0; CardContent::reset();
                             state = AppState::DNSP_INFO; transitionStart = now; break;
                         case SettingsRow::SD_STATUS:
-                            engine.sd().describe(s_sdDescription, sizeof s_sdDescription);
+                            engine.sd().describe(s_infoText.description, sizeof s_infoText.description);
+                            {size_t n=strlen(s_infoText.description);snprintf(s_infoText.description+n,sizeof s_infoText.description-n," Queue losses: %lu.",(unsigned long)engine.sdDropped());}
                             s_dnspStorage = true; state = AppState::DNSP_INFO; transitionStart = now; break;
                         case SettingsRow::SNOOZE_ALL:
                             if(AlertSnooze::active(now)){engine.alerts.clear();AlertSnooze::resume();Theme::showToast("ALERTS RESUMED",nullptr,Theme::CYAN);}
@@ -3321,7 +3314,10 @@ static void openSettingsRow(SettingsRow row,uint32_t now,int gestureStartX) {
                         case SettingsRow::BINGO:        enterBingo(); break;
                         case SettingsRow::DEX:          enterDex(); break;
                         case SettingsRow::APPEARANCE:  uiSettingsOpenAppearance(true); break;
-                        case SettingsRow::TOP_HAT:     Settings::toggleTopHat(); break;
+                        case SettingsRow::PRIVACY: Settings::togglePrivacyMode(); Theme::showToast("MASKED MODE", "Screen only; logs stay unmasked", Theme::AMBER); break;
+                        case SettingsRow::CHARGE_MODE: g_consoleCharge=true; break;
+                        case SettingsRow::LAST_RUN: break;
+                        case SettingsRow::AURA:     Settings::toggleAura(); break;
                         // From a sub-page, back to the main list; from the
                         // main list, out.
                         case SettingsRow::BACK:
@@ -3347,6 +3343,8 @@ static uint32_t    s_lastScreenAt   = 0;     // transitionStart of the screen be
 static bool        s_safeSdPage     = false;
 static bool        s_safeUsbInfo    = false;
 static bool        s_safeTouchReset = false;
+
+#include "cyd_charge.inc"
 
 void loop() {
     if(s_duressBoot!=Duress::Boot::NORMAL){duressLoop();return;}
@@ -3397,7 +3395,7 @@ void loop() {
         if(!s_shutdownDone){
             Research::tick(now);DroneWatch::tick(now);
             if(engine.shutdownTick() && Research::settled() && DroneWatch::settled()){
-                s_shutdownFailed=Research::stats().errors!=0 || DroneWatch::stats().capture==DroneWatch::Capture::ERROR;
+                s_shutdownFailed=engine.sdDropped()!=0 || Research::stats().errors!=0 || DroneWatch::stats().capture==DroneWatch::Capture::ERROR;
                 s_shutdownFailed=!engine.sd().safeEnd()||s_shutdownFailed;
                 Bingo::flush();Dex::flush();Regulars::flush();
                 Preferences planned;
@@ -3430,6 +3428,10 @@ void loop() {
     // Cheap and unconditional: available() is a register read, and this
     // is the only way in for the one serial command the firmware takes.
     Clock::pollSerial();
+    runtimeTick(millis());
+#if defined(ARDUINO_ARCH_ESP32) && !defined(TWATCH_S3)
+    if(chargeTick(millis()))return;
+#endif
     uint32_t frameStartUs = micros();
     s_loopsSinceSay++;   // the real loop rate, pacing delays included; on the [frame] line
     FrameProf::begin();
@@ -3469,7 +3471,7 @@ void loop() {
         g_benchUpdateStop = false;
         s_auto.active = false;
         if (OtaWifi::state() != OtaWifi::State::OFF) {
-            if (!OtaWifi::end()) { engine.stopUpdateRadio(); enterClear(); }
+            { finishWifiMode(); enterClear(); }
         }
     }
 #endif
@@ -3524,6 +3526,9 @@ void loop() {
     // lastTouch is still updated here, because that is what actually undims
     // on the next frame -- the touch is being consumed, not ignored.
     static bool s_swallowTouch = false;
+#if defined(ARDUINO_ARCH_ESP32) && !defined(TWATCH_S3)
+    if(s_bootDark&&touchJustDown){s_bootDark=false;s_screenDimmed=false;applyBrightness();lastTouch=now;touchJustDown=false;}
+#endif
     if (s_screenDimmed && touchJustDown) {
         s_swallowTouch = true;
         lastTouch = now;
@@ -3570,6 +3575,8 @@ void loop() {
     OtaCore::tick(now);
     OtaBle::tick(now);
     if (!Research::active() && !Backup::busy() && DroneWatch::settled() && !DroneWatch::focused()) OtaWifi::tick(now);
+    if(wifiReturnPending&&OtaWifi::settled()){wifiReturnPending=false;engine.stopUpdateRadio();restoreFrameBuffer();}
+    LocationLabel::wifi(OtaWifi::lastAuthenticatedNetwork());
     if(state==AppState::CLEAR&&!Security::locked()&&Care::giftDue()){
         Care::consumeGift();CareUI::open(CareUI::Page::WELCOME);state=AppState::CARE;transitionStart=now;
     }
@@ -3626,10 +3633,14 @@ void loop() {
     if (Security::locked() && state == AppState::RESEARCH) enterLocked();
     if (Research::active() && (Security::locked() || state != AppState::RESEARCH)) Research::stop("Stopped on lock or screen change");
     Research::tick(now);
-    if(Backup::busy()&&(Security::locked()||state!=AppState::CARE))Backup::cancel();
-    if(ReadableLogs::busy()&&!Backup::busy()&&(Security::locked()||(state!=AppState::CARE&&state!=AppState::FIELD_TOOLS)))ReadableLogs::cancel();
+    // Authorized backups continue behind the PIN lock. Only an unlocked navigation cancels.
+    // Cancellation is explicit in Backup UI or destructive/shutdown workflows.
+    if(ReadableLogs::busy()&&!Backup::busy()&&!ReadableLogs::automatic()&&(Security::locked()||(state!=AppState::CARE&&state!=AppState::FIELD_TOOLS)))ReadableLogs::cancel();
+    ReadableLogs::automaticTick(now,engine.sd().ready() && OtaWifi::state()==OtaWifi::State::OFF && OtaBle::state()==OtaBle::State::OFF && !Research::active() && Research::settled() && DroneWatch::settled() && !DroneWatch::focused() && !Backup::busy() && state!=AppState::CARE && state!=AppState::FIELD_TOOLS);
     if(Security::locked()&&ScanProfile::comparing())ScanProfile::stopComparison();
     Backup::tick();
+    static uint32_t sdWarnAt=0,sdWarnErrors=0,sdWarnDrops=0;
+    if((engine.sd().writeErrors()!=sdWarnErrors || engine.sdDropped()!=sdWarnDrops) && now-sdWarnAt>=10000){sdWarnAt=now;sdWarnErrors=engine.sd().writeErrors();sdWarnDrops=engine.sdDropped();Theme::showToast("STORAGE WARNING", "Check microSD status; events may be missing",Theme::AMBER);}
     Field::tick();
     if(Security::locked() || state!=AppState::FIELD_TOOLS || Field::telemetryActive()) {
         DroneWatch::stopCapture();
@@ -3720,6 +3731,8 @@ void loop() {
         }
     }
 #endif
+    if(g_consoleLegend){g_consoleLegend=false;Squachy::previewLegend(!Squachy::legendPreview());}
+    if(g_consoleXyzzy){g_consoleXyzzy=false;Theme::summonXyzzy();}
     if (g_consoleInvert) {
         g_consoleInvert = false;
         Settings::toggleInvert();
@@ -3876,6 +3889,12 @@ void loop() {
         calHoldStart = 0;
     }
 
+    // Count raw touch-down edges, ahead of the normal 200ms menu debounce.
+    // An open background area excludes title, edge-cycling and button zones.
+    if(touchJustDown&&tp.valid&&(state==AppState::CLEAR||state==AppState::DESK)&&
+       Settings::background()==Settings::Background::TOASTERS&&
+       tp.x>=tft.width()/10&&tp.x<tft.width()*9/10&&tp.y>=28&&
+       tp.y<Theme::computeButtonBar(tft.width(),tft.height()).y){Remington::backgroundTap(now);}
     FrameProf::lap(FrameProf::PRE);
     switch (state) {
         case AppState::BOOT: {
@@ -4095,6 +4114,7 @@ void loop() {
             if (Theme::consumeEyeCatch())       Squachy::unlockVoidEye();
             if (Theme::consumeLodgeKnock())     Squachy::unlockParka();
             if (Theme::consumeSharkCatch())     Squachy::unlockShark();
+            if(const uint8_t said=Theme::consumeXyzzy())Squachy::magicWord(said);
     if (Theme::consumePetUnlock())      Squachy::unlockPet();
 
             bool boring = Settings::boringMode();
@@ -4380,14 +4400,14 @@ void loop() {
             const char* alertInfoText = s_showFlockResources
                 ? "Radio evidence does not confirm a camera. If you verify one, report its location to your municipality. For background and reporting resources, open alprradar.com or deflock.org on your phone."
                 : s_showWhy ? DetectionInfo::why(s_alertSnapshot) : s_infoShowingPrimer ? DetectionInfo::rssiConfidencePrimer()
-                                                              : DetectionInfo::explainFor(s_confirmType, s_confirmVendor, s_confirmName, engine);
+                                                              : DetectionInfo::explainFor(s_confirmType, s_confirmVendor, privName(s_confirmName), engine);
             if(Field::config.language){
                 alertInfoText=s_showFlockResources?"Verify a camera visually before reporting it. Open deflock.org/report on your phone.":s_showWhy?Lang::why(s_alertSnapshot):s_infoShowingPrimer?"Signal strength is not distance or direction. Confidence describes the matching evidence.":Lang::detectionNote(s_confirmType);
             }
             // No heading during the primer page -- it's about RSSI/
             // confidence in general, not any one detection type.
             const char* alertInfoTypeName = s_showFlockResources ? "CAMERA RESOURCES" : s_showWhy ? "WHY THIS MATCHED" : s_infoShowingPrimer ? nullptr
-                                          : DetectionInfo::titleFor(s_confirmType, s_confirmVendor, s_confirmName);
+                                          : DetectionInfo::titleFor(s_confirmType, s_confirmVendor, privName(s_confirmName));
             drawTwoBand([&](TFT_eSPI& t, bool advance) { uiAlertTick(t, now, engine, s_infoPending, alertInfoTypeName, alertInfoText, advance); });
             // The finger that opened the card has to lift before the card
             // listens: see s_alertArmed. The auto-dismiss timer below still
@@ -4544,18 +4564,18 @@ void loop() {
             }
             const char* infoText = s_infoShowingPrimer
                                   ? DetectionInfo::rssiConfidencePrimer()
-                                  : DetectionInfo::explainFor(s_confirmType, s_confirmVendor, s_confirmName, engine);
+                                  : DetectionInfo::explainFor(s_confirmType, s_confirmVendor, privName(s_confirmName), engine);
 
             // No heading during the primer page -- it's about RSSI/
             // confidence in general, not any one detection type.
             if(Field::config.language)infoText=s_infoShowingPrimer?"Signal strength is not distance or direction. Confidence describes the matching evidence.":Lang::detectionNote(s_confirmType);
             const char* infoTypeName = s_infoShowingPrimer ? nullptr
-                                     : DetectionInfo::titleFor(s_confirmType, s_confirmVendor, s_confirmName);
+                                     : DetectionInfo::titleFor(s_confirmType, s_confirmVendor, privName(s_confirmName));
             // Nothing on LOG moves by the call -- the note about
             // drawActiveBackground in ui_log.cpp is a comment, not a call.
             drawTwoBand([&](TFT_eSPI& t, bool) {
                 UserLabels::Label userLabel{};const bool userLabeled=UserLabels::lookup(s_confirmMac,userLabel);
-                uiLogTick(t, now, engine, 0, s_confirmPending, s_confirmLabel,
+                uiLogTick(t, now, engine, 0, s_confirmPending, privLabel(s_confirmLabel),
                           s_infoPending, infoTypeName, infoText,
                           engine.isWatched(s_confirmMac, s_confirmIsBle),
                           engine.isHunted(s_confirmMac, s_confirmIsBle),
@@ -4762,7 +4782,7 @@ void loop() {
             drawTwoBand([&](TFT_eSPI& t, bool advance) {
                 UserLabels::Label userLabel{};
                 const bool userLabeled = UserLabels::lookup(s_confirmMac, userLabel);
-                uiRawScanTick(t, now, engine, s_rawScanIsBle, done, s_confirmPending, s_confirmLabel,
+                uiRawScanTick(t, now, engine, s_rawScanIsBle, done, s_confirmPending, privLabel(s_confirmLabel),
                               engine.isWatched(s_confirmMac, s_rawScanIsBle),
                               engine.isHunted(s_confirmMac, s_rawScanIsBle),
                               IgnoreList::contains(s_confirmMac), userLabeled, advance);
@@ -5180,9 +5200,11 @@ void loop() {
                 int netIndex = -1;
                 switch (uiUpdateHitTest(*canvas, tp.x, tp.y, &netIndex)) {
                     case UpdateHit::WIFI_START:
+                        lendFrameToDownload();
                         engine.startUpdateRadio();
                         if (!OtaWifi::begin()) {
                             engine.stopUpdateRadio();
+                            restoreFrameBuffer();
                             Theme::showToast("CAN'T START UPDATE", updateRefusedWhy(), Theme::AMBER);
                         }
                         break;
@@ -5225,7 +5247,7 @@ void loop() {
                             // back, so detection just starts again. It kept
                             // the true-means-restart answer from when an
                             // update cost the board its Bluetooth.
-                            if (!OtaWifi::end()) engine.stopUpdateRadio();
+                            finishWifiMode();
                         } else {
                             OtaBle::end();
                             engine.stopUpdateRadio();
@@ -5233,6 +5255,7 @@ void loop() {
                         uiUpdateInit(*canvas);
                         break;
                     case UpdateHit::BACK:
+                        if(OtaWifi::state()!=OtaWifi::State::OFF)finishWifiMode();
                         enterSettings();
                         uiSettingsOpenPage(SettingsPage::SYSTEM);
                         break;
@@ -5244,13 +5267,40 @@ void loop() {
             }
             break;
         }
+        case AppState::REMINGTON: {
+            drawTwoBand([&](TFT_eSPI& t,bool){Remington::photo(t);});
+            if(touchJustDown&&Remington::tap(now)){returnSettings();}
+            break;
+        }
+        case AppState::LOCATION_LABEL: {
+            drawTwoBand([&](TFT_eSPI& t,bool){LocationUI::draw(t);});
+            if(touchJustDown){const int hit=LocationUI::hit(*canvas,tp.x,tp.y);
+                if(hit==7)returnSettings();
+                else if(hit==1){state=AppState::LOCATION_EDIT;transitionStart=now;uiWifiTextInit(*canvas,"24 CHARS MAX",LocationLabel::currentKey()?LocationLabel::current():"");}
+                else if(hit==2){if(LocationLabel::forgetNetwork(OtaWifi::lastAuthenticatedNetwork()))LocationLabel::clear();else Theme::showToast("COULD NOT CLEAR WI-FI LABEL",nullptr,Theme::AMBER);}
+                else if(hit==8)LocationLabel::rememberNetwork(OtaWifi::lastAuthenticatedNetwork());
+                else if(hit>=3&&hit<=6){const char* presets[]={"Home","Work","Driving","Con"};LocationLabel::set(presets[hit-3]);}
+            }
+            break;
+        }
+        case AppState::LOCATION_EDIT: {
+            lastTouch=now;
+            drawTwoBand([&](TFT_eSPI& t,bool){uiWifiPassTick(t,now,SQW_BANDED_FRAME&&frameBufferOk);});
+            if(touchJustDown)uiWifiPassTouch(tp.x,tp.y,now,WifiPassTouch::DOWN);
+            else if(tp.valid)uiWifiPassTouch(tp.x,tp.y,now,WifiPassTouch::MOVE);
+            else if(touchJustUp)uiWifiPassTouch(tp.x,tp.y,now,WifiPassTouch::UP);
+            const auto result=uiWifiPassResult();
+            if(result!=WifiPassResult::NONE){if(result==WifiPassResult::OK)LocationLabel::set(uiWifiPassText());uiWifiPassClear();state=AppState::LOCATION_LABEL;transitionStart=now;}
+            break;
+        }
         case AppState::WIFI_PASS: {
             // Still inside update mode, with detection paused: the same pin on
             // lastTouch keeps auto-lock from taking the screen mid-password.
             lastTouch = now;
-            // The board redraws only what changed, so it is the same with the
-            // frame buffer and without it (given up for a download).
-            drawTwoBand([&](TFT_eSPI& t, bool) { uiWifiPassTick(t, now); });
+            // Each band is cleared before drawing; incremental keyboard
+            // updates would otherwise leave a black screen after settling.
+            // Direct-to-panel mode can retain the cheaper incremental paint.
+            drawTwoBand([&](TFT_eSPI& t, bool) { uiWifiPassTick(t, now, SQW_BANDED_FRAME && frameBufferOk); });
             if (touchJustDown)    uiWifiPassTouch(tp.x, tp.y, now, WifiPassTouch::DOWN);
             else if (tp.valid)    uiWifiPassTouch(tp.x, tp.y, now, WifiPassTouch::MOVE);
             else if (touchJustUp) uiWifiPassTouch(tp.x, tp.y, now, WifiPassTouch::UP);
@@ -5283,10 +5333,14 @@ void loop() {
                 switch (uiWifiNetsHit(*canvas, tp.x, tp.y, &row)) {
                     case WifiNetsHit::ROW: uiWifiNetsSelect(row); break;
                     case WifiNetsHit::USE: {
+                        if(Backup::busy()||!Research::settled()||!DroneWatch::settled()){Theme::showToast("BUSY", "Finish storage work before connecting", Theme::AMBER);break;}
                         const int s = uiWifiNetsSelected();
                         if (s >= 0 && s < OtaWifi::savedCount()) {
                             OtaWifi::useSaved((uint8_t)s);
-                            Theme::showToast("TRIED FIRST", OtaWifi::savedSsidAt((uint8_t)s), Theme::CYAN);
+                            enterUpdate();
+                            uiUpdateWarningSeen();
+                            engine.startUpdateRadio();
+                            if(!OtaWifi::begin(false)){engine.stopUpdateRadio();Theme::showToast("CONNECTION UNAVAILABLE", "Try again after current work finishes", Theme::AMBER);}
                         }
                         break;
                     }
@@ -5457,7 +5511,7 @@ void loop() {
             break;
         }
         case AppState::PHONE: {
-            drawTwoBand([&](TFT_eSPI& t, bool advance) { uiPhoneTick(t, now, engine, advance); });
+            drawTwoBand([&](TFT_eSPI& t, bool advance) { uiPhoneTick(t, now, engine, advance); if(Backup::busy()){ char progress[48];snprintf(progress,sizeof progress,"Backup saving: %u%% | PIN to access",Backup::percent());t.setTextSize(1);t.setTextColor(Theme::WHITE,Theme::BG);t.setCursor(8,18);t.print(progress);} });
             // All three edges of a touch, not just the press. The payphone
             // keypad still acts on the press and ignores the rest; the
             // QWERTY board previews on the press, follows the finger, and
@@ -5697,7 +5751,7 @@ void loop() {
             break;
         }
         case AppState::PIN_ENTRY: {
-            drawTwoBand([&](TFT_eSPI& t, bool advance) { uiPhoneTick(t, now, engine, advance); });
+            drawTwoBand([&](TFT_eSPI& t, bool advance) { uiPhoneTick(t, now, engine, advance); if(Backup::busy()){ char progress[48];snprintf(progress,sizeof progress,"Backup saving: %u%% | PIN to access",Backup::percent());t.setTextSize(1);t.setTextColor(Theme::WHITE,Theme::BG);t.setCursor(8,18);t.print(progress);} });
             if (touchJustDown) uiPhoneTouch(tp.x, tp.y, now, PhoneTouch::DOWN);
             if (!uiPhoneDone()) break;
             if (!uiPhonePinReady()) { memset(s_pinFirst, 0, sizeof s_pinFirst); enterSecurity(); break; }   // BACK
@@ -5783,7 +5837,7 @@ void loop() {
 #if SQUACH_MESH
             uiPhonePinPrompt(MeshTalk::inbox().unread ? "LOCKED - NEW MESSAGE" : "LOCKED");
 #endif
-            drawTwoBand([&](TFT_eSPI& t, bool advance) { uiPhoneTick(t, now, engine, advance); });
+            drawTwoBand([&](TFT_eSPI& t, bool advance) { uiPhoneTick(t, now, engine, advance); if(Backup::busy()){ char progress[48];snprintf(progress,sizeof progress,"Backup saving: %u%% | PIN to access",Backup::percent());t.setTextSize(1);t.setTextColor(Theme::WHITE,Theme::BG);t.setCursor(8,18);t.print(progress);} });
             if (touchJustDown) uiPhoneTouch(tp.x, tp.y, now, PhoneTouch::DOWN);
             if (uiPhonePinForgot()) {
                 // A forgotten PIN: every secret goes, and the PIN with it, and
@@ -6074,6 +6128,8 @@ void loop() {
             break;
         }
         case AppState::DNSP_INFO: {
+            if(!s_dnspStorage)CardContent::guide(s_dnspPage,engine.sd().ready(),s_infoText.guide);
+            const auto& guide=s_infoText.guide;
             drawTwoBand([&](TFT_eSPI& t, bool) {
                 const int w = t.width(), h = t.height();
                 t.fillRect(0, 0, w, h, Theme::BG);
@@ -6084,10 +6140,10 @@ void loop() {
                     t.setCursor(12, 18); t.print("MICROSD STATUS");
                     t.setTextColor(Theme::WHITE, Theme::BG);
                     char lines[16][48];
-                    uint8_t n = Theme::wrapText(t, s_sdDescription, w - 24, lines, 16);
+                    uint8_t n = Theme::wrapText(t, s_infoText.description, w - 24, lines, 16);
                     for (uint8_t i = 0; i < n; ++i) { t.setCursor(12, 36 + i * 11); t.print(lines[i]); }
                 } else {
-                    const DnspGuidePage& guide=DNSP_GUIDE[s_dnspPage];
+                    
                     t.setTextSize(2); t.setTextColor(Theme::CYAN, Theme::BG);
                     t.setCursor(12, 18); t.print(guide.title);
                     t.setTextColor(Theme::WHITE, Theme::BG);
@@ -6319,7 +6375,7 @@ void loop() {
 
         // An alert has to be visible. A detector that dims itself and then
         // hides the thing it just found is worse than one with no saver at all.
-        const bool alerting = (state == AppState::ALERT || state == AppState::WATCH_ALERT);
+        const bool alerting = (state == AppState::ALERT || state == AppState::WATCH_ALERT || state == AppState::RULE_ALERT);
         const uint16_t timeoutSec = Settings::screenTimeoutSec();
         // Desk mode is a clock; a clock that goes dark is not there.
         bool wantDim = timeoutSec && idleMs > (uint32_t)timeoutSec * 1000UL &&
@@ -6356,6 +6412,10 @@ void loop() {
             const bool lit = s_crownLitUntil && (int32_t)(s_crownLitUntil - now) > 0;
             wantDim = !alertWants && !lit;
         }
+#endif
+#if defined(ARDUINO_ARCH_ESP32) && !defined(TWATCH_S3)
+        if(s_bootDark&&Settings::wakeOnAlert()&&alerting)s_bootDark=false;
+        if(s_bootDark)wantDim=true;
 #endif
         if (wantDim != s_screenDimmed) {
             s_screenDimmed = wantDim;

@@ -1,0 +1,2 @@
+DURESS LIMITS
+microSD erasure is best effort and deleted data may be recoverable. Reflashing alone does not clear PIXEL TIDE or

@@ -43,6 +43,8 @@ struct __attribute__((packed)) DetRecord {
     uint8_t  crc;
 };
 static const uint8_t DET_AGAIN = 0x01;   // came back after going quiet
+static const uint8_t DET_LOCATION = 0x04; // pad[0..2] holds the 24-bit location ID
+inline uint32_t locationKey(const DetRecord& r){return (r.flags&DET_LOCATION)?uint32_t(r.pad[0])|(uint32_t(r.pad[1])<<8)|(uint32_t(r.pad[2])<<16):0;}
 static const uint8_t DET_PRINTED = 0x02; // v1.25+: MAC is conventional printed order
 
 // One boot. When it followed a crash, the crash is in here too, from the
@@ -137,6 +139,14 @@ uint16_t readDetectionsAt(const uint16_t* at, uint16_t n, DetRecord* out);
 void forEachBoot(bool (*fn)(const BootRecord& r, void* ctx), void* ctx);
 uint16_t readBoots(uint16_t from, uint16_t max, BootRecord* out);
 uint16_t bootsKept();
+
+// Read a stable head while new sightings arrive. No record copies or heap.
+struct RingSnapshot{uint32_t seq[32]{};int8_t head=-1;uint16_t used=0;};
+struct HistorySnapshot{RingSnapshot dets,boots;};
+void captureHistory(HistorySnapshot& out);
+bool historyIntact(const HistorySnapshot& snapshot); // false if a captured sector was overwritten
+uint16_t readDetectionsSnapshot(const HistorySnapshot&,uint16_t from,uint16_t max,DetRecord* out);
+uint16_t readBootsSnapshot(const HistorySnapshot&,uint16_t from,uint16_t max,BootRecord* out);
 
 uint16_t detectionsKept();              // since the last CLR
 uint8_t  crashesKept();

@@ -1,0 +1,2 @@
+FORGOT PIN
+Forgot PIN uses a deliberate 3-2-1 confirmation before erasing protected settings. Cancel if you

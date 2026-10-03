@@ -1,0 +1,2 @@
+ALERTS
+Alerts & Detection controls popup length, confidence, filters and snoozing. Stored Alert History shows every

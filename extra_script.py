@@ -1,4 +1,4 @@
-# DNSquachWatch release-candidate version stamped throughout the image.
+# DNSquachWatch firmware version stamped throughout the image.
 Import("env")
 import os
 
@@ -10,7 +10,7 @@ def get_version():
     forced = os.environ.get("SQW_VERSION", "").strip()
     if forced:
         return forced
-    return "1.1.2"  # do not inherit a parent directory's git tag
+    return "1.5.0"  # do not inherit a parent directory's git tag
 
 
 env.Append(BUILD_FLAGS=['-DFIRMWARE_VERSION=\\"%s\\"' % get_version()])
@@ -62,3 +62,17 @@ if env['PIOENV'] in ('cyd', 'cyd-fast', 'cyd-ili9341', 'cyd-ili9341-fast'):
             destination.write_text(result)
         return env.File(str(destination))
     env.AddBuildMiddleware(runtime_ble, '*NimBLEScan.cpp')
+
+# Emit compile-time stack estimates alongside objects for the resource audit.
+env.Append(CCFLAGS=["-fstack-usage"])
+
+# Whole-program optimization removes duplicate wrappers and unused branches
+# without dropping features or consuming history/security flash reservations.
+env.Append(CCFLAGS=['-flto'], LINKFLAGS=['-flto'])
+# ESP-IDF's prebuilt FreeRTOS archive references the Arduino entry point after
+# GCC LTO's reachability pass. Root it explicitly so LTO preserves app_main.
+env.Append(LINKFLAGS=['-Wl,-u,app_main'])
+env.Append(LINKFLAGS=['-fuse-linker-plugin'])
+# Native symbol tables let the pinned platform's per-library archivers index
+# LTO objects; the final plugin-aware linker still performs optimization.
+env.Append(CCFLAGS=['-ffat-lto-objects'])

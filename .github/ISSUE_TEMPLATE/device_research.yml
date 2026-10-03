@@ -6,14 +6,15 @@ body:
     attributes:
       value: |
         Reports begin **unverified**. A label concerns one observed device; it does not identify every device with the same prefix. Detector confidence is not researcher verification.
-        Attach the small `/Research Submissions/report-XXXXXXXX-XXXX.txt` export below. Please do not upload a whole backup, raw capture or card image.
+        Retain your PRIVATE copy locally. Submit ONLY the REDACTED copy, whose MAC ends `XX:XX:XX` and whose advertised name is omitted. Paste its JSON contents below so the checker can inspect it. Do not attach files, backups, raw captures or card images.
+        Automated checks run AFTER posting; they cannot prevent uploads or remove attachment data already held by GitHub. Review subtags and free text yourself.
         Read [the research guide](https://github.com/your-dnsp/DNSquachWatch/blob/master/CONTRIBUTING-RESEARCH.md). Others can add independent evidence in comments. A maintainer records the final status.
   - type: textarea
     id: report
     attributes:
       label: Exported observation
-      description: Drag the exported TXT file here, or paste its contents. Review labels, subtags and any identifiers before uploading.
-      placeholder: Attach report-00000000-0001.txt from Research Submissions.
+      description: Paste ONLY the REDACTED TXT file contents. Keep PRIVATE locally; do not attach it.
+      placeholder: Paste report-00000000-0001-REDACTED.txt JSON here.
     validations:
       required: true
   - type: input
@@ -53,7 +54,7 @@ body:
     attributes:
       label: Sharing review
       options:
-        - label: I reviewed this export and have permission to share any full identifiers it contains.
+        - label: I retained my PRIVATE copy locally and am submitting only REDACTED data with XX:XX:XX suffixes and no advertised names.
           required: true
         - label: I understand this is an unverified report about an individual observation, not an automatically trusted detection rule.
           required: true

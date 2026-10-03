@@ -1,0 +1,2 @@
+SCREEN LIGHT
+Choose white, amber, rainbow, caution, SOS or a short Morse message. Double-tap anywhere to stop the light.

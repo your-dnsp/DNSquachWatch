@@ -1,0 +1,2 @@
+PIN LOCK
+Security can require a PIN after boot or lock. Turning PIN Lock off asks for the current PIN. Keep a safe copy

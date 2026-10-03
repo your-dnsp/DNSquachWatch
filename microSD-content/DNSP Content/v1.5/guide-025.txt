@@ -1,0 +1,2 @@
+QUIETING ALERTS
+SNOOZE quiets one device until restart. SNOOZE ALL pauses popups for 10 minutes. IGNORE persists. Logging may

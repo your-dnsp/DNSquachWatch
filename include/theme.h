@@ -509,6 +509,12 @@ namespace Theme {
     // consume-once contract as the three above; main.cpp turns it into the
     // PARKA unlock.
     bool consumeLodgeKnock();
+    // XYZZY, on the TERMINAL background: the terminal types the word now and
+    // then, and each tap on it is reported here once -- 1, 2, then 3, which is
+    // the YZZERD unlock, then round again. 0 when nothing new was tapped.
+    uint8_t consumeXyzzy();
+    // Bring the word up now instead of on its own clock (console, emulator).
+    void summonXyzzy();
 
     // The flock's wing, exposed so the CHROME WING outfit can wear the
     // exact same shape rather than an approximation of it: a curved lobe

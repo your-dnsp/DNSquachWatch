@@ -1,0 +1,2 @@
+WIPE AFTER 10
+Wipe After 10 means ten wrong unlock attempts erase protected device data. Read and confirm its warning before

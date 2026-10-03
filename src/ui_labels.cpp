@@ -1,16 +1,19 @@
 #include "ui_labels.h"
 #include "theme.h"
+#include "privacy.h"
+#include "research_submission.h"
 #include <cstring>
 #include <cstdio>
 
 namespace LabelUI {
 namespace {
-enum class Stage:uint8_t{CHOICE,TYPE,SUBTAG,T9,CONFIRM,ERROR};
+enum class Stage:uint8_t{CHOICE,TYPE,SUBTAG,T9,CONFIRM,ERROR,SHARE,SHARE_DONE,SHARE_ERROR};
 bool on=false;
 Stage stage=Stage::CHOICE;
 UserLabels::Target target;
 UserLabels::Label label;
 bool hadLabel=false;
+char sharePath[96]{};
 uint8_t typePage=0,subPage=0;
 uint8_t lastKey=255;
 uint32_t lastKeyAt=0;
@@ -45,7 +48,19 @@ void draw(TFT_eSPI& t){
         title(t,hadLabel?"EDIT USER LABEL":"CONFIRM OR EDIT ASSUMPTION");
         char b[96];snprintf(b,sizeof b,"Detected: %s\nCurrent user label: %s%s%s",detectionTypeName(target.original),hadLabel?UserLabels::typeName(label.type):"not set",hadLabel&&label.subtag[0]?" / ":"",hadLabel?label.subtag:"");prose(t,b,40,55);
         Theme::drawButton(t,10,100,w-20,30,hadLabel?"EXPORT CURRENT AGAIN":"CONFIRM DETECTED TAG",false);
-        Theme::drawButton(t,10,136,w-20,30,"EDIT TAG / SUBTAG",false);footer(t,"CANCEL","");
+        Theme::drawButton(t,10,136,w-20,30,"EDIT TAG / SUBTAG",false);
+        Theme::drawButton(t,10,172,w-20,24,"RESEARCH REPORT...",false);footer(t,"CANCEL","");
+    }else if(stage==Stage::SHARE){
+        title(t,"UNVERIFIED - REVIEW BEFORE SHARING");
+        prose(t,"One device observation, not an OUI-wide identification. Review your subtag for personal details. No location or other logs included.",36,58);
+        prose(t,"REDACTED: submit this copy. PRIVATE: retain it; never upload it. MAC suffix XX:XX:XX; names omitted from REDACTED.",98,72);
+        
+        footer(t,"BACK","EXPORT BOTH");
+    }else if(stage==Stage::SHARE_DONE||stage==Stage::SHARE_ERROR){
+        title(t,stage==Stage::SHARE_DONE?"REPORT EXPORTED":"REPORT NOT EXPORTED");
+        prose(t,stage==Stage::SHARE_DONE?sharePath:"Check microSD mounting and free space in Storage & Recovery, then retry.",40,58);
+        prose(t,"Submit only REDACTED. Retain PRIVATE. Paste REDACTED contents into the GitHub form; the checker scans pasted text.",110,65);
+        footer(t,"BACK","");
     }else if(stage==Stage::TYPE){
         title(t,"CHOOSE TAG");const uint8_t from=typePage*4;for(uint8_t i=0;i<4&&from+i<TYPE_N;i++)row(t,i,UserLabels::typeName(TYPES[from+i]));
         char more[20];snprintf(more,sizeof more,"MORE %u/%u",typePage+1,(TYPE_N+3)/4);footer(t,"BACK",more);
@@ -57,7 +72,7 @@ void draw(TFT_eSPI& t){
         static const char* keys[]={"1","ABC2","DEF3","DEL","GHI4","JKL5","MNO6","SPACE","PQRS7","TUV8","WXYZ9","DONE"};
         for(int i=0;i<12;i++){int col=i%4,rowIx=i/4;Theme::drawButton(t,6+col*(w-8)/4,68+rowIx*38,(w-16)/4,32,keys[i],false);}footer(t,"BACK","");
     }else if(stage==Stage::CONFIRM){
-        title(t,"REVIEW USER OBSERVATION");char mac[24],b[240];snprintf(mac,sizeof mac,"%02X:%02X:%02X:%02X:%02X:%02X",target.mac[0],target.mac[1],target.mac[2],target.mac[3],target.mac[4],target.mac[5]);snprintf(b,sizeof b,"MAC: %s\nDetected: %s\nUser label: %s\nSubtag: %s\n\nThis records your observation; it does not prove device identity.",mac,detectionTypeName(target.original),UserLabels::typeName(label.type),label.subtag[0]?label.subtag:"(none)");prose(t,b,40,112);Theme::drawButton(t,10,h-84,w-20,34,"SAVE + EXPORT TO microSD",false);footer(t,"BACK","");
+        title(t,"REVIEW USER OBSERVATION");char mac[24],b[240];snprintf(mac,sizeof mac,"%02X:%02X:%02X:%02X:%02X:%02X",target.mac[0],target.mac[1],target.mac[2],target.mac[3],target.mac[4],target.mac[5]);Privacy::mac(mac,sizeof mac,target.mac);snprintf(b,sizeof b,"MAC: %s\nDetected: %s\nUser label: %s\nSubtag: %s\n\nThis records your observation; it does not prove device identity.",mac,detectionTypeName(target.original),UserLabels::typeName(label.type),label.subtag[0]?label.subtag:"(none)");prose(t,b,40,112);Theme::drawButton(t,10,h-84,w-20,34,"SAVE + EXPORT TO microSD",false);footer(t,"BACK","");
     }else{
         title(t,"EXPORT DID NOT FINISH");prose(t,"The label was not applied because its required microSD record could not be written. Check Storage & Recovery, then retry.",48,90);Theme::drawButton(t,10,h-84,w-20,34,"RETRY EXPORT",false);footer(t,"CANCEL","");
     }
@@ -66,9 +81,16 @@ void draw(TFT_eSPI& t){
 Outcome tap(int x,int y,int w,int h,uint32_t now){
     if(!on)return Outcome::NONE;
     if(stage==Stage::CHOICE){
+        if(y>=172&&y<196){stage=Stage::SHARE;return Outcome::NONE;}
         if(y>=100&&y<130){if(!hadLabel){label.type=(uint8_t)target.original;label.subtag[0]=0;}stage=Stage::CONFIRM;return Outcome::NONE;}
         if(y>=136&&y<166){startType();return Outcome::NONE;}
         if(y>=h-40&&x<w/2){on=false;return Outcome::CANCELLED;}
+    }else if(stage==Stage::SHARE){
+        
+        if(y>=h-40){if(x<w/2)stage=Stage::CHOICE;else stage=ResearchSubmission::savePair(target,label,now,sharePath,sizeof sharePath)?Stage::SHARE_DONE:Stage::SHARE_ERROR;}
+        return Outcome::NONE;
+    }else if(stage==Stage::SHARE_DONE||stage==Stage::SHARE_ERROR){
+        if(y>=h-40)stage=Stage::SHARE;return Outcome::NONE;
     }else if(stage==Stage::TYPE){
         if(y>=42&&y<186){uint8_t i=(uint8_t)((y-42)/36),at=(uint8_t)(typePage*4+i);if(i<4&&at<TYPE_N){label.type=TYPES[at];startSubtag();}return Outcome::NONE;}
         if(y>=h-40){if(x<w/2){stage=Stage::CHOICE;}else typePage=(uint8_t)((typePage+1)%((TYPE_N+3)/4));return Outcome::NONE;}

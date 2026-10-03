@@ -16,7 +16,7 @@ static const Spec spec[VALUE_COUNT]={
  {"pwrScrnT",2,0,5,false},{"pwrDim",16,0,255,false},{"pwrFps",2,0,4,false},{"pwrIdleT",1,0,4,false},
  {"pwrCpu",0,0,2,false},{"pwrWake",1,0,1,true},{"ltOn",1,0,1,true},{"ltAlert",1,0,1,true},
  {"ltMsg",1,0,1,true},{"ltIdle",1,0,2,false},{"banter",2,0,3,false},{"ltColor",0,0,10,false},
- {"ltBri7",4,1,7,false},{"tophat",1,0,1,true},{"tempo",70,50,200,false},{"deskBg",255,0,255,false},{"ldr",0,0,1,true}
+ {"ltBri7",4,1,7,false},{"tophat",1,0,1,true},{"tempo",70,50,200,false},{"deskBg",255,0,255,false},{"ldr",0,0,1,true},{"autoHistory",1,0,1,true}
 };
 uint32_t crc(const void* v,size_t n){uint32_t c=~0u;const uint8_t* p=(const uint8_t*)v;while(n--){c^=*p++;for(int i=0;i<8;i++)c=(c>>1)^(0xedb88320u&-(c&1));}return ~c;}
 bool valid(const Snapshot& s){
@@ -28,7 +28,7 @@ bool valid(const Snapshot& s){
 bool encode(const Snapshot& s,char* out,size_t cap){
  if(!out||!valid(s)||cap<64)return false;size_t at=0;
  auto line=[&](const char* key,uint32_t value){int n=snprintf(out+at,cap-at,"%s=%lu\n",key,(unsigned long)value);if(n<0||size_t(n)>=cap-at)return false;at+=n;return true;};
- if(!line("DNSP_PUBLIC_V2",2))return false;
+ if(!line("DNSP_PUBLIC_V3",3))return false;
  for(size_t i=0;i<VALUE_COUNT;i++)if(!line(spec[i].key,s.values[i]))return false;
  const uint8_t fields[]={s.language,s.hebrew,s.contrast,s.reduced,s.left,s.large};
  for(int i=0;i<6;i++){char k[4];snprintf(k,sizeof k,"f%d",i);if(!line(k,fields[i]))return false;}
@@ -37,8 +37,8 @@ bool encode(const Snapshot& s,char* out,size_t cap){
 bool decode(const char* p,size_t n,Snapshot& out){
  if(!p||n>=SETTINGS_CAP)return false;size_t at=0;Snapshot s;
  auto line=[&](const char* key,uint32_t& value){size_t k=strlen(key);if(at+k+2>n||memcmp(p+at,key,k)||p[at+k]!='=')return false;at+=k+1;value=0;unsigned digits=0;while(at<n&&p[at]>='0'&&p[at]<='9'){unsigned d=p[at++]-'0';if(++digits>10||value>(UINT32_MAX-d)/10)return false;value=value*10+d;}return digits&&at<n&&p[at++]=='\n';};
- uint32_t v;bool old=n>=14&&!memcmp(p,"DNSP_PUBLIC_V1",14);if(!line(old?"DNSP_PUBLIC_V1":"DNSP_PUBLIC_V2",v)||v!=(old?1u:2u))return false;
- for(size_t i=0;i<(old?VALUE_COUNT-1:VALUE_COUNT);i++)if(!line(spec[i].key,s.values[i]))return false;
+ uint32_t v;bool old=n>=14&&!memcmp(p,"DNSP_PUBLIC_V1",14),middle=n>=14&&!memcmp(p,"DNSP_PUBLIC_V2",14);if(!line(old?"DNSP_PUBLIC_V1":middle?"DNSP_PUBLIC_V2":"DNSP_PUBLIC_V3",v)||v!=(old?1u:middle?2u:3u))return false;s.values[33]=1;
+ for(size_t i=0;i<(old?32u:middle?33u:VALUE_COUNT);i++)if(!line(spec[i].key,s.values[i]))return false;
  uint8_t* fields[]={&s.language,&s.hebrew,&s.contrast,&s.reduced,&s.left,&s.large};
  for(int i=0;i<6;i++){char k[4];snprintf(k,sizeof k,"f%d",i);if(!line(k,v)||v>255)return false;*fields[i]=v;}
  size_t end=at;if(!line("crc32",v)||v!=crc(p,end)||at!=n||!valid(s))return false;out=s;return true;

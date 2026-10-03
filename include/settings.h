@@ -6,6 +6,7 @@
 // stay in main.cpp, which reads these getters after a change.
 #pragma once
 #include <stdint.h>
+#include <stddef.h>
 #include "signatures.h"   // Confidence
 
 namespace Settings {
@@ -132,9 +133,9 @@ namespace Settings {
     bool       rotationLocked();
     void       toggleRotationLock();
 
-    // The Legend top hat: worn unless taken off on the APPEARANCE page.
-    bool       topHatShown();
-    void       toggleTopHat();
+    // The Legend's aura: lit unless put out on the APPEARANCE page.
+    bool       auraShown();
+    void       toggleAura();
 
     // Last rotation (0..3, TFT_eSPI's setRotation() values) the rotate
     // button left the screen on -- so it comes back up the same way
@@ -228,6 +229,29 @@ namespace Settings {
     // worse than useless.
     bool       wakeOnAlert();
     void       toggleWakeOnAlert();
+    // TAGS + RINGS on the watch: AirTags, Tiles, Samsung and Google tags and
+    // Ring cameras are logged but never interrupt -- no card, no buzz, no
+    // screen waking. On by default: a commute is fifty AirTags an hour.
+    // How long each of the last few boots ran, in minutes, newest first --
+    // the runtime log for boards that cannot read their battery. main.cpp
+    // notes the running boot every ten minutes; the entry for a boot that
+    // ended is how long it lasted (to within ten minutes).
+    void       noteRunMinutes(uint16_t boot, uint16_t minutes);
+    uint8_t    runHistory(uint16_t* boots, uint16_t* minutes, uint8_t cap);
+    // PRIVACY MODE (SYSTEM): the screen hides the device half of every
+    // address and all but three characters of every device and network
+    // name. See include/privacy.h. Off by default.
+    bool autoHistory();
+    void toggleAutoHistory();
+    bool       privacyMode();
+    void       togglePrivacyMode();
+    bool       quietTrackers();
+    void       toggleQuietTrackers();
+    // Set the first time this watch's GPS answers: it is an S3 Plus, whose
+    // bigger cell takes a faster charge. Never cleared by a GPS that is
+    // merely switched off.
+    bool       watchPlus();
+    void       setWatchPlus();
     // The T-Watch's buzz on an alert (the DRV2605 haptic motor). Kept on
     // every board so the settings file reads the same; only the watch has
     // a motor to use it.
@@ -239,12 +263,6 @@ namespace Settings {
     uint8_t    buzzStrength();
     const char* buzzModeName();
     void       cycleBuzz();
-    // STEADY POWER on the watch: the power chip's DC1, which feeds the
-    // ESP32 and its radio, held in PWM instead of dropping to PFM at light
-    // load. A test for the deaf radios: PFM ripple is the kind of noise a
-    // receiver hears first. Off by default; costs a few mA.
-    bool       steadyPower();
-    void       toggleSteadyPower();
 
     // The watch's radio duty cycle; see RADIO_DUTY_NAMES in settings.cpp.
     // 0 when the saver is off. Watch only.
@@ -263,6 +281,67 @@ namespace Settings {
     // of them so a saved preference travels, the way the light's knobs do.
     bool        buzzerOn();
     void        toggleBuzzer();
+
+    // ---- LORA ------------------------------------------------------------
+    // The wireless slot: OFF, FOCUS on one profile, or SURVEY over the band
+    // (Lora::Mode's values), and which profile FOCUS parks on (an index into
+    // lora_profiles.cpp's table). Only the CrowPanel 7 shows the rows; the
+    // values are kept everywhere, like the buzzer's.
+    uint8_t     loraMode();
+    void        cycleLoraMode();
+    // Which band plan the sniffer listens to: 0 AUTO (the Americas' time
+    // zones get US 915, everywhere else EU 868), 1 EU, 2 US. Read at boot.
+    // The watch's LORA row: 0 OFF, 1 MESHTASTIC, 2 MESHCORE, 3 BOTH (the
+    // default: the radio takes turns between the two). Applied by
+    // Lora::applyListen().
+    uint8_t     loraListen();
+    void        cycleLoraListen();
+    const char* loraListenName();
+    uint8_t     loraRegion();
+    void        setLoraRegion(uint8_t r);
+    uint8_t     loraFocus();
+    void        setLoraFocus(uint8_t ix);
+
+    // ONLINE LOOKUPS: whether this board may ask a public service about a node
+    // it heard. Four switches, not one, because a master alone cannot say
+    // "aircraft yes, callsigns no" -- which is the setting a careful operator
+    // actually wants. All four default OFF, and that is the one place this
+    // differs in shape from updateCheck() below: that switch talks to
+    // first-party infrastructure about THIS board and defaults ON, these talk
+    // to third parties about OTHER PEOPLE. What each one sends, and the
+    // measured harm behind the default, is in include/lora_enrich.h.
+    //
+    // The fourth is a different KIND of request and still defaults off. The
+    // MeshCore adverts feed sends a row count and nothing else -- no key, no
+    // prefix, no name, nothing about what this board heard (include/lora_feed.h)
+    // -- so it is the one source here that cannot betray anything even in
+    // principle. It is off by default anyway: this board does not join a
+    // network unasked, whatever the request would have said.
+    bool        loraLookups();           // the master
+    void        toggleLoraLookups();
+    bool        loraLookupCall();        // hamrig.com, for APRS and MeshCom callsigns
+    void        toggleLoraLookupCall();
+    bool        loraLookupOgn();         // the OGN device database, for FANET
+    void        toggleLoraLookupOgn();
+    bool        loraLookupFeed();        // meshcore.df0x.de recent adverts, to name MeshCore rows
+    void        toggleLoraLookupFeed();
+
+    // The channel keys the two mesh decoders hold, as one opaque blob. The
+    // record format is Lora::Chan's business (include/lora_channels.h); this
+    // is only the NVS entry, so that the store stays the one place that talks
+    // to Preferences.
+    //
+    // ONE entry for the whole list, for the reason the egg-hunt progress is
+    // packed into one: thirty channels would be thirty entries in a store
+    // with a few hundred free, and a channel list is not what that budget is
+    // for. Key "loraChans" -- 9 characters, inside NVS's limit of 15, and no
+    // other key in settings.cpp begins with those letters.
+    size_t      loraChannels(uint8_t* out, size_t cap);        // bytes read; 0 = nothing stored
+    // n == 0 removes the entry. False when the store would not take it -- a
+    // full NVS partition, say. That has to be reported rather than swallowed:
+    // a write that silently fails is a board that silently forgets its keys
+    // again, which is the whole bug this entry exists to fix.
+    bool        setLoraChannels(const uint8_t* rec, size_t n);
 
     // ---- STATUS LIGHT ----------------------------------------------------
     // The RGB LED on the back of the 2.8" CYD. See status_light.h for the

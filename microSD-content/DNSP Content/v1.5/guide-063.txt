@@ -1,0 +1,2 @@
+SAFE MODE
+Hold the screen while powering on for Safe Mode. It can also start after repeated short boots. Use it to recover

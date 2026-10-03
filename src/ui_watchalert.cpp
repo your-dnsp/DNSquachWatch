@@ -1,6 +1,7 @@
 // SquachWatch-CYD — watched-target alert screen implementation
 #include "ui_watchalert.h"
 #include "theme.h"
+#include "privacy.h"
 #include "squachy.h"
 #include <Arduino.h>
 #include <stdio.h>
@@ -77,6 +78,9 @@ WatchView gather(const DetectionEngine& eng) {
         }
     }
     if (!v.label || !v.label[0]) v.label = "UNKNOWN DEVICE";
+    // Every line this screen draws or has Squachy say goes through v.label.
+    static char pv[40];
+    v.label = Privacy::name(v.label, pv, sizeof pv);
     const uint8_t n = eng.watchRssiCount();
     if (n > 0) {
         v.haveRssi = true;

@@ -1,6 +1,6 @@
 // SquachWatch-CYD — optional SD card event log
 // If the SD card is mounted at boot, each Detection is appended to
-// /squachwatch-YYYYMMDD.log as one CSV line.
+// a unique /squachwatch-session-XXXXXXXX.log as one CSV line.
 // If the card is absent, every call is a silent no-op.
 #pragma once
 #include <Arduino.h>
@@ -12,7 +12,8 @@ public:
     void logPressure(uint32_t alerts, uint32_t ble);
     bool begin();              // returns true if card mounted
     bool ready() const { return _ready; }
-    void logEvent(const Detection& d);
+    bool logEvent(const Detection& d);
+    uint32_t writeErrors() const { return _writeErrors; }
     bool safeEnd(); // sync block device, unmount; false if writes could not be confirmed
     bool recoveryRemount();
     bool recoveryTest();
@@ -30,7 +31,8 @@ private:
     bool     _ready = false;
     bool     _memoryLimited = false;
     uint32_t _lastFlush = 0;
-    char     _filename[24] = {0};
+    uint32_t _session=0;
+    char     _filename[48] = {0};
     char     _recovery[120] = "No recovery action run.";
     void     openDaily();
 };

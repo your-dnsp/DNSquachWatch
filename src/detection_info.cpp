@@ -1,5 +1,6 @@
 // SquachWatch-CYD — detection type explanations
 #include "detection_info.h"
+#include "privacy.h"
 #include <Arduino.h>
 #include "research.h"
 #include "detection.h"
@@ -145,7 +146,7 @@ const char* why(const Detection& d) {
                 snprintf(reasonPart, sizeof reasonPart, "reason %u", (unsigned)d.signature);
             char bssidPart[52] = "BSSID varied";
             if ((d.evidenceBits & DEAUTH_META_SAME_BSSID) && d.name[0])
-                snprintf(bssidPart, sizeof bssidPart, "BSSID %s", d.name);
+                {char pv[40];snprintf(bssidPart, sizeof bssidPart, "BSSID %s",Privacy::name(d.name,pv,sizeof pv));}
             snprintf(text, sizeof text,
                      "%u deauth frames from one claimed transmitter in %lums; %u target%s, %s, %s, %s. Source MACs can be spoofed. Channel hopping means Squachy observed only part of the traffic. This does not prove an attack.",
                      (unsigned)d.hits, duration, targets, targets == 1 ? "" : "s",

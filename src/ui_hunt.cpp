@@ -1,6 +1,7 @@
 // SquachWatch-CYD — HUNT MODE screen implementation
 #include "ui_hunt.h"
 #include "theme.h"
+#include "privacy.h"
 #include "squachy.h"
 #include <Arduino.h>
 
@@ -135,7 +136,8 @@ void uiHuntTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool adva
     t.setTextWrap(false);
     t.setTextColor(Theme::CYAN, Theme::BG);
     int labelY = bodyTop + sqH + 2;
-    const char* label = eng.huntLabel();
+    char pv[40];
+    const char* label = Privacy::name(eng.huntLabel(), pv, sizeof pv);
     int lw = t.textWidth(label);
     int maxLw = w - 16;
     t.setCursor((w - (lw < maxLw ? lw : maxLw)) / 2, labelY);

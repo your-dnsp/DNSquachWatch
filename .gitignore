@@ -18,3 +18,7 @@ before-dnsp*.bin
 device-partitions.bin
 dnsp-backup-*/
 
+
+# Signing secrets never belong in the repository
+*.pem
+*.key

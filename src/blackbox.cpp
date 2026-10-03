@@ -1,5 +1,6 @@
 // SquachWatch-CYD — the black box. See blackbox.h.
 #include "blackbox.h"
+#include "location_label.h"
 #include "clock.h"
 #include <Arduino.h>
 #include <string.h>
@@ -179,17 +180,19 @@ struct Ring {
     }
 
     // Newest first. fn gets each record whose checksum holds.
-    void walk(bool (*fn)(const uint8_t* rec, void* ctx), void* ctx) const {
-        if (head < 0) return;
+    void walk(bool (*fn)(const uint8_t* rec, void* ctx), void* ctx, const RingSnapshot* snapshot=nullptr) const {
+        const uint32_t* order=snapshot?snapshot->seq:seq;
+        const int startHead=snapshot?snapshot->head:head;
+        if (startHead < 0) return;
         bool done[SECTORS] = {};
         uint8_t buf[REC * CHUNK];
         for (;;) {
             int8_t s = -1;
             for (uint8_t i = 0; i < count; i++)
-                if (seq[i] && !done[i] && (s < 0 || seq[i] > seq[s])) s = (int8_t)i;
+                if (order[i] && !done[i] && (s < 0 || order[i] > order[s])) s = (int8_t)i;
             if (s < 0) return;
             done[s] = true;
-            int top = (s == head) ? used : PER;
+            int top = (s == startHead) ? (snapshot?snapshot->used:used) : PER;
             while (top > 0) {
                 const int n = top < CHUNK ? top : CHUNK;
                 const int from = top - n;
@@ -350,6 +353,7 @@ void noteDetection(const Detection& d, bool again) {
     r.type    = (uint8_t)d.type;
     r.conf    = (uint8_t)d.conf;
     r.flags   = (uint8_t)((again ? DET_AGAIN : 0) | DET_PRINTED);
+    if(d.locationKey){r.flags|=DET_LOCATION;r.pad[0]=d.locationKey;r.pad[1]=d.locationKey>>8;r.pad[2]=d.locationKey>>16;}
     memcpy(r.mac, d.mac, 6);
     r.rssi    = d.rssi;
     r.channel = d.channel;
@@ -397,6 +401,19 @@ uint16_t readDetections(uint16_t from, uint16_t max, DetRecord* out) {
         return w.got < w.max;
     }, &w);
     return w.got;
+}
+
+void captureHistory(HistorySnapshot& out){auto capture=[](const Ring& r,RingSnapshot& s){memcpy(s.seq,r.seq,sizeof s.seq);s.head=r.head;s.used=r.used;};capture(s_dets,out.dets);capture(s_boots,out.boots);}
+bool historyIntact(const HistorySnapshot& snapshot){auto valid=[](const Ring& r,const RingSnapshot& s){for(uint8_t i=0;i<r.count;i++)if(s.seq[i]&&s.seq[i]!=r.seq[i])return false;return true;};return s_ready&&valid(s_dets,snapshot.dets)&&valid(s_boots,snapshot.boots);}
+uint16_t readDetectionsSnapshot(const HistorySnapshot& snapshot,uint16_t from,uint16_t max,DetRecord* out){
+ if(!historyIntact(snapshot)||!out||!max)return 0;
+ struct C{uint16_t skip,max,n;DetRecord* out;} c{from,max,0,out};
+ s_dets.walk([](const uint8_t* p,void* context){if(p[0]==KIND_CLEAR)return false;if(p[0]!=KIND_DET)return true;C& c=*(C*)context;if(c.skip){--c.skip;return true;}DetRecord r=*(const DetRecord*)p;if(!r.channel&&!(r.flags&DET_PRINTED)){for(uint8_t i=0;i<6;i++)r.mac[i]=p[offsetof(DetRecord,mac)+5-i];}c.out[c.n++]=r;return c.n<c.max;},&c,&snapshot.dets);return c.n;
+}
+uint16_t readBootsSnapshot(const HistorySnapshot& snapshot,uint16_t from,uint16_t max,BootRecord* out){
+ if(!historyIntact(snapshot)||!out||!max)return 0;
+ struct C{uint16_t skip,max,n;BootRecord* out;} c{from,max,0,out};
+ s_boots.walk([](const uint8_t* p,void* context){if(p[0]!=KIND_BOOT)return true;C& c=*(C*)context;if(c.skip){--c.skip;return true;}c.out[c.n++]=*(const BootRecord*)p;return c.n<c.max;},&c,&snapshot.boots);return c.n;
 }
 
 uint16_t readDetectionsAt(const uint16_t* at, uint16_t n, DetRecord* out) {
@@ -466,7 +483,7 @@ void dump() {
                       (r.flags & BOOT_DUMP) ? r.task : "", (unsigned long)r.pc, (unsigned long)r.cause);
         return true;
     }, nullptr);
-    Serial.println("boot,epoch,up_s,type,mac,rssi,channel,hits,again,vendor,name");
+    Serial.println("boot,epoch,up_s,type,mac,rssi,channel,hits,again,vendor,name,location");
     // Everything the ring holds, CLR or not. The LOG screen stops at the mark
     // a CLR leaves (a restart must not bring back what was cleared), but this
     // is the record: it prints the mark as a line and carries on, so a
@@ -480,12 +497,12 @@ void dump() {
         }
         if (p[0] != KIND_DET) return true;
         const DetRecord& r = *(const DetRecord*)p;
-        Serial.printf("%u,%lu,%lu,%s,%02x:%02x:%02x:%02x:%02x:%02x,%d,%u,%u,%u,%s,%s\n",
+        Serial.printf("%u,%lu,%lu,%s,%02x:%02x:%02x:%02x:%02x:%02x,%d,%u,%u,%u,%s,%s,%s\n",
                       (unsigned)r.boot, (unsigned long)r.epoch, (unsigned long)r.upSec,
                       detectionTypeName((DetectionType)r.type),
                       r.mac[0], r.mac[1], r.mac[2], r.mac[3], r.mac[4], r.mac[5],
                       (int)r.rssi, (unsigned)r.channel, (unsigned)r.hits,
-                      (r.flags & DET_AGAIN) ? 1u : 0u, r.vendor, r.name);
+                      (r.flags & DET_AGAIN) ? 1u : 0u, r.vendor, r.name,LocationLabel::text(locationKey(r)));
         return true;
     }, nullptr);
     Serial.println("[blackbox] end");

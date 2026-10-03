@@ -1,3 +1,4 @@
+#include "sd_retry.h"
 // SquachWatch-CYD — DetectionEngine public API
 #pragma once
 #if SQUACH_MESH
@@ -457,6 +458,7 @@ public:
     void checkHuntBle(const uint8_t* mac, int8_t rssi);
 
     // SD log helper accessor.
+    uint32_t sdDropped() const {return _sdDropped.load();}
     SdLog& sd() { return _sd; }
 
     // Rough per-channel activity level for the spectrum-waterfall
@@ -646,12 +648,15 @@ private:
     static const uint8_t SD_Q_CAP = 8;
     Detection        _sdQ[SD_Q_CAP];
     volatile uint8_t _sdQHead = 0, _sdQTail = 0;
+    std::atomic<uint32_t> _sdDropped{0};
+    SdRetry::State _sdRetry;
+    void drainSd(uint32_t now);
 
     // Sightings owed to the black box. Not the Detection itself: the entry
     // is read back from the log when it is written, a second and a half
     // later, so the name an active scan's reply brings is on it. Filled from
     // the host task and loop() both, so under a lock; drained by loop().
-    struct BlackBoxQ { uint8_t mac[6]; DetectionType type; bool again; uint32_t ms; };
+    struct BlackBoxQ { uint8_t mac[6]; DetectionType type; bool again; uint32_t ms; uint32_t locationKey; };
     static const uint8_t BB_Q_CAP = 16;
     BlackBoxQ _bbQ[BB_Q_CAP];
     uint8_t   _bbQHead = 0, _bbQTail = 0;

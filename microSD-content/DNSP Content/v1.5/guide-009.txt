@@ -1,0 +1,2 @@
+LOCATION RECALL
+No label means no-label- set. Clear removes the active label and current network association. A remembered label returns

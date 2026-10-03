@@ -2,6 +2,7 @@
 #include "ui_desk.h"
 #include "clock.h"
 #include "theme.h"
+#include "privacy.h"
 #include "squachy.h"
 #include <Arduino.h>
 #include <stdio.h>
@@ -368,7 +369,8 @@ static void drawAlertCard(TFT_eSPI& t, int barY, uint32_t now, bool compact, int
     printRight(ty, y + 4, c);
     // The device's own name where it has one, else the vendor; what fits.
     char who[13];
-    snprintf(who, sizeof who, compact ? "%.7s" : "%.11s", d.name[0] ? d.name : vendorText(d));
+    char pv[40];
+    snprintf(who, sizeof who, compact ? "%.7s" : "%.11s", d.name[0] ? Privacy::name(d.name, pv, sizeof pv) : vendorText(d));
     printRight(who, y + 15, Theme::WHITE);
     char sig[16];
     snprintf(sig, sizeof sig, "%d dBm", d.rssi);

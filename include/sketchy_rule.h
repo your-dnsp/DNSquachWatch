@@ -10,6 +10,7 @@ struct Endpoint {
     uint8_t channel = 0;
     uint16_t hits = 0;
     uint32_t at = 0;
+    uint32_t locationKey=0;
     char name[20]{};
     char vendor[16]{};
 };

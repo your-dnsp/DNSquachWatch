@@ -8,6 +8,7 @@
 #include "clock.h"
 #include <Arduino.h>
 #include <WiFi.h>
+#include <WiFiClientSecure.h>
 #include <HTTPClient.h>
 #include <Preferences.h>
 #include <esp_heap_caps.h>
@@ -17,18 +18,22 @@
 #define FIRMWARE_VERSION "unknown"
 #endif
 #ifndef OTA_WIFI_BASE
-#define OTA_WIFI_BASE "http://squachwatch.com/"
+#define OTA_WIFI_BASE "https://raw.githubusercontent.com/your-dnsp/DNSquachWatch/master/ota/"
 #endif
 
 using OtaCore::Fail;
 
 namespace OtaWifi {
+static bool s_checkUpdates=true;
+static char s_lastAuthenticated[33]{};
+static void rememberAuthenticated(){if(WiFi.status()==WL_CONNECTED)WiFi.SSID().toCharArray(s_lastAuthenticated,sizeof s_lastAuthenticated);}
+const char* lastAuthenticatedNetwork(){rememberAuthenticated();return s_lastAuthenticated;}
 namespace {
 
 const char* NVS_NS = "otawifi";
 const uint32_t JOIN_TIMEOUT_MS  = 20000;
 const uint32_t STALL_TIMEOUT_MS = 15000;
-const uint32_t TASK_STACK       = 8192;    // measured 3.2 KB used over a whole plain-HTTP update (was 12 KB, sized for TLS)
+const uint32_t TASK_STACK       = 12288;    // TLS client task; hardware high-water measurements remain required
 
 volatile State s_state   = State::OFF;
 volatile Fail  s_fail    = Fail::NONE;
@@ -189,21 +194,14 @@ void collectScan(int n) {
     WiFi.scanDelete();
 }
 
-// Plain HTTP, on purpose, for the firmware as well as the manifest.
-//
-// What made this safe was already here: every image is signed, and the board
-// refuses one that is not ours or that is older than the one running (see
-// OtaCore::finish). TLS was buying secrecy about WHICH public file was being
-// downloaded, and charging about 45 KB of flash and a 40 KB contiguous heap
-// block for it -- the block that forced the screen buffer to be freed before
-// an update could start, on a board whose largest block is 34 KB.
-//
-// The cost is that somebody on the same network can see which release is
-// being fetched, and a network that blocks plain HTTP now blocks updates too.
-static WiFiClient* s_plain = nullptr;
+// GitHub requires HTTPS. Certificate identity is not used as firmware trust:
+// the existing ECDSA verification authenticates the exact board image before
+// activation. Metadata may be forged; it never authorizes automatic install.
+// No credentials or private device data are sent to the update server.
+static WiFiClientSecure* s_tls = nullptr;
 WiFiClient* client() {
-    if (!s_plain) s_plain = new WiFiClient();
-    return s_plain;
+    if (!s_tls){s_tls = new WiFiClientSecure();s_tls->setInsecure();}
+    return s_tls;
 }
 
 // A small file into `out`. Returns the HTTP status, or a negative number when
@@ -326,12 +324,13 @@ bool join() {
     }
     if (s_cancel) return false;
     if (st != WL_CONNECTED) {
-        setResult(savedIndexOf(s_ssid), st == WL_NO_SSID_AVAIL ? SavedResult::NOT_FOUND : SavedResult::BAD_PASSWORD);
-        fail(st == WL_NO_SSID_AVAIL ? Fail::WIFI_NOT_FOUND : Fail::WIFI_PASSWORD);
+        setResult(savedIndexOf(s_ssid), st == WL_NO_SSID_AVAIL ? SavedResult::NOT_FOUND : st == WL_CONNECT_FAILED ? SavedResult::BAD_PASSWORD : SavedResult::TIMEOUT);
+        fail(st == WL_NO_SSID_AVAIL ? Fail::WIFI_NOT_FOUND : st == WL_CONNECT_FAILED ? Fail::WIFI_PASSWORD : Fail::TIMEOUT);
         return false;
     }
     Serial.printf("[ota] joined %s as %s\n", s_ssid, WiFi.localIP().toString().c_str());
     // The clock rides along: one NTP round trip while the radio is up anyway.
+    rememberAuthenticated();
     Clock::syncWait(1500);
     if (s_save && !saveNetwork(s_ssid, s_pass))
         Serial.println("[ota] wifi: the network list is full, not saved");
@@ -470,7 +469,10 @@ void run(void*) {
     if (join()) {
         // The password has done its job; it only lives on in NVS if saved.
         memset(s_pass, 0, sizeof s_pass);
-        if (check()) {
+        if(!s_checkUpdates){
+            s_state=State::CONNECTED;
+            while(!s_cancel)delay(50);
+        } else if (check()) {
             s_state = State::READY;
             while (!s_install && !s_cancel) delay(50);
             if (!s_cancel) download();
@@ -487,6 +489,7 @@ void run(void*) {
     // rather than the board.
     WiFi.removeEvent(dropEv);
     WiFi.disconnect(false, false);
+    delete s_tls;s_tls=nullptr;
     Serial.printf("[ota] update task stack: %u of %u bytes never used\n",
                   (unsigned)(uxTaskGetStackHighWaterMark(nullptr) * sizeof(StackType_t)), (unsigned)TASK_STACK);
     s_task = nullptr;
@@ -497,12 +500,13 @@ void run(void*) {
 
 int8_t bestSavedInScan();   // below, with the rest of the list
 
-bool begin() {
+bool begin(bool checkUpdates) {
     if (s_state != State::OFF) return true;
     if (Security::locked() || !OtaCore::available()) return false;
     // A cancelled attempt's task can still be unwinding an HTTP request it is
     // waiting on. One at a time: it clears s_task on its way out.
     if (s_task) return false;
+    s_checkUpdates=checkUpdates;
     readSaved();
     s_fail = Fail::NONE;
     s_cancel = s_install = s_downloadStarted = false;
@@ -527,6 +531,8 @@ bool begin() {
     Serial.println("[ota] wifi update mode: scanning");
     return true;
 }
+
+bool settled() { return s_task==nullptr; }
 
 bool end() {
     if (s_state == State::OFF) return false;
@@ -642,10 +648,10 @@ void removeSaved(uint8_t i) {
 
 void printSaved() {
     readSaved();
-    static const char* const R[] = { "not tried", "joined", "wrong password", "not found" };
+    static const char* const R[] = { "not tried", "joined", "authentication failed", "not found", "timed out" };
     Serial.printf("[wifi] %u saved, USE is %u\n", (unsigned)s_n, (unsigned)s_use);
     for (uint8_t i = 0; i < s_n; i++)
-        Serial.printf("[wifi]   %u: %s -- %s\n", (unsigned)i, s_list[i].ssid, R[(uint8_t)s_list[i].result & 3]);
+        Serial.printf("[wifi]   %u: %s -- %s\n", (unsigned)i, s_list[i].ssid, R[(uint8_t)s_list[i].result <= 4 ? (uint8_t)s_list[i].result : 0]);
 }
 
 void useSaved(uint8_t i) {
@@ -689,7 +695,7 @@ void connect(const char* ssid, const char* pass, bool save) {
     }
 }
 
-bool bootCheck(uint32_t budgetMs) {
+bool bootCheck(uint32_t budgetMs, bool checkUpdates) {
     readSaved();
     if (!s_n) return false;
     const uint32_t t0 = millis();
@@ -778,9 +784,12 @@ bool bootCheck(uint32_t budgetMs) {
     if (st == WL_CONNECTED)           setResult((int8_t)pick, SavedResult::JOINED);
     else if (st == WL_NO_SSID_AVAIL)  setResult((int8_t)pick, SavedResult::NOT_FOUND);
     else if (st == WL_CONNECT_FAILED) setResult((int8_t)pick, SavedResult::BAD_PASSWORD);
+    else setResult((int8_t)pick, SavedResult::TIMEOUT);
     bool found = false;
     if (st == WL_CONNECTED) {
+        rememberAuthenticated();
         Serial.printf("[ota] boot check: joined in %lu ms\n", (unsigned long)(millis() - t0));
+        if(checkUpdates){
         uint8_t body[1024];
         size_t  len = 0;
         // From the join, like the join's own wait, and never below a second:
@@ -788,14 +797,10 @@ bool bootCheck(uint32_t budgetMs) {
         // whole budget would have wrapped it round to about fifty days.
         const uint32_t usedJ = millis() - tj;
         const uint32_t left  = usedJ + 1000 < budgetMs ? budgetMs - usedJ : 1000;
-        // Plain HTTP, on purpose. A TLS handshake wants 40 KB in one piece
-        // and five to ten seconds, and one that timed out left a dead
-        // connection in the middle of the heap that cost the frame buffer
-        // its block -- measured, twice. The site answers the manifest over
-        // plain HTTP, and nothing rides on this answer but a notice: the
-        // install itself goes over HTTPS and checks the signature.
+        // GitHub requires HTTPS. Treat transport/manifest as untrusted:
+        // only the board-bound ECDSA image signature authorizes installation.
         const String base = OTA_WIFI_BASE;
-        WiFiClient plain;
+        WiFiClientSecure plain;plain.setInsecure();
         HTTPClient http;
         if (http.begin(plain, base + "manifest-" + OtaCore::buildName() + ".json")) {
             http.setConnectTimeout((int32_t)left);
@@ -834,11 +839,13 @@ bool bootCheck(uint32_t budgetMs) {
         // lookups at once, one of them waiting out a retry. Asked one after
         // the other, the clock costs its own couple of hundred ms and the
         // GET costs what it should.
+        }
         Clock::syncStart();
     } else {
         Serial.printf("[ota] boot check: no join (%d) in %lu ms\n", (int)st, (unsigned long)(millis() - t0));
     }
     if (st == WL_CONNECTED) {
+        rememberAuthenticated();
         // A time server answers in well under a second; this is the cap on
         // a bad day, not the usual cost. Skipped once the clock is fresh.
         const uint32_t t2 = millis();
@@ -854,7 +861,7 @@ bool bootCheck(uint32_t budgetMs) {
     Clock::syncStop();
     // Everything back the way it was: the driver torn down, so Bluetooth
     // starts into the heap it always had.
-    WiFi.disconnect(true, true);
+    WiFi.disconnect(true, false);
     WiFi.mode(WIFI_OFF);
     Serial.printf("[ota] boot check done in %lu ms (heap %lu, largest %lu)\n", (unsigned long)(millis() - t0),
                   (unsigned long)ESP.getFreeHeap(),
@@ -878,6 +885,7 @@ void connectSaved() {
     connectSavedAt(k >= 0 ? (uint8_t)k : s_use);
 }
 
+const char* authenticatedNetwork(){rememberAuthenticated();return WiFi.status()==WL_CONNECTED?s_lastAuthenticated:"";}
 const char* network()       { return s_ssid; }
 const char* latestVersion() { return s_latest; }
 bool        upToDate()      { return s_latest[0] && strcmp(s_latest, FIRMWARE_VERSION) == 0; }

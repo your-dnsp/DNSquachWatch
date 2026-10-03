@@ -1,0 +1,11 @@
+{
+  "version": "1.5.0",
+  "target": "cyd-fast",
+  "release_name": "DNSquachWatch v1.5",
+  "whats_new": [
+    "Saved Wi-Fi connects without Update Check",
+    "Backup startup stack fix",
+    "Confirmed optional erase for USB recovery",
+    "DNSP-signed updates from DNSP GitHub"
+  ]
+}

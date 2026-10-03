@@ -1,0 +1,2 @@
+SET LOCATION
+Alerts & Detections > Set Location adds a manual label to new findings. Choose Home, Work, Driving, Con or up

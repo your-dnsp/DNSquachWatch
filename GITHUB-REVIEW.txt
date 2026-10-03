@@ -1,0 +1,142 @@
+Prepared v1.4 source, README, microSD content, installer and submission checks. NOT PUSHED. Build artifacts excluded.
+
+.github/ISSUE_TEMPLATE/device_research.yml
+.github/workflows/research-redaction.yml
+CONTRIBUTING-RESEARCH.md
+FIRMWARE-NOTES.txt
+GITHUB-REVIEW.txt
+INSTALL-CONTENT.md
+PENDING-CHANGES.md
+README-DNSP.md
+README.md
+SD-CONTENT-DESIGN.md
+SIZE-AUDIT-v1.4.json
+SIZE-AUDIT.md
+TEST-REPORT.md
+TRANSLATION-STRINGS-EN.txt
+extra_script.py
+include/card_content.h
+include/care.h
+include/detection.h
+include/installation_guide.h
+include/readable_logs.h
+include/research_submission.h
+include/sd_log.h
+include/sd_retry.h
+include/settings.h
+include/ui_scratch.h
+include/ui_settings.h
+microSD-content/DNSP Content/v1.4/DNSQUACHWATCH INSTALLATION.txt
+microSD-content/DNSP Content/v1.4/guide-000.txt
+microSD-content/DNSP Content/v1.4/guide-001.txt
+microSD-content/DNSP Content/v1.4/guide-002.txt
+microSD-content/DNSP Content/v1.4/guide-003.txt
+microSD-content/DNSP Content/v1.4/guide-004.txt
+microSD-content/DNSP Content/v1.4/guide-005.txt
+microSD-content/DNSP Content/v1.4/guide-006.txt
+microSD-content/DNSP Content/v1.4/guide-007.txt
+microSD-content/DNSP Content/v1.4/guide-008.txt
+microSD-content/DNSP Content/v1.4/guide-009.txt
+microSD-content/DNSP Content/v1.4/guide-010.txt
+microSD-content/DNSP Content/v1.4/guide-011.txt
+microSD-content/DNSP Content/v1.4/guide-012.txt
+microSD-content/DNSP Content/v1.4/guide-013.txt
+microSD-content/DNSP Content/v1.4/guide-014.txt
+microSD-content/DNSP Content/v1.4/guide-015.txt
+microSD-content/DNSP Content/v1.4/guide-016.txt
+microSD-content/DNSP Content/v1.4/guide-017.txt
+microSD-content/DNSP Content/v1.4/guide-018.txt
+microSD-content/DNSP Content/v1.4/guide-019.txt
+microSD-content/DNSP Content/v1.4/guide-020.txt
+microSD-content/DNSP Content/v1.4/guide-021.txt
+microSD-content/DNSP Content/v1.4/guide-022.txt
+microSD-content/DNSP Content/v1.4/guide-023.txt
+microSD-content/DNSP Content/v1.4/guide-024.txt
+microSD-content/DNSP Content/v1.4/guide-025.txt
+microSD-content/DNSP Content/v1.4/guide-026.txt
+microSD-content/DNSP Content/v1.4/guide-027.txt
+microSD-content/DNSP Content/v1.4/guide-028.txt
+microSD-content/DNSP Content/v1.4/guide-029.txt
+microSD-content/DNSP Content/v1.4/guide-030.txt
+microSD-content/DNSP Content/v1.4/guide-031.txt
+microSD-content/DNSP Content/v1.4/guide-032.txt
+microSD-content/DNSP Content/v1.4/guide-033.txt
+microSD-content/DNSP Content/v1.4/guide-034.txt
+microSD-content/DNSP Content/v1.4/guide-035.txt
+microSD-content/DNSP Content/v1.4/guide-036.txt
+microSD-content/DNSP Content/v1.4/guide-037.txt
+microSD-content/DNSP Content/v1.4/guide-038.txt
+microSD-content/DNSP Content/v1.4/guide-039.txt
+microSD-content/DNSP Content/v1.4/guide-040.txt
+microSD-content/DNSP Content/v1.4/guide-041.txt
+microSD-content/DNSP Content/v1.4/guide-042.txt
+microSD-content/DNSP Content/v1.4/guide-043.txt
+microSD-content/DNSP Content/v1.4/guide-044.txt
+microSD-content/DNSP Content/v1.4/guide-045.txt
+microSD-content/DNSP Content/v1.4/guide-046.txt
+microSD-content/DNSP Content/v1.4/guide-047.txt
+microSD-content/DNSP Content/v1.4/guide-048.txt
+microSD-content/DNSP Content/v1.4/guide-049.txt
+microSD-content/DNSP Content/v1.4/guide-050.txt
+microSD-content/DNSP Content/v1.4/guide-051.txt
+microSD-content/DNSP Content/v1.4/guide-052.txt
+microSD-content/DNSP Content/v1.4/guide-053.txt
+microSD-content/DNSP Content/v1.4/guide-054.txt
+microSD-content/DNSP Content/v1.4/guide-055.txt
+microSD-content/DNSP Content/v1.4/guide-056.txt
+microSD-content/DNSP Content/v1.4/guide-057.txt
+microSD-content/DNSP Content/v1.4/guide-058.txt
+microSD-content/DNSP Content/v1.4/guide-059.txt
+microSD-content/DNSP Content/v1.4/guide-060.txt
+microSD-content/DNSP Content/v1.4/guide-061.txt
+microSD-content/DNSP Content/v1.4/guide-062.txt
+microSD-content/DNSP Content/v1.4/guide-063.txt
+microSD-content/DNSP Content/v1.4/guide-064.txt
+microSD-content/DNSP Content/v1.4/guide-065.txt
+microSD-content/DNSP Content/v1.4/guide-066.txt
+microSD-content/DNSP Content/v1.4/guide-067.txt
+microSD-content/DNSP Content/v1.4/guide-068.txt
+microSD-content/DNSP Content/v1.4/guide-069.txt
+microSD-content/DNSP Content/v1.4/guide-070.txt
+microSD-content/DNSP Content/v1.4/guide-071.txt
+microSD-content/DNSP Content/v1.4/guide-072.txt
+microSD-content/DNSP Content/v1.4/guide-073.txt
+microSD-content/README.txt
+microSD-content/manifest.json
+platformio.ini
+sim/Makefile
+sim/detection_sim.cpp
+src/backup.cpp
+src/card_content.cpp
+src/care.cpp
+src/cyd_charge.inc
+src/detection.cpp
+src/installation_guide.cpp
+src/main.cpp
+src/pixel_tide.cpp
+src/readable_logs.cpp
+src/research_submission.cpp
+src/sd_log.cpp
+src/settings.cpp
+src/ui_boot.cpp
+src/ui_care.cpp
+src/ui_field.cpp
+src/ui_labels.cpp
+src/ui_location.cpp
+src/ui_scratch.cpp
+src/ui_settings.cpp
+src/ui_sysprops.cpp
+src/user_labels_storage.cpp
+test/Makefile
+test/card_content_test.cpp
+test/care_test.cpp
+test/install_tools_test.py
+test/installation_guide_test.cpp
+test/readable_storage_test.cpp
+test/research_submission_test.cpp
+test/sd_retry_test.cpp
+test/storage_shim/SD.h
+test/ui_scratch_test.cpp
+tools/check_research_report.py
+tools/install_dnsp.py
+tools/research_issue_guard.py

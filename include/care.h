@@ -3,7 +3,7 @@
 #include <stdint.h>
 #include "ui_settings.h"
 namespace Care {
-constexpr size_t VALUE_COUNT=33, SETTINGS_CAP=1024;
+constexpr size_t VALUE_COUNT=34, SETTINGS_CAP=1024;
 struct Snapshot { uint32_t values[VALUE_COUNT]{}; uint8_t language=0,hebrew=0,contrast=0,reduced=0,left=0,large=0; };
 uint32_t crc(const void*,size_t);
 bool valid(const Snapshot&);
@@ -29,6 +29,8 @@ bool busy();
 const char* status();
 unsigned percent();
 const char* phaseLabel();
+const char* progressDetail();
+uint32_t elapsedSeconds(uint32_t now);
 uint8_t slot();
 void nextSlot();
 bool restore(bool card,DetectionEngine* engine=nullptr);

@@ -1,5 +1,6 @@
 // SquachWatch-CYD — theme implementation
 #include "theme.h"
+#include "remington.h"
 #include "field_tools.h"
 #include "language.h"
 #include "draw_band.h"
@@ -2422,6 +2423,8 @@ void drawFlyingToasters(TFT_eSPI& t, uint32_t now, int yStart, int yEnd) {
         }
     }
 
+    Remington::shootingStar(t,now,yStart,yEnd);
+
     // ---- comet -----------------------------------------------------------
     // Slower and much rarer than the shooting star, and built the other way
     // round: a solid head with a glow, and a trail that follows the path it
@@ -3570,6 +3573,73 @@ void drawAquarium(TFT_eSPI& t, uint32_t now, int yStart, int yEnd) {
     }
 }
 
+// ---- XYZZY ----------------------------------------------------------------
+// The magic word from the first adventure game. Every so often the terminal
+// types it, large, either side of Squachy, and holds it for a few seconds.
+// Tap it three times (three appearances) and consumeXyzzy() reports each
+// one; the third is the YZZERD unlock.
+//
+// Either side of him, not centred like the banner below: he stands in the
+// middle of this band and a centred word is behind him.
+static const uint32_t XYZZY_SHOW_MS = 3500;
+static const uint8_t  XYZZY_NEEDED  = 3;
+static uint32_t s_xyzzyNextAt = 0, s_xyzzyStart = 0, s_xyzzyHitAt = 0;
+// Where the word is RIGHT NOW, so a tap can find it -- same shape as the
+// lodge and the eye: published every frame it is up, stale after 250 ms.
+static int      s_xyzzyX[2] = { 0, 0 }, s_xyzzyY = 0, s_xyzzyHW = 0, s_xyzzyHH = 0;
+static uint32_t s_xyzzyAt = 0;
+static uint8_t  s_xyzzyTaps = 0, s_xyzzyPending = 0;
+
+uint8_t consumeXyzzy() {
+    const uint8_t n = s_xyzzyPending;
+    s_xyzzyPending = 0;
+    return n;
+}
+
+// Bring the word up now rather than on its own clock: the console's XYZZY
+// command and the emulator, so the unlock can be tested without waiting.
+void summonXyzzy() { if (!s_xyzzyStart) s_xyzzyNextAt = 1; }
+
+static void drawXyzzy(TFT_eSPI& t, uint32_t now, int yStart, int bandH) {
+    if (!s_xyzzyNextAt) s_xyzzyNextAt = now + (uint32_t)random(12000, 24000);
+    if (!s_xyzzyStart) {
+        if (now < s_xyzzyNextAt) return;
+        s_xyzzyStart = now ? now : 1;
+        s_xyzzyHitAt = 0;
+    }
+    const bool hit = s_xyzzyHitAt != 0;
+    if (hit ? (now - s_xyzzyHitAt > 450) : (now - s_xyzzyStart > XYZZY_SHOW_MS)) {
+        s_xyzzyStart  = 0;
+        s_xyzzyHitAt  = 0;
+        s_xyzzyNextAt = now + (uint32_t)random(14000, 28000);
+        return;
+    }
+    const int w  = t.width();
+    const int sz = (w >= 300) ? 2 : 1;
+    const int cw = 6 * sz * 5, ch = 8 * sz;              // "XYZZY"
+    const int cy = yStart + bandH / 3;
+    // Tapped: it flashes inverted, then goes. Otherwise yellow on the dark,
+    // with a cursor blinking after it, so it reads as typed.
+    const uint16_t ink = hit ? BG : VAPOR_YELLOW, paper = hit ? VAPOR_YELLOW : BG;
+    t.setTextSize(sz);
+    t.setTextColor(ink, paper);
+    for (uint8_t k = 0; k < 2; k++) {
+        const int cx = k == 0 ? w / 5 : w - w / 5;
+        t.fillRect(cx - cw / 2 - 4, cy - ch / 2 - 3, cw + 8 + 6 * sz, ch + 6, paper);
+        t.drawRect(cx - cw / 2 - 4, cy - ch / 2 - 3, cw + 8 + 6 * sz, ch + 6, VAPOR_YELLOW);
+        t.setCursor(cx - cw / 2, cy - ch / 2);
+        t.print("XYZZY");
+        if (!hit && ((now / 300) & 1)) t.fillRect(cx + cw / 2 + sz, cy - ch / 2, 5 * sz, ch, VAPOR_YELLOW);
+        s_xyzzyX[k] = cx + 3 * sz;
+    }
+    t.setTextSize(1);
+    if (!hit) {
+        // Generous: it is a word to be poked at, not a target to be hit.
+        s_xyzzyY = cy; s_xyzzyHW = cw / 2 + 4 + 3 * sz + 8; s_xyzzyHH = ch / 2 + 3 + 10;
+        s_xyzzyAt = now ? now : 1;
+    }
+}
+
 // Two independently-scrolling columns (different add intervals so they
 // never sync up) side by side, so the log fills the full screen width
 // instead of a narrow strip down the left.
@@ -3696,6 +3766,9 @@ void drawTerminalLog(TFT_eSPI& t, uint32_t now, int yStart, int yEnd) {
             flashNextAt = now + (uint32_t)random(9000, 20000);
         }
     }
+
+    // The magic word, over everything else the terminal has up.
+    drawXyzzy(t, now, yStart, bandH);
 }
 
 // ---- FIREFLIES ---------------------------------------------------------
@@ -4515,6 +4588,20 @@ bool backgroundTap(int x, int y, uint32_t now) {
             } else {
                 setEyeStreak(run);
             }
+            return true;
+        }
+    }
+
+    // XYZZY, while the terminal has it up. Either copy of the word counts.
+    if (s_xyzzyAt && (now - s_xyzzyAt) <= 250) {
+        const int xdy = y - s_xyzzyY;
+        for (uint8_t k = 0; k < 2; k++) {
+            const int xdx = x - s_xyzzyX[k];
+            if (xdx < -s_xyzzyHW || xdx > s_xyzzyHW || xdy < -s_xyzzyHH || xdy > s_xyzzyHH) continue;
+            s_xyzzyAt    = 0;                    // taken: one tap an appearance
+            s_xyzzyHitAt = now ? now : 1;
+            if (++s_xyzzyTaps >= XYZZY_NEEDED) s_xyzzyTaps = 0;
+            s_xyzzyPending = s_xyzzyTaps ? s_xyzzyTaps : XYZZY_NEEDED;
             return true;
         }
     }

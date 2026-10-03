@@ -1,0 +1,2 @@
+CHARGE VS SHUTDOWN
+Charge Mode pauses radios and lowers power. Use Safe Shutdown before removing power or microSD; Charge Mode

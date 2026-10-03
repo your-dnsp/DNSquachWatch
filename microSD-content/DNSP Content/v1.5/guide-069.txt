@@ -1,0 +1,2 @@
+MASKED MODE
+Masked Mode masks supported screens only. Logs, backups and files in Pocket Reader are not anonymized.

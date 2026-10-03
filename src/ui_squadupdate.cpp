@@ -2,6 +2,7 @@
 #if SQUACH_MESH
 #include "ui_squadupdate.h"
 #include "theme.h"
+#include "privacy.h"
 #include "settings.h"
 #include "ota_core.h"
 #include "ota_wifi.h"
@@ -144,8 +145,11 @@ void uiSquadUpdateTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
         t.setTextSize(1);
         y = g.shareY + g.shareH + 4;
         if (can)
+        {
+            char pv[40];
             snprintf(buf, sizeof buf, "%s, used once and forgotten.",
-                     OtaWifi::savedSsidAt((uint8_t)s_shareIdx));
+                     Privacy::name(OtaWifi::savedSsidAt((uint8_t)s_shareIdx), pv, sizeof pv));
+        }
         else if (!s_scanDone)
             snprintf(buf, sizeof buf, "Looking for a network to share...");
         else if (!OtaWifi::hasSaved())

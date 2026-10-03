@@ -1,25 +1,11 @@
-# DNSquachWatch v1.1.2 test report
+# v1.5 validation
 
-Targets: 2.8-inch CYD, ST7789 and ILI9341, initial 80 MHz display clock (`cyd-fast` and `cyd-ili9341-fast`). Upstream base: SquachWatch v1.25.0.
+- Pinned PlatformIO ESP32 ST7789-80MHz compilation and the complete-image fit guard pass.
+- The complete host test suite passes, including per-source DEAUTH, record/export/journal logic, storage retry, security/duress, labels, rendering helpers and malformed input checks.
+- DNSP UI simulation passes in landscape, portrait, reboot and half-buffer/full-frame comparisons. Duress UI simulation also passed during this update.
+- Five installer tests pass: ordinary updates preserve state; erase requires yes; decline/EOF cancel; damaged binaries cannot trigger erase.
+- All 702 serialized translations, versioned card-file hashes, and 19,757 font bytes match the retained source fixtures. Every normal/Japanese font bitmap also matches when decoded from bounded 64-byte card windows.
+- The signed update image is checked against the DNSP public key; altered images and another board's signed message are rejected before publication.
+- USB kit image headers/digests, archive integrity and per-file SHA-256 checks are validated before delivery.
 
-## Automated results
-
-- PlatformIO `cyd-fast` and `cyd-ili9341-fast` release builds: passed.
-- ST7789 firmware flash use: 1,912,213 / 1,966,080 bytes (97.3%); 53,867 bytes remain by the linker measurement. Its generated `firmware.bin` is 1,918,512 bytes, leaving 47,568 bytes of raw slot headroom.
-- ILI9341 firmware flash use: 1,912,313 / 1,966,080 bytes (97.3%); 53,767 bytes remain by the linker measurement. Its generated `firmware.bin` is 1,918,608 bytes, leaving 47,472 bytes of raw slot headroom.
-- Static RAM use for each target: 120,128 / 327,680 bytes (36.7%).
-- Installation-guide decode passed a byte-for-byte comparison with the printable source; the compact aquarium texture passed the full firmware build.
-- Complete host unit suite: passed, including Remote ID, malformed radio input, ALPR/signature matching, user-label validation and replacement, the 90-second Sketchy Environment rule, security, duress journal interruption, verified backup, spam flood, alert queue/snooze, settings persistence, crash reports, research exports, and game logic.
-- All 35 Python partition, display-target, duress-journal, recovery-tool, Bluetooth-runtime, and display-runtime tests passed.
-- Focused DEAUTH tests passed: same-source threshold, unrelated/split sources, independent per-source cooldowns, true sliding-window expiry, multiple receivers, BSSID/reason/protection evidence, malformed frames, rollover arithmetic, and deterministic table eviction. Research tests passed for decoded RAW evidence, address-free redaction, protected-body handling, and coherent-burst session counters.
-- Backup now refreshes only internal readable history instead of copying microSD files back onto the same card. Restore validates both records before applying them, journals the selected slot for deterministic retry, verifies restored state, and hands Watch/Hunt targets across one reboot. Hardware power-interruption verification remains required.
-- Banded-frame composition simulation passed in landscape and portrait, and the isolated duress simulation passed; the decoy path does not start normal detection services.
-- The broad UI integration harness still reports pre-existing failures in alert timing/snooze, several simulator preference-persistence checks, and Hebrew persistence. The same failures reproduce on the unmodified v1.1.0 simulator, while the v1.1.2 Research controls and all DEAUTH-specific tests pass. This release does not claim those unrelated harness failures were repaired.
-
-Compiler warnings remaining are simulator/library warnings for unavailable hardware paths and TFT_eSPI's built-in touch warning. The board uses the separate XPT2046 touch library, so TFT_eSPI's own touch API is intentionally disabled.
-
-## Physical checks still required
-
-The preceding images passed initial testing on the user's ST7789 board, including ordinary boot, display, microSD visibility, and the tested recovery paths reported during development. These exact v1.1.2 images have not yet been flashed, and the ILI9341 build has no physical-panel result yet. On each display, verify sustained boot with microSD inserted; touch and color calibration; a controlled DEAUTH RAW Research session and redacted export; label exports; the paired ALPR/deauth rule; scan/system history navigation; two ordinary Refresh runs without duplicates or removed history; an interrupted Refresh followed by successful retry; Export & Organize; Pocket Reader access; interrupted and successful backup/restore of settings, labels, Ignore entries, rules and Watch/Hunt targets; the one-reboot target handoff; all five scan-profile controls; the three-minute comparison; and unavailable/full/removed-card failures before wider distribution.
-
-Avata 2 reception and human-reviewed translations remain separately deferred.
+These are software/build checks. This v1.5 image has not been flashed by the assistant. Hardware testing remains required for long backups on busy/slow cards, saved home Wi-Fi join/time/location, both display panels, and a full signed network update. Avata 2 field validation and human translation review remain pending. No destructive device/card test was performed.

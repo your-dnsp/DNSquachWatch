@@ -1,4 +1,6 @@
 #include "ui_field.h"
+#include "ui_scratch.h"
+#include "location_label.h"
 #include "field_tools.h"
 #include "drone_watch.h"
 #include "research.h"
@@ -48,8 +50,6 @@ static bool randomAnimating=false;
 static uint32_t randomStarted=0;
 static constexpr uint32_t RANDOM_ANIMATION_MS=1000;
 static uint8_t readerOffset=0,readerCount=0,readerPick=0;
-static char readerNames[16][96]{};
-static char readerText[1025]{};
 static bool readerOpen=false;
 static bool readerRefresh=false;
 static uint32_t radioPrevWifi=0,radioPrevBle=0,radioSampleAt=0;
@@ -81,18 +81,19 @@ static bool morseOn(uint32_t elapsed){
     return false;
 }
 static void loadReaderList(){
-    readerCount=0;readerOpen=false;readerText[0]=0;
+    UiScratch::storage.reader=UiScratch::Reader{};
+    readerCount=0;readerOpen=false;UiScratch::storage.reader.text[0]=0;
 #if defined(ARDUINO_ARCH_ESP32)
     const char* known[]={"ALL-ALERTS.txt","SCAN-HISTORY.txt","SYSTEM-HISTORY.txt","SKETCHY-ENVIRONMENT.txt","EXPORT-SUMMARY.txt"};
-    for(const char* n:known){char p[96];snprintf(p,sizeof p,"/DNSP Readable Logs/Current/%s",n);if(SD.exists(p)&&readerCount<16)snprintf(readerNames[readerCount++],96,"%s",p);}
+    for(const char* n:known){char p[96];snprintf(p,sizeof p,"/DNSP Readable Logs/Current/%s",n);if(SD.exists(p)&&readerCount<16)snprintf(UiScratch::storage.reader.names[readerCount++],96,"%s",p);}
     File root=SD.open("/");if(!root)return;File f;
-    while((f=root.openNextFile())&&readerCount<16){const char* n=f.name();size_t z=strlen(n);if(!f.isDirectory()&&z>4&&!strcasecmp(n+z-4,".txt")){snprintf(readerNames[readerCount++],96,"%s",n);}f.close();}root.close();
+    while((f=root.openNextFile())&&readerCount<16){const char* n=f.name();size_t z=strlen(n);if(!f.isDirectory()&&z>4&&!strcasecmp(n+z-4,".txt")){snprintf(UiScratch::storage.reader.names[readerCount++],96,"%s",n);}f.close();}root.close();
 #endif
 }
 static bool openReader(uint8_t i){
-    readerText[0]=0;if(i>=readerCount)return false;
+    UiScratch::storage.reader.text[0]=0;if(i>=readerCount)return false;
 #if defined(ARDUINO_ARCH_ESP32)
-    File f=SD.open(readerNames[i],FILE_READ);if(!f)return false;f.seek(readerOffset);size_t n=f.read((uint8_t*)readerText,sizeof(readerText)-1);f.close();readerText[n]=0;readerOpen=true;return true;
+    File f=SD.open(UiScratch::storage.reader.names[i],FILE_READ);if(!f)return false;f.seek(readerOffset);size_t n=f.read((uint8_t*)UiScratch::storage.reader.text,sizeof(UiScratch::storage.reader.text)-1);f.close();UiScratch::storage.reader.text[n]=0;readerOpen=true;return true;
 #else
     return false;
 #endif
@@ -344,7 +345,7 @@ void draw(TFT_eSPI &t, uint32_t now, const DetectionEngine &eng) {
         paragraph(t,"Rules combine separate observations into a secondary alert. Sketchy Environment watches for Flock, Axon or another ALPR clue and a deauthentication burst within 90 seconds. It is a caution signal, not proof the events are related. Custom rule creation is planned, but is not available in this version.",42,h-92);
     } else if(page==ALERT_HISTORY_SCAN){
         BlackBox::DetRecord r{};uint16_t count=BlackBox::detectionsKept();
-        if(BlackBox::readDetections(historyIndex,1,&r)){char m[24];macText(m,sizeof m,r.mac);snprintf(b,sizeof b,"%u/%u  %s%s\nBoot %u +%lus\nMAC %s\nRSSI %d  CH %u  hits %u\n%s | %s",(unsigned)(historyIndex+1),(unsigned)count,detectionTypeName((DetectionType)r.type),(r.flags&BlackBox::DET_AGAIN)?" - REAPPEARED":"",(unsigned)r.boot,(unsigned long)r.upSec,m,(int)r.rssi,(unsigned)r.channel,(unsigned)r.hits,r.conf==(uint8_t)Confidence::HIGH_CONF?"HIGH":r.conf==(uint8_t)Confidence::MED_CONF?"MEDIUM":"LOW",r.name[0]?r.name:r.vendor);paragraph(t,b,42,h-90);}else paragraph(t,"No stored scan events. Snoozed and popup-suppressed detections appear here once observed and stored.",44,h-96);
+        if(BlackBox::readDetections(historyIndex,1,&r)){char m[24];macText(m,sizeof m,r.mac);snprintf(b,sizeof b,"%u/%u  %s%s\nBoot %u +%lus\nMAC %s\nRSSI %d  CH %u  hits %u\n%s | %s\nLocation: %s",(unsigned)(historyIndex+1),(unsigned)count,detectionTypeName((DetectionType)r.type),(r.flags&BlackBox::DET_AGAIN)?" - REAPPEARED":"",(unsigned)r.boot,(unsigned long)r.upSec,m,(int)r.rssi,(unsigned)r.channel,(unsigned)r.hits,r.conf==(uint8_t)Confidence::HIGH_CONF?"HIGH":r.conf==(uint8_t)Confidence::MED_CONF?"MEDIUM":"LOW",r.name[0]?r.name:r.vendor,LocationLabel::text(BlackBox::locationKey(r)));paragraph(t,b,42,h-90);}else paragraph(t,"No stored scan events. Snoozed and popup-suppressed detections appear here once observed and stored.",44,h-96);
     } else if(page==ALERT_HISTORY_SYSTEM){
         BlackBox::BootRecord r{};uint16_t count=BlackBox::bootsKept();
         if(BlackBox::readBoots(historyIndex,1,&r)){snprintf(b,sizeof b,"%u/%u  BOOT %u\nReason: %s\nFirmware: %s\nPrior uptime: %lus\nHeap: %lu free / %lu block\nScreen %u  Task: %s",(unsigned)(historyIndex+1),(unsigned)count,(unsigned)r.boot,BlackBox::reasonName(r.reason),r.version,(unsigned long)r.upSec,(unsigned long)r.heapFree,(unsigned long)r.heapBlock,(unsigned)r.screen,r.task[0]?r.task:"--");paragraph(t,b,42,h-90);}else paragraph(t,"No stored device or system records are available.",44,h-96);
@@ -407,9 +408,9 @@ void draw(TFT_eSPI &t, uint32_t now, const DetectionEngine &eng) {
         snprintf(b,sizeof b,"COUNTER: %ld",(long)counter);Lang::draw(t,b,8,counterLabelY,w-16,28,Theme::WHITE,false,true);Lang::button(t,8,counterButtonsY,w/3-7,32,"-1");Lang::button(t,w/3+2,counterButtonsY,w/3-4,32,"RESET");Lang::button(t,2*w/3+2,counterButtonsY,w/3-10,32,"+1");
     } else if (page == POCKET_READER) {
         if(readerRefresh){snprintf(b,sizeof b,"%s %u%%",ReadableLogs::phase(),ReadableLogs::percent());line(t,b,46,false);t.drawRect(12,70,w-24,12,Theme::CYAN);t.fillRect(14,72,(w-28)*ReadableLogs::percent()/100,8,Theme::CYAN);paragraph(t,"Refreshing readable files. Keep power on.",92,h-150);}
-        else if(readerOpen){paragraph(t,readerText,40,h-86);line(t,"First 1 KiB; full identifiers may appear",h-54,false);}
+        else if(readerOpen){paragraph(t,UiScratch::storage.reader.text,40,h-86);line(t,"First 1 KiB; full identifiers may appear",h-54,false);}
         else if(!readerCount)paragraph(t,"No root-level .txt files found, or microSD is unavailable. Put short reference files in the card root.",42,h-96);
-        else {for(uint8_t i=0;i<readerCount&&i<6;i++){snprintf(b,sizeof b,"%c %.32s",i==readerPick?'>':' ',readerNames[i]);line(t,b,42+i*22,false);}}
+        else {for(uint8_t i=0;i<readerCount&&i<6;i++){snprintf(b,sizeof b,"%c %.32s",i==readerPick?'>':' ',UiScratch::storage.reader.names[i]);line(t,b,42+i*22,false);}}
         if(!readerRefresh&&!readerOpen){Lang::button(t,8,h-126,w-16,36,"REFRESH FILES");if(readerCount)Lang::button(t,8,h-84,w-16,36,"OPEN SELECTED");}
     } else if (page == RADIO_ACTIVITY) {
         uint32_t wf=wifiFramesSeen(),ba=advertsSeen();if(!radioSampleAt){radioPrevWifi=wf;radioPrevBle=ba;radioSampleAt=now;}else if(now-radioSampleAt>=1000){uint32_t dt=now-radioSampleAt;radioWifiRate=(wf-radioPrevWifi)*1000/dt;radioBleRate=(ba-radioPrevBle)*1000/dt;radioPrevWifi=wf;radioPrevBle=ba;radioSampleAt=now;}

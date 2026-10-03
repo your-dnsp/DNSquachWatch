@@ -209,13 +209,13 @@ void drawUpdateTab(TFT_eSPI& t, const Geom& g) {
             if(count>=s_creditScroll&&count<s_creditScroll+visible)
                 text(t,g.px+8,g.py+5+(count-s_creditScroll)*LINE,lines[i],Theme::BLACK);
     };
-    add("Original SquachWatch base: 1.25.0");
+    add("Original SquachWatch base: 1.27.0");
     const char* version=OtaCore::availableVersion();char line[100];
     snprintf(line,sizeof line,"Latest original release heard: %s",version[0]?version:"not checked / none known");add(line);
     const char* source=OtaCore::availableFrom();
     snprintf(line,sizeof line,"Source: %s",!version[0]?"none this boot":source[0]?source:"squachwatch.com");add(line);
-    add("Current DNSP firmware: v1.1.2");
-    add("Based on SquachWatch v1.25.0.");
+    add("Current DNSP firmware: v1.5");
+    add("Based on SquachWatch v1.27.0.");
     add("Last flash date: unknown (USB flashing does not record it).");
     add("The system is running custom firmware by DNSP. Updating from SquachWatch directly will remove the customizations.");
     add("If you need a newer DNSP firmware update, contact dnsp@duck.com.");
@@ -226,6 +226,41 @@ void drawUpdateTab(TFT_eSPI& t, const Geom& g) {
         t.fillRect(g.px+g.pw-9,g.py+5,4,track,Theme::W95_SHADOW);
         t.fillRect(g.px+g.pw-9,g.py+5+(track-thumb)*s_creditScroll/s_creditScrollMax,4,thumb,NAVY);}
     checkbox(t,g.px+8,checkboxY(g),Settings::updateCheck(),"Check at boot");
+}
+
+void drawCreditsTab(TFT_eSPI& t, const Geom& g) {
+    const char* const paragraphs[] = {
+        "Modified firmware by dnsprincess (DNSP).",
+        "Kudos to SquachWatch creator Talking Sasquach (YouTube) / skizzophrenic (GitHub) for the original project.",
+        "DNSP is responsible for custom changes and creative works. The original creator is not responsible for this modified firmware.",
+        "Original firmware: https://squachwatch.com/",
+        "Device identification research on GitHub:",
+        "ReconGrunt / FlipDeFlock",
+        "zmattmanz / flock-detection",
+        "Ringmast4r / FLOCK. Special thanks for the OUI intelligence that helped improve device identification.",
+        "rpriven / flock-public-records-toolkit",
+        "Their public research informed DNSquachWatch. These researchers are not responsible for this firmware or its detection conclusions."
+    };
+    // Stream short paragraphs through the same scrolling model as Update.
+    // A single fixed line array would silently truncate the longer credits.
+    const int visible = (g.ph - 12) / LINE;
+    int count = 0;
+    for (const char* paragraph : paragraphs) {
+        char lines[10][48];
+        const int n = Theme::wrapText(t, paragraph, g.pw - 26, lines, 10);
+        for (int i = 0; i < n; ++i, ++count)
+            if (count >= s_creditScroll && count < s_creditScroll + visible)
+                text(t, g.px + 8, g.py + 5 + (count - s_creditScroll) * LINE, lines[i], Theme::BLACK);
+    }
+    s_creditScrollMax = count > visible ? count - visible : 0;
+    if (s_creditScroll > s_creditScrollMax) s_creditScroll = s_creditScrollMax;
+    if (s_creditScrollMax) {
+        const int track = visible * LINE;
+        int thumb = track * visible / count;
+        if (thumb < 6) thumb = 6;
+        t.fillRect(g.px + g.pw - 9, g.py + 5, 4, track, Theme::W95_SHADOW);
+        t.fillRect(g.px + g.pw - 9, g.py + 5 + (track - thumb) * s_creditScroll / s_creditScrollMax, 4, thumb, NAVY);
+    }
 }
 
 void drawBoardTab(TFT_eSPI& t, const Geom& g) {
@@ -243,7 +278,7 @@ void drawBoardTab(TFT_eSPI& t, const Geom& g) {
     y += LINE;
 
     snprintf(buf, sizeof buf, "%s  %s", OtaCore::runningSlot(), OtaCore::runningVersion());
-    row(t, g, y, "Installed", "DNSP v1.1.2");
+    row(t, g, y, "Installed", "DNSP v1.5");
     y += LINE;
 
     const char* other = OtaCore::otherVersion();
@@ -316,22 +351,7 @@ void uiSysPropsTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool 
     t.fillRect(g.x + 5 + s_tab * g.tabW, g.py, g.tabW - 2, 2, Theme::W95_FACE);
 
     if      (s_tab == TAB_UPDATE) drawUpdateTab(t, g);
-    else if(s_tab==TAB_CREDITS) {
-        const char* credit = "Modified firmware by dnsprincess. Kudos to SquachWatch creator Talking Sasquach (YouTube) / skizzophrenic (GitHub). DNSP is responsible for custom changes and creative works, not the original creator. Original firmware: https://squachwatch.com/";
-        char lines[16][48];
-        const int count = Theme::wrapText(t, credit, g.pw-26, lines, 16);
-        const int visible = (g.ph-10)/LINE;
-        s_creditScrollMax = count > visible ? count-visible : 0;
-        if (s_creditScroll > s_creditScrollMax) s_creditScroll = s_creditScrollMax;
-        for (int i=0; i<visible && i+s_creditScroll<count; ++i)
-            text(t,g.px+8,g.py+5+i*LINE,lines[i+s_creditScroll],Theme::BLACK);
-        if (s_creditScrollMax) {
-            const int track = g.ph-10;
-            const int thumb = track*visible/count;
-            t.fillRect(g.px+g.pw-10,g.py+5,5,track,Theme::W95_SHADOW);
-            t.fillRect(g.px+g.pw-10,g.py+5+(track-thumb)*s_creditScroll/s_creditScrollMax,5,thumb,NAVY);
-        }
-    }
+    else if(s_tab==TAB_CREDITS) drawCreditsTab(t, g);
     else                          drawBoardTab(t, g);
 
     // The buttons. UPDATE NOW only where it belongs -- a button that acts on
@@ -346,8 +366,8 @@ void uiSysPropsTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool 
         t.drawRect(b.updX - 2, g.btnY - 2, b.updW + 4, BTN_H + 4, Theme::W95_DKSHADOW);
     } else {
         if (s_tab == TAB_CREDITS) {
-            boldButton(t, g.px+4, g.btnY, 54, BTN_H, "Up");
-            boldButton(t, g.px+62, g.btnY, 62, BTN_H, "Down");
+            boldButton(t, g.px+2, g.btnY, 28, BTN_H, "^");
+            boldButton(t, g.px+34, g.btnY, 28, BTN_H, "v");
         }
         boldButton(t, b.closeX, g.btnY, b.closeW, BTN_H, "Close");
     }
@@ -371,8 +391,7 @@ SysPropsHit uiSysPropsTouch(TFT_eSPI& t, int x, int y) {
         if (in(x, y, g.x + 4 + i * g.tabW, g.tabY - 2, g.tabW, TAB_H + 4)) { s_tab = i;s_creditScroll=0;s_creditScrollMax=0; return SysPropsHit::NONE; }
 
     if (s_tab == TAB_CREDITS) {
-        if (x>=g.px+2 && x<g.px+60 && y>=g.btnY-5 && y<g.btnY+BTN_H+5) { uiSysPropsScroll(-1); return SysPropsHit::NONE; }
-        if (x>=g.px+60 && x<g.px+126 && y>=g.btnY-5 && y<g.btnY+BTN_H+5) { uiSysPropsScroll(1); return SysPropsHit::NONE; }
+        if(y>=g.btnY&&y<g.btnY+BTN_H&&x>=g.px&&x<g.px+64){uiSysPropsScroll(x<g.px+32?-1:1);return SysPropsHit::NONE;}
     }
     if (s_tab == TAB_UPDATE) {
         if(y>=g.btnY&&y<g.btnY+BTN_H&&x>=g.px&&x<g.px+64){uiSysPropsScroll(x<g.px+32?-1:1);return SysPropsHit::NONE;}

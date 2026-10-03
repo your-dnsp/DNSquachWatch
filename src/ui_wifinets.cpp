@@ -2,6 +2,7 @@
 #include "ui_wifinets.h"
 #include "ota_wifi.h"
 #include "theme.h"
+#include "privacy.h"
 #include <Arduino.h>
 #include <stdio.h>
 #include <string.h>
@@ -71,9 +72,10 @@ void paragraph(TFT_eSPI& t, int y, uint16_t c, const char* s) {
 
 const char* resultWords(OtaWifi::SavedResult r) {
     switch (r) {
-        case OtaWifi::SavedResult::JOINED:       return "joined at the last boot";
-        case OtaWifi::SavedResult::BAD_PASSWORD: return "wrong password";
-        case OtaWifi::SavedResult::NOT_FOUND:    return "not found at the last boot";
+        case OtaWifi::SavedResult::JOINED:       return "last connection succeeded";
+        case OtaWifi::SavedResult::BAD_PASSWORD: return "authentication failed";
+        case OtaWifi::SavedResult::TIMEOUT: return "connection timed out";
+        case OtaWifi::SavedResult::NOT_FOUND:    return "not found on last attempt";
         default:                                 return "not tried yet";
     }
 }
@@ -117,7 +119,7 @@ void uiWifiNetsTick(TFT_eSPI& t, uint32_t now) {
     const Bar b = bar(t, 4);
     if (!n) {
         paragraph(t, ROW_Y0 + 4, Theme::WHITE,
-                  "No networks saved. ADD picks one from a scan. The password is checked at the next boot, "
+                  "No networks saved. ADD picks one from a scan. Saved networks are tried at boot. CONNECT tries now, "
                   "and this list says how that went.");
     }
     const int fit = rowsThatFit(t, b.y[0]);
@@ -131,7 +133,8 @@ void uiWifiNetsTick(TFT_eSPI& t, uint32_t now) {
         const int   tagW = tag[0] ? t.textWidth(tag) + 6 : 0;
         const int maxChars = (w - 16 - 12 - tagW) / t.textWidth("M");
         char name[40];
-        snprintf(name, sizeof name, "%.*s", maxChars > 32 ? 32 : maxChars, OtaWifi::savedSsidAt((uint8_t)i));
+        char pv[40];
+        snprintf(name, sizeof name, "%.*s", maxChars > 32 ? 32 : maxChars, Privacy::name(OtaWifi::savedSsidAt((uint8_t)i), pv, sizeof pv));
         t.setTextColor(Theme::WHITE, Theme::TASKBAR);
         t.setCursor(14, y + 4);
         t.print(name);
@@ -147,7 +150,7 @@ void uiWifiNetsTick(TFT_eSPI& t, uint32_t now) {
     }
     const bool haveSel = s_selected >= 0 && s_selected < n;
     const bool full    = n >= OtaWifi::SAVED_MAX;
-    Theme::drawWin95Button(t, b.x[0], b.y[0], b.w, BTN_H, "USE",    !haveSel || s_selected == OtaWifi::savedUse());
+    Theme::drawWin95Button(t, b.x[0], b.y[0], b.w, BTN_H, "CONNECT", !haveSel);
     Theme::drawWin95Button(t, b.x[1], b.y[1], b.w, BTN_H, "REMOVE", !haveSel);
     Theme::drawWin95Button(t, b.x[2], b.y[2], b.w, BTN_H, full ? "FULL" : "ADD", full);
     Theme::drawWin95Button(t, b.x[3], b.y[3], b.w, BTN_H, "BACK",   false);
@@ -206,7 +209,8 @@ void uiWifiAddTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
         const int   tagW = tag[0] ? t.textWidth(tag) + 6 : 0;
         const int maxChars = (w - 16 - 12 - 20 - tagW) / t.textWidth("M");
         char name[40];
-        snprintf(name, sizeof name, "%.*s", maxChars > 32 ? 32 : maxChars, ssid[0] ? ssid : "(hidden)");
+        char pv[40];
+        snprintf(name, sizeof name, "%.*s", maxChars > 32 ? 32 : maxChars, ssid[0] ? Privacy::name(ssid, pv, sizeof pv) : "(hidden)");
         t.setTextColor(Theme::WHITE, Theme::TASKBAR);
         t.setCursor(14, y + (ROW_H - t.fontHeight()) / 2);
         t.print(name);

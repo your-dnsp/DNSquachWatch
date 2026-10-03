@@ -196,3 +196,366 @@ v1.1 additions (English source; human translation pending)
 189. Complete readable history, settings, labels, rules and targets are included.
 190. PINs, Duress state and authentication secrets are never included.
 191. Settings, labels, rules and targets restored. Reboot only for hardware display changes.
+
+# v1.2 additions
+SET LOCATION
+EDIT LABEL
+CLEAR
+Home
+Work
+Driving
+Con
+Manual label | 24 characters maximum
+Recalled from authenticated Wi-Fi
+REMEMBER FOR VERIFIED WI-FI
+WI-FI NOT AUTHENTICATED THIS BOOT
+no-label-set
+location-unavailable
+Remington
+Double-tap to return
+
+# v1.2.1 additions
+COPY LOG
+CHECK LOG
+No backup progress for 2 minutes. Incomplete slot retained.
+History read/write verification failed. Backup incomplete.
+Stored history wrapped during export. Retry to capture the new head.
+Scan cursor commit failed; retry is safe.
+System cursor commit failed; retry is safe.
+Rule cursor commit failed; retry is safe.
+File %u/%u: %lu/%lu KiB
+Firmware: %lu/%lu KiB
+%lus elapsed | Keep power on
+
+
+v1.3 English fields added for human translation
+
+AURA
+LIT
+OUT
+PRIVACY MODE
+CHARGE MODE
+START
+LAST RUN
+CHARGE MODE WAIT
+Finish the active task first
+RESEARCH REPORT...
+UNVERIFIED - REVIEW BEFORE SHARING
+FULL MAC + NAME: INCLUDED
+FULL MAC + NAME: OMITTED
+EXPORT REPORT
+REPORT EXPORTED
+REPORT NOT EXPORTED
+One device observation, not an OUI-wide identification. Review the label and subtag for personal details. No location, Wi-Fi credentials or other logs are included.
+Include identifiers only with consent. Export creates a shareable text file for the GitHub research form.
+Check microSD mounting and free space in Storage & Recovery, then retry.
+Copy the report from microSD to a computer. Open the GitHub link inside the file and attach it. Status starts unverified.
+Low power mode: %luh %02lum
+Radios and status light are off. Battery charge level is not measured. Tap the dark screen for the timer; tap again to resume.
+
+
+V1.4 CARD WALKTHROUGH (English; translation deferred)
+
+guide-000.txt
+WELCOME
+DNSquachWatch is DNSP's modified SquachWatch firmware. This optional tour stays in DNSP's Tools.
+
+guide-001.txt
+HOME & SETTINGS
+The home screen shows Squachy and recent activity. Tap the menu icon for every feature. LOG opens retained
+
+guide-002.txt
+HOME & SETTINGS (CONT.)
+detections.
+
+guide-003.txt
+ALERTS
+Alerts & Detection controls popup length, confidence, filters and snoozing. Stored Alert History shows every
+
+guide-004.txt
+ALERTS (CONT.)
+retained detection; Rules has its own incidents.
+
+guide-005.txt
+MATCH EVIDENCE
+A match is a clue, not proof of a camera or owner. Tap WHY THIS MATCHED. LOW means weak evidence. RSSI is not
+
+guide-006.txt
+MATCH EVIDENCE (CONT.)
+distance.
+
+guide-007.txt
+SET LOCATION
+Alerts & Detections > Set Location adds a manual label to new findings. Choose Home, Work, Driving, Con or up
+
+guide-008.txt
+SET LOCATION (CONT.)
+to 24 characters.
+
+guide-009.txt
+LOCATION RECALL
+No label means no-label- set. Clear removes the active label and current network association. A remembered label returns
+
+guide-010.txt
+LOCATION RECALL (CONT.)
+after Wi-Fi authentication.
+
+guide-011.txt
+CHECK YOUR LABEL
+Labels are not GPS. Check the label when moving; another network with the same name can recall it. The menu
+
+guide-012.txt
+CHECK YOUR LABEL (CONT.)
+shows manual or Wi-Fi recalled.
+
+guide-013.txt
+SHARE RESEARCH
+Research & Data > Device Research opens labeling and report exports. Reports describe one observation and start
+
+guide-014.txt
+SHARE RESEARCH (CONT.)
+unverified.
+
+guide-015.txt
+REDACTED REPORTS
+Export creates a REDACTED report to submit and a PRIVATE report to retain. Only submit REDACTED; keep
+
+guide-016.txt
+REDACTED REPORTS (CONT.)
+PRIVATE on your own computer.
+
+guide-017.txt
+RESEARCH REVIEW
+Redacted MACs end XX:XX:XX and omit advertised names. Review custom subtags for personal details.
+
+guide-018.txt
+RESEARCH REVIEW (CONT.)
+Independent evidence can be added in GitHub comments.
+
+guide-019.txt
+DEVICE LABELS
+Hold a LOG or raw-scan row to label and tag a device. A label applies to that individual address, not every
+
+guide-020.txt
+DEVICE LABELS (CONT.)
+device sharing its prefix.
+
+guide-021.txt
+RULES
+Rules combine observations. Sketchy Environment warns when an ALPR clue and deauthentication occur
+
+guide-022.txt
+RULES (CONT.)
+within 90 seconds; it does not prove a link.
+
+guide-023.txt
+WATCH & HUNT
+WATCH keeps one target prominent. HUNT helps revisit a selected clue. Neither confirms identity, ownership,
+
+guide-024.txt
+WATCH & HUNT (CONT.)
+direction or intent.
+
+guide-025.txt
+QUIETING ALERTS
+SNOOZE quiets one device until restart. SNOOZE ALL pauses popups for 10 minutes. IGNORE persists. Logging may
+
+guide-026.txt
+QUIETING ALERTS (CONT.)
+continue.
+
+guide-027.txt
+FLOCK & ALPR
+ALPR matches are evidence-based leads. Verify visually before reporting. Open the resources panel for ALPR
+
+guide-028.txt
+FLOCK & ALPR (CONT.)
+Radar and DeFlock.
+
+guide-029.txt
+FPV & DRONES
+FPV & Drones contains a pit board, Remote ID readings, focused search, reception diagnostics, capture and
+
+guide-030.txt
+FPV & DRONES (CONT.)
+equipment limits.
+
+guide-031.txt
+REMOTE ID LIMITS
+This board hears 2.4 GHz Wi-Fi and legacy BLE. It cannot hear 5.8 GHz video or all BLE 5 broadcasts. No match is
+
+guide-032.txt
+REMOTE ID LIMITS (CONT.)
+not clearance.
+
+guide-033.txt
+RESEARCH & DATA
+Research & Data contains the research log, radio activity map, session reports, own telemetry and user-pinned sensors.
+
+guide-034.txt
+RAW DATA
+RAW research and drone capture can include identifiers and positions. Review before sharing. Redacted
+
+guide-035.txt
+RAW DATA (CONT.)
+exports are safer for general use.
+
+guide-036.txt
+STORAGE
+Storage & Recovery shows card status, Backup & Restore, and microSD Recovery: remount, repair folders, or
+
+guide-037.txt
+STORAGE (CONT.)
+confirmed quick format.
+
+guide-038.txt
+BACKUP & RESTORE
+Backups include current LOG, readable history, labels, filters, rules, profiles and active targets. PINs and
+
+guide-039.txt
+BACKUP & RESTORE (CONT.)
+secrets stay out. Keep the matching release kit.
+
+guide-040.txt
+DISPLAY
+Display & Appearance controls theme, background, brightness, Auto Brightness, glitch effects, color order and
+
+guide-041.txt
+DISPLAY (CONT.)
+rotation lock.
+
+guide-042.txt
+SYSTEM
+System holds display speed, touch and color checks, language, credits, diagnostics, health exports, updates
+
+guide-043.txt
+SYSTEM (CONT.)
+and troubleshooting.
+
+guide-044.txt
+SQUACHY
+Squachy contains size, outfits, pets, sunglasses, banter, Bingo, the Squachy-Dex, diary and original
+
+guide-045.txt
+SQUACHY (CONT.)
+character features.
+
+guide-046.txt
+DESK MODE
+Desk Mode provides the clock display, background and clock choices, time zone, and supported Squachy
+
+guide-047.txt
+DESK MODE (CONT.)
+visitors.
+
+guide-048.txt
+DNSP'S TOOLS
+DNSP's Tools contains Squach Snacks, Screen Light, Coin & Dowsing Rod, Timer & Counter, Pocket Reader, demos and
+
+guide-049.txt
+DNSP'S TOOLS (CONT.)
+this tour.
+
+guide-050.txt
+SCREEN LIGHT
+Choose white, amber, rainbow, caution, SOS or a short Morse message. Double-tap anywhere to stop the light.
+
+guide-051.txt
+ACCESSIBILITY
+Accessibility changes contrast, motion, handedness and control size. Hold the current language button for 3
+
+guide-052.txt
+ACCESSIBILITY (CONT.)
+seconds for Hebrew.
+
+guide-053.txt
+PIN LOCK
+Security can require a PIN after boot or lock. Turning PIN Lock off asks for the current PIN. Keep a safe copy
+
+guide-054.txt
+PIN LOCK (CONT.)
+outside the device.
+
+guide-055.txt
+WIPE AFTER 10
+Wipe After 10 means ten wrong unlock attempts erase protected device data. Read and confirm its warning before
+
+guide-056.txt
+WIPE AFTER 10 (CONT.)
+enabling it.
+
+guide-057.txt
+DURESS PIN
+Optional Duress appears after PIN Lock. It works only on the lock screen, attempts erasure, then starts persistent PIXEL
+
+guide-058.txt
+DURESS PIN (CONT.)
+TIDE.
+
+guide-059.txt
+DURESS LIMITS
+microSD erasure is best effort and deleted data may be recoverable. Reflashing alone does not clear PIXEL TIDE or
+
+guide-060.txt
+DURESS LIMITS (CONT.)
+saved state.
+
+guide-061.txt
+FORGOT PIN
+Forgot PIN uses a deliberate 3-2-1 confirmation before erasing protected settings. Cancel if you
+
+guide-062.txt
+FORGOT PIN (CONT.)
+did not intend a reset.
+
+guide-063.txt
+SAFE MODE
+Hold the screen while powering on for Safe Mode. It can also start after repeated short boots. Use it to recover
+
+guide-064.txt
+SAFE MODE (CONT.)
+display or microSD.
+
+guide-065.txt
+POWER & UPDATES
+Power offers Safe Shutdown and Reboot. An upstream update replaces DNSP firmware; reinstall DNSP only from a
+
+guide-066.txt
+POWER & UPDATES (CONT.)
+matching image.
+
+guide-067.txt
+YOU'RE READY
+Start with Alerts & Detection, then explore. Use help panels when unsure, export useful records, and treat every
+
+guide-068.txt
+YOU'RE READY (CONT.)
+radio match as a clue.
+
+guide-069.txt
+MASKED MODE
+Masked Mode masks supported screens only. Logs, backups and files in Pocket Reader are not anonymized.
+
+guide-070.txt
+CHARGE VS SHUTDOWN
+Charge Mode pauses radios and lowers power. Use Safe Shutdown before removing power or microSD; Charge Mode
+
+guide-071.txt
+CHARGE VS SHUTDOWN (CONT.)
+does not unmount the card.
+
+guide-072.txt
+AUTOMATIC HISTORY
+Automatic readable history is enabled by default with a card. Storage & Recovery can turn it off. Watch for
+
+guide-073.txt
+AUTOMATIC HISTORY (CONT.)
+storage errors; keep a computer copy.
+
+V1.4 MENU / STATUS
+MASKED MODE
+AUTO READABLE LOGS
+DEVICE RESEARCH
+STORAGE WARNING
+EXPORT BOTH
+Backup saving: %u%% | PIN to access

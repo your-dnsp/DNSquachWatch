@@ -1,0 +1,2 @@
+DEVICE LABELS
+Hold a LOG or raw-scan row to label and tag a device. A label applies to that individual address, not every

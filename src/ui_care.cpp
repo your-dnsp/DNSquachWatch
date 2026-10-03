@@ -21,7 +21,7 @@ bool working(){return backupPending||Backup::busy()||ReadableLogs::busy();}
 void runPending(bool visible,uint32_t now,DetectionEngine& eng){
  if(!visible){backupPending=false;return;}
  if(backupPending&&pendingRendered){backupPending=false;pendingRendered=false;Backup::start(eng.sd().ready(),now,&eng);dirty=true;}
- ReadableLogs::tick();
+ if(!Backup::busy())ReadableLogs::tick();
 }
 void drawBackupProgress(TFT_eSPI& t,unsigned percent,const char* phase,uint32_t now){
  if(percent>100)percent=100;const int w=t.width();char line[64];
@@ -30,7 +30,11 @@ void drawBackupProgress(TFT_eSPI& t,unsigned percent,const char* phase,uint32_t 
  t.drawRect(12,64,w-24,12,Theme::CYAN);
  t.fillRect(14,66,w-28,8,Theme::BG);
  t.fillRect(14,66,(w-28)*percent/100,8,Theme::CYAN);
- Lang::draw(t,"Keep power on. Please wait.",12,82,w-24,28,Theme::WHITE,false);
+ if(current==Page::BACKUP && Backup::busy()){
+  Lang::draw(t,Backup::progressDetail(),12,80,w-24,16,Theme::WHITE,false);
+  snprintf(line,sizeof line,"%lus elapsed | Keep power on",(unsigned long)Backup::elapsedSeconds(now));
+  Lang::draw(t,line,12,98,w-24,14,Theme::WHITE,false);
+ }else Lang::draw(t,"Keep power on. Please wait.",12,82,w-24,28,Theme::WHITE,false);
 }
 
 static uint8_t textPage=0,textPages=1;static int textBottom=88;
@@ -124,7 +128,7 @@ SettingsRow tap(int x,int y,int w,int h,uint32_t now,DetectionEngine& eng){
   else if(current==Page::WELCOME)return SettingsRow::DNSP_GUIDE;
   else if(current==Page::REPORT){auto s=Research::stats();bool ok=eng.sd().ready()&&!s.active&&Research::settled()&&s.session&&Research::storageReport(s);strcpy(notice,ok?"Saved /dnsp-field-report.txt":"No finished session, card, or export failed.");}
   else if(current==Page::HEALTH){
-   auto v=Care::health();char report[1024];snprintf(report,sizeof report,"DNSquachWatch v1.1.2 device-health report\nUptime seconds: %lu\nLoop count: %lu\nMinimum free heap: %lu\nMinimum largest block: %lu\nMaximum loop gap ms: %lu\nLoop gaps >250ms: %lu\nBLE adverts: %lu\nWiFi frames: %lu\nBLE queue drops: %lu\nAdvert pressure drops: %lu\nAlert overflow: %lu\nBackup verified this boot: %s\nThese measurements do not prove coverage, frame rate, or electrical stability. No identifiers included.\n",
+   auto v=Care::health();char report[1024];snprintf(report,sizeof report,"DNSquachWatch v1.5 device-health report\nUptime seconds: %lu\nLoop count: %lu\nMinimum free heap: %lu\nMinimum largest block: %lu\nMaximum loop gap ms: %lu\nLoop gaps >250ms: %lu\nBLE adverts: %lu\nWiFi frames: %lu\nBLE queue drops: %lu\nAdvert pressure drops: %lu\nAlert overflow: %lu\nBackup verified this boot: %s\nThese measurements do not prove coverage, frame rate, or electrical stability. No identifiers included.\n",
    (unsigned long)(now/1000),(unsigned long)v.loops,(unsigned long)v.minHeap,(unsigned long)v.minBlock,(unsigned long)v.maxGap,(unsigned long)v.over250,(unsigned long)advertsSeen(),(unsigned long)wifiFramesSeen(),(unsigned long)eng.bleQueueDropped(),(unsigned long)advertsDropped(),(unsigned long)eng.alerts.dropped(),Backup::verifiedThisBoot()?"yes":"no");
    strcpy(notice,"Exporting device health...");
    bool ok=Backup::exportHealth(eng.sd().ready(),report);

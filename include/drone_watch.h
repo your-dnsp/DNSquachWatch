@@ -13,7 +13,7 @@ struct Stats {
     Verdict last=Verdict::NONE;
 };
 struct Record {
-    uint32_t at=0;
+    uint32_t at=0, locationKey=0;
     uint16_t original=0, length=0;
     uint8_t mac[6]{}, channel=0;
     int8_t rssi=0;

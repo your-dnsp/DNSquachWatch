@@ -21,6 +21,7 @@ struct Stats {
     uint32_t bleMs=0, wifiMs=0, channelMs[14]{}; uint16_t channels=0; uint32_t catalog=BUILTIN_VERSION;
 };
 struct Record {
+    uint32_t locationKey=0;
     uint32_t id=0, at=0, reference=0; uint8_t radio=0, mac[6]{}, addressType=0, channel=0;
     int8_t rssi=0; uint16_t original=0; uint8_t length=0; uint8_t payload[PAYLOAD_CAP]{};
     Match match; Verdict verdict=Verdict::UNREVIEWED; char note[49]{};

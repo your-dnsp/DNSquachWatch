@@ -1,0 +1,2 @@
+ACCESSIBILITY
+Accessibility changes contrast, motion, handedness and control size. Hold the current language button for 3

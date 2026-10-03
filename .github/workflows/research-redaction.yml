@@ -1,0 +1,23 @@
+name: Research redaction review
+on:
+  issues:
+    types: [opened, edited, reopened]
+  issue_comment:
+    types: [created, edited]
+permissions:
+  contents: read
+  issues: write
+jobs:
+  screen:
+    if: github.event.issue.pull_request == null && github.event.sender.type != 'Bot'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.repository.default_branch }}
+      - name: Screen submitted text without downloading attachments
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 tools/research_issue_guard.py

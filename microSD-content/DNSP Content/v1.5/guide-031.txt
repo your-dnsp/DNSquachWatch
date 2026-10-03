@@ -1,0 +1,2 @@
+REMOTE ID LIMITS
+This board hears 2.4 GHz Wi-Fi and legacy BLE. It cannot hear 5.8 GHz video or all BLE 5 broadcasts. No match is

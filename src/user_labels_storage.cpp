@@ -1,6 +1,6 @@
 #include "user_labels.h"
 #include "csv_text.h"
-#if defined(ARDUINO_ARCH_ESP32)
+#if defined(ARDUINO_ARCH_ESP32) || defined(RESEARCH_SUBMISSION_TEST)
 #include <SD.h>
 #include <cstdio>
 #include <cstring>
@@ -52,19 +52,20 @@ bool storageExport(const Target& target,const Label& label,uint32_t now){
     ok=writeAll(csv,row);csv.flush();csv.close();return ok;
 }
 
-void storageWipe(){
-    if(!SD.cardSize()||!SD.exists(DIR))return;
+static void wipeDirectory(const char* dir){
+    if(!SD.cardSize()||!SD.exists(dir))return;
     // Delete in small fixed-memory batches until the directory is empty. A
     // long-running field project can create far more than 24 finding files;
     // stopping after one batch would leave user observations behind during a
     // duress wipe.
-    for(uint16_t pass=0;pass<512;pass++){
-        File dir=SD.open(DIR);if(!dir)return;char paths[12][112];uint8_t n=0;
-        for(File f=dir.openNextFile();f&&n<12;f=dir.openNextFile()){const char* name=f.name();snprintf(paths[n++],sizeof paths[0],"%s/%s",DIR,strrchr(name,'/')?strrchr(name,'/')+1:name);f.close();}
-        dir.close();if(!n)break;for(uint8_t i=0;i<n;i++)SD.remove(paths[i]);
+    for(uint16_t pass=0;pass<1000;pass++){
+        File folder=SD.open(dir);if(!folder)return;char paths[12][112];uint8_t n=0;
+        for(File f=folder.openNextFile();f&&n<12;f=folder.openNextFile()){const char* name=f.name();snprintf(paths[n++],sizeof paths[0],"%s/%s",dir,strrchr(name,'/')?strrchr(name,'/')+1:name);f.close();}
+        folder.close();if(!n)break;for(uint8_t i=0;i<n;i++)SD.remove(paths[i]);
     }
-    SD.rmdir(DIR);
+    SD.rmdir(dir);
 }
+void storageWipe(){wipeDirectory(DIR);wipeDirectory("/Research Submissions/PRIVATE");wipeDirectory("/Research Submissions");}
 } // namespace UserLabels
 #else
 namespace UserLabels { bool storageExport(const Target&,const Label&,uint32_t){return false;} void storageWipe(){} }

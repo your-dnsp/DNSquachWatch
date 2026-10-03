@@ -12,6 +12,7 @@ int main(){
  ck("captured defaults valid",Care::valid(a));ck("encode",Care::encode(a,text,sizeof text));Care::Snapshot b;
  ck("roundtrip",Care::decode(text,strlen(text),b)&&!memcmp(&a,&b,sizeof a));
  std::string old=text;old.replace(0,16,"DNSP_PUBLIC_V1=1");
+ auto ah=old.find("autoHistory=");old.erase(ah,old.find('\n',ah)-ah+1);
  auto ldr=old.find("ldr=");old.erase(ldr,old.find('\n',ldr)-ldr+1);auto end=old.find("crc32=");old.resize(end);
  char crc[48];snprintf(crc,sizeof crc,"crc32=%lu\n",(unsigned long)Care::crc(old.data(),old.size()));old+=crc;
  ck("v1 backup still imports with sensor disabled",Care::decode(old.data(),old.size(),b)&&b.values[32]==0);

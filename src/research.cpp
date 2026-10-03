@@ -1,4 +1,5 @@
 #include "research.h"
+#include "location_label.h"
 #include "deauth_tracker.h"
 #include "field_tools.h"
 #include "signatures.h"
@@ -83,7 +84,7 @@ void coverage(uint32_t delta,bool ble,bool wifi,uint8_t ch){Guard g;if(!s.active
 void observe(uint8_t radio,const uint8_t* mac,uint8_t addr,int8_t rssi,uint8_t ch,const uint8_t* data,size_t len,uint32_t now,const Match& match){
     if(!mac||(!data&&len)||radio>1)return;
     Guard g;if(!s.active||(radio==0&&s.profile==Profile::WIFI)||(radio==1&&s.profile==Profile::BLUETOOTH))return;
-    inc(s.observed);Record r;r.id=++nextId;r.at=now-s.start;r.radio=radio;r.addressType=addr;r.rssi=rssi;r.channel=ch;r.match=match;
+    inc(s.observed);Record r;r.locationKey=LocationLabel::currentKey();r.id=++nextId;r.at=now-s.start;r.radio=radio;r.addressType=addr;r.rssi=rssi;r.channel=ch;r.match=match;
     memcpy(r.mac,mac,6);r.original=(uint16_t)(len>65535?65535:len);r.length=(uint8_t)(len>PAYLOAD_CAP?PAYLOAD_CAP:len);
     if(r.length)memcpy(r.payload,data,r.length);enqueue(r);
 }
@@ -111,9 +112,9 @@ bool encode(const Record& r,const Stats& s,char* json,size_t jc,char* csv,size_t
         else{strcpy(receiver,"redacted");strcpy(bssid,"redacted");}
     }
     // Redacted records deliberately contain no persistent device token, names, notes or payload.
-    int a=snprintf(json,jc,"{\"schema\":2,\"session\":%lu,\"id\":%lu,\"reference\":%lu,\"uptime_ms\":%lu,\"time_quality\":\"relative\",\"catalog\":%lu,\"radio\":%u,\"address_type\":%u,\"mac\":\"%s\",\"rssi\":%d,\"channel\":%u,\"type\":%u,\"confidence\":%u,\"evidence\":%u,\"rule\":%u,\"ie_fingerprint\":%lu,\"experimental\":true,\"wifi_subtype\":%d,\"deauth\":%s,\"claimed_transmitter\":\"%s\",\"receiver\":\"%s\",\"bssid\":\"%s\",\"deauth_reason\":%d,\"reason_known\":%s,\"protected_management\":%s,\"original_bytes\":%u,\"captured_bytes\":%u,\"payload_hex\":\"%s\",\"verdict\":\"%s\",\"note\":\"%s\"}\n",
-        (unsigned long)s.session,(unsigned long)r.id,(unsigned long)r.reference,(unsigned long)r.at,(unsigned long)s.catalog,r.radio,r.addressType,mac,r.rssi,r.channel,(unsigned)r.match.type,(unsigned)r.match.conf,r.match.bits,r.match.rule,(unsigned long)(s.raw?r.match.fingerprint:0),isDeauth?12:-1,isDeauth?"true":"false",isDeauth?mac:"",receiver,bssid,isDeauth&&deauth.reasonValid?deauth.reason:-1,isDeauth&&deauth.reasonValid?"true":"false",isDeauth&&deauth.protectedFrame?"true":"false",r.original,s.raw?r.length:0,payload,verdictName(r.verdict),note);
-    int b=snprintf(csv,cc,"%lu,%lu,%lu,%lu,%lu,%u,%s,%d,%u,%u,%u,%u,%s,%u,%s,%s,%s,%d,%s\n",(unsigned long)s.session,(unsigned long)r.id,(unsigned long)r.reference,(unsigned long)r.at,(unsigned long)s.catalog,r.radio,mac,r.rssi,r.channel,(unsigned)r.match.type,r.match.bits,r.match.rule,verdictName(r.verdict),(unsigned)r.match.conf,isDeauth?mac:"",receiver,bssid,isDeauth&&deauth.reasonValid?deauth.reason:-1,isDeauth&&deauth.protectedFrame?"protected":isDeauth?"unprotected":"");
+    int a=snprintf(json,jc,"{\"schema\":2,\"session\":%lu,\"id\":%lu,\"reference\":%lu,\"uptime_ms\":%lu,\"time_quality\":\"relative\",\"catalog\":%lu,\"radio\":%u,\"address_type\":%u,\"mac\":\"%s\",\"rssi\":%d,\"channel\":%u,\"type\":%u,\"confidence\":%u,\"evidence\":%u,\"rule\":%u,\"ie_fingerprint\":%lu,\"experimental\":true,\"wifi_subtype\":%d,\"deauth\":%s,\"claimed_transmitter\":\"%s\",\"receiver\":\"%s\",\"bssid\":\"%s\",\"deauth_reason\":%d,\"reason_known\":%s,\"protected_management\":%s,\"original_bytes\":%u,\"captured_bytes\":%u,\"payload_hex\":\"%s\",\"verdict\":\"%s\",\"note\":\"%s\",\"location\":\"%s\"}\n",
+        (unsigned long)s.session,(unsigned long)r.id,(unsigned long)r.reference,(unsigned long)r.at,(unsigned long)s.catalog,r.radio,r.addressType,mac,r.rssi,r.channel,(unsigned)r.match.type,(unsigned)r.match.conf,r.match.bits,r.match.rule,(unsigned long)(s.raw?r.match.fingerprint:0),isDeauth?12:-1,isDeauth?"true":"false",isDeauth?mac:"",receiver,bssid,isDeauth&&deauth.reasonValid?deauth.reason:-1,isDeauth&&deauth.reasonValid?"true":"false",isDeauth&&deauth.protectedFrame?"true":"false",r.original,s.raw?r.length:0,payload,verdictName(r.verdict),note,LocationLabel::text(r.locationKey));
+    int b=snprintf(csv,cc,"%lu,%lu,%lu,%lu,%lu,%u,%s,%d,%u,%u,%u,%u,%s,%u,%s,%s,%s,%d,%s,%s\n",(unsigned long)s.session,(unsigned long)r.id,(unsigned long)r.reference,(unsigned long)r.at,(unsigned long)s.catalog,r.radio,mac,r.rssi,r.channel,(unsigned)r.match.type,r.match.bits,r.match.rule,verdictName(r.verdict),(unsigned)r.match.conf,isDeauth?mac:"",receiver,bssid,isDeauth&&deauth.reasonValid?deauth.reason:-1,isDeauth&&deauth.protectedFrame?"protected":isDeauth?"unprotected":"",LocationLabel::text(r.locationKey));
     return a>=0&&size_t(a)<jc&&b>=0&&size_t(b)<cc;
 }
 void tick(uint32_t now){

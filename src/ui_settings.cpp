@@ -7,6 +7,8 @@
 #include "ota_core.h"
 #include "ota_wifi.h"
 #include "theme.h"
+#include "privacy.h"
+#include "location_label.h"
 #include "settings.h"
 #include "security.h"
 #include "ignore_list.h"
@@ -73,24 +75,24 @@ static const SettingsRow ALL_ROWS[] = {
 };
 static const SettingsRow ALERT_ROWS[] = {
     SettingsRow::ALERT_DURATION, SettingsRow::SNOOZE_ALL, SettingsRow::SNOOZE_INBOX, SettingsRow::CONFIDENCE, SettingsRow::AUTO_QUIET,
-    SettingsRow::DETECTION_FILTER, SettingsRow::DETECTION_PROFILE, SettingsRow::ALERT_HISTORY, SettingsRow::ALERT_RULES, SettingsRow::IGNORED_DEVICES, SettingsRow::TROUBLESHOOT,
+    SettingsRow::DETECTION_FILTER, SettingsRow::DETECTION_PROFILE, SettingsRow::SET_LOCATION, SettingsRow::ALERT_HISTORY, SettingsRow::ALERT_RULES, SettingsRow::IGNORED_DEVICES, SettingsRow::TROUBLESHOOT,
 };
 static const SettingsRow FUN_ROWS[] = {
     SettingsRow::SQUACHY_SIZE, SettingsRow::OUTFIT, SettingsRow::PET,
-    SettingsRow::SHADES_COLOR, SettingsRow::BANTER, SettingsRow::TOP_HAT,
+    SettingsRow::SHADES_COLOR, SettingsRow::BANTER, SettingsRow::AURA,
     SettingsRow::BINGO, SettingsRow::DEX, SettingsRow::VIEW_DIARY,
     SettingsRow::SHOW_OFF, SettingsRow::REPLAY_INTRO, SettingsRow::BORING_MODE,
 };
-static const SettingsRow DNSP_ROWS[] = {SettingsRow::BREAKOUT, SettingsRow::SCREEN_LIGHT, SettingsRow::RANDOMIZER, SettingsRow::TIMER_COUNTER, SettingsRow::POCKET_READER, SettingsRow::READABLE_LOGS, SettingsRow::DNSP_GUIDE, SettingsRow::PRACTICE, SettingsRow::GIFT_PREP};
+static const SettingsRow DNSP_ROWS[] = {SettingsRow::BREAKOUT, SettingsRow::SCREEN_LIGHT, SettingsRow::RANDOMIZER, SettingsRow::TIMER_COUNTER, SettingsRow::POCKET_READER, SettingsRow::READABLE_LOGS, SettingsRow::DNSP_GUIDE, SettingsRow::PRACTICE, SettingsRow::GIFT_PREP, SettingsRow::REMINGTON};
 static const SettingsRow FPV_ROWS[] = {SettingsRow::FPV_PIT, SettingsRow::DRONE_READINGS, SettingsRow::DRONE_SEARCH, SettingsRow::DRONE_DIAG, SettingsRow::DRONE_CAPTURE, SettingsRow::DRONE_LIMITS};
-static const SettingsRow DATA_ROWS[] = {SettingsRow::RESEARCH, SettingsRow::RADIO_ACTIVITY, SettingsRow::FIELD_REPORT, SettingsRow::TELEMETRY, SettingsRow::SENSORS};
+static const SettingsRow DATA_ROWS[] = {SettingsRow::RESEARCH, SettingsRow::DEVICE_RESEARCH, SettingsRow::RADIO_ACTIVITY, SettingsRow::FIELD_REPORT, SettingsRow::TELEMETRY, SettingsRow::SENSORS};
 static const SettingsRow ACCESS_ROWS[] = {SettingsRow::ACCESSIBILITY, SettingsRow::LANGUAGE};
-static const SettingsRow STORAGE_ROWS[] = {SettingsRow::SD_STATUS, SettingsRow::BACKUP, SettingsRow::MICROSD_RECOVERY};
+static const SettingsRow STORAGE_ROWS[] = {SettingsRow::SD_STATUS, SettingsRow::AUTO_HISTORY, SettingsRow::BACKUP, SettingsRow::MICROSD_RECOVERY};
 static const uint8_t ALL_ROWS_N = sizeof(ALL_ROWS) / sizeof(ALL_ROWS[0]);
 
 // The APPEARANCE page: everything about how HE looks, then everything about
-// how the SCREEN looks. The Legend top hat only gets a row once he has a hat
-// to take off.
+// how the SCREEN looks. The Legend's aura only gets a row once he has an aura
+// to put out.
 static const SettingsRow APPEARANCE_ROWS[] = {
     SettingsRow::THEME, SettingsRow::BACKGROUND, SettingsRow::BACKGROUND_LOCK, SettingsRow::BRIGHTNESS, SettingsRow::AMBIENT_LIGHT,
     SettingsRow::GLITCH_EFFECTS, SettingsRow::INVERT, SettingsRow::RGB_SWAP, SettingsRow::ROTATION_LOCK,
@@ -100,8 +102,12 @@ static const SettingsRow APPEARANCE_ROWS[] = {
 
 // The SYSTEM page: the rarely-needed machinery, off the main list.
 static const SettingsRow SYSTEM_ROWS[] = {
+    SettingsRow::PRIVACY, SettingsRow::CHARGE_MODE,
 #if defined(DNSP_RUNTIME_DISPLAY) || !defined(ARDUINO_ARCH_ESP32)
     SettingsRow::DISPLAY_SPEED,
+#endif
+#if defined(ESP32) && !defined(TWATCH_S3)
+    SettingsRow::LAST_RUN,
 #endif
     SettingsRow::CALIBRATE, SettingsRow::CHECK_COLORS,
     SettingsRow::LANGUAGE, SettingsRow::ACCESSIBILITY,
@@ -150,7 +156,7 @@ static_assert(sizeof(FUN_ROWS)/sizeof(FUN_ROWS[0])<=LIST_MAX_N,"squachy menu cap
 // look identical, so somebody looking for OUTFIT after turning boring mode on
 // had no way to learn where it went.
 //
-// This is deliberately NOT how unearned things behave: PET and TOP HAT stay
+// This is deliberately NOT how unearned things behave: PET and AURA stay
 // hidden entirely (see buildDisplayList), because a greyed-out row saying
 // "not found yet" hands over the existence of a secret.
 static bool isSquachyOnlyRow(SettingsRow r) {
@@ -164,7 +170,7 @@ static bool isSquachyOnlyRow(SettingsRow r) {
            r == SettingsRow::SQUACHMESH ||
            r == SettingsRow::SHADES_COLOR || r == SettingsRow::SQUACHY_SIZE ||
            r == SettingsRow::OUTFIT ||
-           r == SettingsRow::PET || r == SettingsRow::TOP_HAT;
+           r == SettingsRow::PET || r == SettingsRow::AURA;
 }
 
 enum class RowGroupId : uint8_t { APPEARANCE, BEHAVIOR, SQUACHY, SYSTEM, DESK, SQUAD, TOOLS, DISPLAY_OPTIONS, PLAY, HELP, WATCH };
@@ -207,7 +213,7 @@ static RowGroupId groupFor(SettingsRow r) {
         case SettingsRow::ROTATION_LOCK:
         case SettingsRow::STATUS_LIGHT:
         case SettingsRow::SHADES_COLOR:
-        case SettingsRow::TOP_HAT:
+        case SettingsRow::AURA:
         // SIZE, OUTFIT and PET moved onto the APPEARANCE page with the rest of
         // how he looks. They answer APPEARANCE rather than SQUACHY so the page
         // draws under one header instead of splitting in two.
@@ -299,12 +305,12 @@ static uint8_t buildDisplayList(DisplayItem* out) {
         const SettingsRow r = src[i];
         // Boring mode greys these instead of hiding them -- see
         // isSquachyOnlyRow(). They stay in the list; drawing handles the rest.
-        // PET and TOP HAT are hidden by not being EARNED rather than by a
+        // PET and AURA are hidden by not being EARNED rather than by a
         // mode. Showing a permanently-off row for something you have never
-        // seen would give the secret away -- and a switch for a hat he is
-        // not wearing yet would be a switch that does nothing.
+        // seen would give the secret away -- and a switch for an aura he
+        // does not have yet would be a switch that does nothing.
         if (r == SettingsRow::PET && !Squachy::petUnlocked()) continue;
-        if (r == SettingsRow::TOP_HAT && !Squachy::hasTopHat()) continue;
+        if (r == SettingsRow::AURA && !Squachy::hasAura()) continue;
         // Not a secret, just impossible: a board without a second app slot or
         // a Bluetooth server has nothing to update into.
         if ((r == SettingsRow::UPDATE_FIRMWARE || r == SettingsRow::UPDATE_CHECK) && !OtaCore::available()) continue;
@@ -771,6 +777,10 @@ static void rowContent(SettingsRow r, const DetectionEngine& eng, char* valBuf, 
         case SettingsRow::RANDOMIZER: label="COIN & DOWSING ROD"; value=">"; break;
         case SettingsRow::TIMER_COUNTER: label="TIMER & COUNTER"; value=">"; break;
         case SettingsRow::POCKET_READER: label="POCKET READER"; value=">"; break;
+        case SettingsRow::SET_LOCATION: label="SET LOCATION"; snprintf(valBuf,valBufN,"%.12s",LocationLabel::current()); value=valBuf; break;
+        case SettingsRow::DEVICE_RESEARCH: label="DEVICE RESEARCH"; value=">"; break;
+        case SettingsRow::AUTO_HISTORY: label="AUTO READABLE LOGS"; value=Settings::autoHistory()?"ON":"OFF"; break;
+        case SettingsRow::REMINGTON: label="REMINGTON"; value=">"; break;
         case SettingsRow::READABLE_LOGS: label="READABLE LOG EXPORT"; value=">"; break;
         case SettingsRow::RADIO_ACTIVITY: label="RADIO ACTIVITY MAP"; value=">"; break;
         case SettingsRow::PRACTICE: label="PRACTICE DEMOS"; value=">"; break;
@@ -917,6 +927,21 @@ static void rowContent(SettingsRow r, const DetectionEngine& eng, char* valBuf, 
             label = "BUZZ"; value = Settings::buzz() ? "ON" : "OFF";
             break;
 #endif
+        case SettingsRow::PRIVACY:
+            label = "MASKED MODE"; value = Settings::privacyMode() ? "ON" : "OFF";
+            break;
+        case SettingsRow::CHARGE_MODE:
+            label = "CHARGE MODE"; value = "START";
+            break;
+        case SettingsRow::LAST_RUN: {
+            // The boot before this one: how long it ran before it stopped.
+            label = "LAST RUN";
+            uint16_t b[2], m[2];
+            const uint8_t n = Settings::runHistory(b, m, 2);
+            if (n < 2) value = "--";
+            else { snprintf(valBuf, valBufN, "%uh %02um", (unsigned)(m[1] / 60), (unsigned)(m[1] % 60)); value = valBuf; }
+            break;
+        }
         case SettingsRow::POWER_SAVER:
             label = "POWER SAVER"; value = Settings::powerSaver() ? "ON" : "OFF";
             break;
@@ -953,7 +978,10 @@ static void rowContent(SettingsRow r, const DetectionEngine& eng, char* valBuf, 
             else value = "NONE >";
             break;
         case SettingsRow::TIME_ZONE:
-            label = "TIME ZONE"; value = Settings::timeZoneName();
+            // Two arrows like BRIGHT's minus and plus: the left half of the
+            // row steps west, the right half east, so going one past your
+            // zone is one tap back rather than a lap of the world.
+            label = "ZONE <  >"; value = Settings::timeZoneName();
             break;
         case SettingsRow::REPLAY_INTRO:
             label = "REPLAY ONBOARDING";
@@ -1030,8 +1058,8 @@ static void rowContent(SettingsRow r, const DetectionEngine& eng, char* valBuf, 
         case SettingsRow::APPEARANCE:
             label = "DISPLAY & APPEARANCE"; value = ">";
             break;
-        case SettingsRow::TOP_HAT:
-            label = "TOP HAT"; value = Settings::topHatShown() ? "SHOWN" : "HIDDEN";
+        case SettingsRow::AURA:
+            label = "AURA"; value = Settings::auraShown() ? "LIT" : "OUT";
             break;
         case SettingsRow::BACK:
             label = "< BACK";
@@ -1051,8 +1079,9 @@ void uiSettingsTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
     s_hasWatch = eng.watchKind() != DetectionEngine::WatchKind::NONE;
     s_hasHunt  = eng.huntKind()  != DetectionEngine::WatchKind::NONE;
     s_dexCaught = uiDexCaught(eng);
-    if (s_hasWatch) { strncpy(s_watchLabel, eng.watchLabel(), sizeof(s_watchLabel) - 1); s_watchLabel[sizeof(s_watchLabel) - 1] = 0; }
-    if (s_hasHunt)  { strncpy(s_huntLabel,  eng.huntLabel(),  sizeof(s_huntLabel)  - 1); s_huntLabel[sizeof(s_huntLabel)  - 1] = 0; }
+    char pv[40];
+    if (s_hasWatch) { strncpy(s_watchLabel, Privacy::name(eng.watchLabel(), pv, sizeof pv), sizeof(s_watchLabel) - 1); s_watchLabel[sizeof(s_watchLabel) - 1] = 0; }
+    if (s_hasHunt)  { strncpy(s_huntLabel,  Privacy::name(eng.huntLabel(),  pv, sizeof pv), sizeof(s_huntLabel)  - 1); s_huntLabel[sizeof(s_huntLabel)  - 1] = 0; }
 
     int top, bodyBottom, rowH, headerH, tallH;
     computeGeom(t, h, top, bodyBottom, rowH, headerH, tallH);

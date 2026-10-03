@@ -1,0 +1,2 @@
+SYSTEM
+System holds display speed, touch and color checks, language, credits, diagnostics, health exports, updates

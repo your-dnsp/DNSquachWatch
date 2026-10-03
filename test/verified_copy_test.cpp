@@ -1,5 +1,6 @@
 #include "test_util.h"
 #include "verified_copy.h"
+#include "backup_progress.h"
 #include <vector>
 #include <algorithm>
 #include <string>
@@ -17,4 +18,11 @@ int main(){using P=Backup::Copy::Phase;suite("Streaming SHA-256 and verified cop
   ck(scenario==0?"read-back completes exact copy":"read/write/corruption failure never completes",c.phase==(scenario==0?P::DONE:P::FAILED));
   if(!scenario)ck("bounded two-pass work",steps==12&&d.bytes==s.bytes);
  }
+ suite("Multi-megabyte backup with more than five minutes of progress");
+ s.fail=false;s.bytes.resize(4*1024*1024);for(size_t i=0;i<s.bytes.size();i++)s.bytes[i]=uint8_t(i*13);
+ Dest big;Backup::Copy large;Backup::ProgressWatch watch;large.start(s.bytes.size());watch.start(0);unsigned steps=0;bool stalled=false;
+ while((large.phase==P::WRITE||large.phase==P::VERIFY)&&steps<10000){large.tick(s,big);++steps;watch.observe(steps*100,large.at+uint32_t(large.phase));stalled=stalled||watch.stalled(steps*100);}
+ ck("large history copy verifies exact bytes",large.phase==P::DONE&&big.bytes==s.bytes);
+ ck("healthy long copy never times out",steps*100>300000&&!stalled);
+ ck("large copy remains one 1KiB step",steps==8192);
  return report();}

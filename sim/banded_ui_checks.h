@@ -4,10 +4,14 @@
 #include "ui_watchalert.h"
 #include "ui_colorcheck.h"
 #include "ui_sysprops.h"
+#include "ui_wifipass.h"
 #include "ui_device.h"
 #include "ui_settings.h"
 #include "ui_boot.h"
 #include "fast_sprite.h"
+#include "remington.h"
+#include "ui_location.h"
+#include "ui_labels.h"
 
 static int runBandedUiChecks() {
     suite("Half-screen storage, logical geometry and composed pixels");
@@ -47,12 +51,39 @@ static int runBandedUiChecks() {
         uiAlertInit(full,d);uiAlertSetPending(4,0);
         check("alert and Snooze All",[&](TFT_eSPI& t){uiAlertTick(t,10000,engine,false,nullptr,nullptr,false);});
         check("alert explanation overlay",[&](TFT_eSPI& t){uiAlertTick(t,10000,engine,true,"WHY THIS MATCHED","Manufacturer match does not confirm a camera.",false);});
+        UserLabels::Target labelTarget{};labelTarget.mac[0]=0xA4;labelTarget.mac[5]=0xEE;
+        labelTarget.original=DetectionType::FLOCK;strcpy(labelTarget.name,"Research Device");
+        UserLabels::Label label{};label.type=(uint8_t)DetectionType::FLOCK;strcpy(label.subtag,"CAMERA");
+        ck("research label restored",UserLabels::restore(labelTarget.mac,label));LabelUI::open(labelTarget);
+        check("research choice paints both halves",[&](TFT_eSPI& t){LabelUI::draw(t);});
+        LabelUI::tap(80,182,w,h,10000);
+        check("research export consent paints both halves",[&](TFT_eSPI& t){LabelUI::draw(t);});
+        LabelUI::tap(80,110,w,h,10001);
+        check("research identifier opt-in paints both halves",[&](TFT_eSPI& t){LabelUI::draw(t);});
+        LabelUI::tap(w-30,h-25,w,h,10002);
+        check("research export failure paints both halves",[&](TFT_eSPI& t){LabelUI::draw(t);});LabelUI::close();
         uiSettingsInit(full);
         check("settings",[&](TFT_eSPI& t){uiSettingsTick(t,10000,engine);});
         uiSysPropsInit(full);
         check("system update window",[&](TFT_eSPI& t){uiSysPropsTick(t,10000,engine,false);});
         uiSysPropsShowCredits();
         check("credits window",[&](TFT_eSPI& t){uiSysPropsTick(t,10000,engine,false);});
+        const auto creditsTop = fullPanel.pixelsRGB565();
+        const int propsX = (w - (w-8<300?w-8:300))/2 + 4;
+        const int propsBottom = (h - (h-8<232?h-8:232))/2 + (h-8<232?h-8:232) - 6 - 24;
+        uiSysPropsTouch(full, propsX+48, propsBottom+12);
+        check("credits Down paints both halves",[&](TFT_eSPI& t){uiSysPropsTick(t,10000,engine,false);});
+        ck("credits Down changes content",fullPanel.pixelsRGB565()!=creditsTop);
+        uiSysPropsTouch(full, propsX+16, propsBottom+12);
+        check("credits Up paints both halves",[&](TFT_eSPI& t){uiSysPropsTick(t,10000,engine,false);});
+        ck("credits Up restores content",fullPanel.pixelsRGB565()==creditsTop);
+        uiWifiPassInit(full, "Test network");
+        check("settled WiFi keyboard survives cleared bands",[&](TFT_eSPI& t){uiWifiPassTick(t,millis()+1000,true);});
+        check("idle WiFi keyboard survives another cleared frame",[&](TFT_eSPI& t){uiWifiPassTick(t,millis()+1000,true);});
+        check("Remington photo composes both bands",[&](TFT_eSPI& t){Remington::photo(t);});
+        check("location page composes both bands",[&](TFT_eSPI& t){LocationUI::draw(t);});
+        Remington::shootingStar(full,1000,0,h);Remington::shootingStar(full,37000,0,h);
+        check("Remington shooting star composes both bands",[&](TFT_eSPI& t){Remington::shootingStar(t,38000,0,h);});
         DeviceUI::open(DeviceUI::POWER,false,w,h);
         check("read-only help page",[&](TFT_eSPI& t){DeviceUI::draw(t);});
         Theme::showToast("WORKING", "SAVING TO MICROSD", Theme::CYAN);

@@ -1,0 +1,2 @@
+AUTOMATIC HISTORY
+Automatic readable history is enabled by default with a card. Storage & Recovery can turn it off. Watch for
