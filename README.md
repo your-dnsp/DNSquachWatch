@@ -1,170 +1,93 @@
 # DNSquachWatch v1.5.1
 
-DNSquachWatch is a friends-and-family modified edition of **SquachWatch** for the classic 2.8-inch ESP32 Cheap Yellow Display (CYD). It keeps Squachy, the original visual identity, the core detection model, and the spirit of the upstream project while adding device & microSD recovery, additional OUI and device research, labeling and OUI research contribution mechanisms, accessibility tools, security enhancements, additional scanning and logging capabilities, additional drone detection & support for FPV pilots, and whimsical additions.
+DNSquachWatch is **dnsprincess's friends-and-family edition of SquachWatch** for the classic 2.8-inch ESP32 Cheap Yellow Display (CYD), based on **SquachWatch v1.27.0**. It keeps Squachy, the original visual identity, and the spirit of the project while adding device & microSD recovery, additional OUI and device research, labeling and OUI research contribution mechanisms, accessibility tools, security enhancements, additional scanning and logging capabilities, additional drone detection & support for FPV pilots, and whimsical additions.
 
+**SquachWatch was created by Talking Sasquach / skizzophrenic.** This edition builds on that work; DNSP is responsible for the modifications. For the original firmware, visit [squachwatch.com](https://squachwatch.com/) or [the upstream project](https://github.com/skizzophrenic/SquachWatch-CYD).
 
-**Label, tag, and contribute research:** open **Research & Data > Device Research**, then hold a LOG row to label/tag that individual device. **RESEARCH REPORT...** exports two files: submit only **REDACTED** and retain **PRIVATE** locally. The redacted copy keeps the observed prefix and replaces the device-specific MAC suffix with `XX:XX:XX`; advertised names are omitted. Paste its contents into [the GitHub research form](https://github.com/your-dnsp/DNSquachWatch/issues/new?template=device_research.yml). Labels and prefixes are leads, not proof that every device with that OUI is the same product. The repository is public. A GitHub account is needed to submit or comment. Reports start unverified; independent observations can corroborate them.
+**Label devices and contribute research:** open **Research & Data > Device Research**, then hold a LOG row to label or tag an individual device. **RESEARCH REPORT...** creates **REDACTED** and **PRIVATE** copies. Keep PRIVATE locally and submit only REDACTED through [the research form](https://github.com/your-dnsp/DNSquachWatch/issues/new?template=device_research.yml). Reports start unverified; others can comment with corroborating observations. A personal label does not identify every device sharing its manufacturer prefix. See [the contribution guide](CONTRIBUTING-RESEARCH.md).
 
-This release is based on **SquachWatch v1.27.0**. DNSP's decisions take priority where the projects differ, including the menu organization, conservative detection wording, storage workflow, recovery behavior, and custom tools.
+## Downloads and hardware
 
-DNSquachWatch is maintained by **dnsprincess**. Bugs and design choices in this modified firmware should be reported to DNSP and should not be attributed to the original SquachWatch creator.
+| Your display | Firmware |
+|---|---|
+| ST7789, newer CYD batches | [ST7789-80MHz kit](firmware/v1.5.1/ST7789-80MHz/DNSquachWatch-v1.5.1-ST7789-80MHz.zip) |
+| ILI9341, older CYD batches | [ILI9341-80MHz kit](firmware/v1.5.1/ILI9341-80MHz/DNSquachWatch-v1.5.1-ILI9341-80MHz.zip) |
 
-## This release's hardware
+Both kits target the **classic 2.8-inch ESP32 CYD** and start with an **80 MHz display clock**. System settings can switch the display to 40 MHz; the flash clock stays at 40 MHz. If you are unsure which controller your CYD has, try ST7789 first. A solid white screen may mean it needs ILI9341: try the other kit. Keep each kit's four flashing binaries together.
 
-The v1.5.1 primary release targets the **2.8-inch classic ESP32 CYD with ST7789**, with an initial **80 MHz display clock**. A separate **ILI9341 80 MHz** kit supports older CYD batches. It uses the same v1.5.1 source and backup correction; ILI9341 hardware validation remains pending. The System menu can switch the display bus to 40 MHz if a panel is unstable. The flash bus remains at 40 MHz.
+Also obtain the [microSD content](firmware/v1.5/DNSquachWatch-v1.5-microSD-content.zip) and copy **DNSP Content/v1.5/** to the card root. **Existing v1.5 card content remains compatible with v1.5.1.** Flashing the ESP32 does not copy files to microSD. The full walkthrough, extended language content, and installation document use the supplied card files; backups require the checked installation document. Boot, scanning, essential recovery, and Remington remain built in. No Wi-Fi content download is used.
 
-Booting, scanning, essential recovery, and Remington remain built in. The complete walkthrough and installation document now require the supplied **microSD-content/DNSP Content/v1.5/** files on the card. Backups require the checked installation document. Flashing the ESP32 does not populate microSD. Firmware and microSD content are separate downloads for manual installation. Both are also provided in this repository. The optional offline installer can copy content and flash the board. No Wi-Fi content download is used. See [INSTALL-CONTENT.md](INSTALL-CONTENT.md) for the separate installation guide.
+Each firmware ZIP includes all four flashing binaries, image checksums, an optional offline installer, and recovery instructions. See [INSTALL-CONTENT.md](INSTALL-CONTENT.md) for installation and manual card copying, or [GitHub Releases](https://github.com/your-dnsp/DNSquachWatch/releases/tag/v1.5.1) for both kits and download checksums.
 
+## Latest update
 
-## Downloads
+**v1.5.1 fixes the backup crash reported during v1.5 testing.** Backup completion has been confirmed on DNSP's ST7789 device. Both display kits also show the correct **DNSP v1.5.1** splash label. No new microSD content is needed.
 
-**v1.5 is superseded: backup could crash. Use the hardware-tested v1.5.1 ST7789 build.** Existing `/DNSP Content/v1.5/` remains compatible; card content is repackaged only when it changes.
-
-See [GitHub Releases](https://github.com/your-dnsp/DNSquachWatch/releases) and [DNSP changelog](CHANGELOG-DNSP.md).
-
-- [ST7789 80 MHz firmware kit](firmware/v1.5.1/ST7789-80MHz/DNSquachWatch-v1.5.1-ST7789-80MHz.zip)
-- [microSD content](firmware/v1.5/DNSquachWatch-v1.5-microSD-content.zip) — copy the version-matched content; the on-card path is **DNSP Content/v1.5**.
-- [ILI9341 80 MHz firmware kit](firmware/v1.5.1/ILI9341-80MHz/DNSquachWatch-v1.5.1-ILI9341-80MHz.zip)
-
-If you are unsure which CYD display you have, try the ST7789 image. A solid white screen may mean the other controller is fitted: try the ILI9341 image. Keep all four flashing binaries from the same kit together. See [INSTALL-CONTENT.md](INSTALL-CONTENT.md) for flashing and manual card copying; source code is not required for flashing.
-
-## New in v1.5.1
-
-- Corrected the backup stack overflow; backup completion was confirmed by DNSP on the physical ST7789-80MHz device.
-- Captured history is read using fixed cursors with at most eight 64-byte flash reads per step, and backup yields between steps.
-- Diagnostic serial rate is 115200 baud. Card content remains v1.5.
-
-## Included from v1.5
-
-- Saved Wi-Fi is attempted at ordinary boot, including PIN-locked boots, regardless of **Update Check**. A successful connection attempts time sync and recalls a remembered network location. The radio then returns to detection; this is not a permanent Wi-Fi connection. Safe boot and persistent duress mode retain their radio restrictions.
-- **Wi-Fi Networks > CONNECT** joins the selected saved network and synchronizes time without checking for updates. It also makes that network preferred at the next boot. Connection failures are visible; a timeout is not reported as a wrong password.
-- Backup preparation uses separate bounded stack frames instead of combining large snapshots in the main task. Firmware completion is checked in small blocks. Backup progress and operation behind the PIN lock are retained.
-- Updates use DNSP's public repository and a dedicated DNSP firmware signing key. They do not install the original creator's firmware. The board verifies the signature and matching display target before activating an image. HTTPS metadata is a notice, not authenticated research or a permission to install; downloads are authenticated by the image signature.
-- Installer **--erase** is an optional recovery operation with a default-No confirmation. It removes PIN/duress state, saved Wi-Fi, preferences and onboard history. Card data is untouched, but microSD backups do not contain the security secrets needed to reconstruct those settings.
-- Whole-program optimization retains the features and reserved flash regions while making room for the GitHub update transport.
-
-### Included from v1.4
-
-- **Remington stays built in:** neither his photograph nor shooting-star sprite is loaded from the card. Card content cannot replace them.
-- **Complete card walkthrough:** larger-text pages cover location labels and research submissions early, followed by all major menus, security and recovery. Missing or corrupt content shows an installation message instead of breaking boot.
-- **Automatic readable history:** enabled by default, adjustable under Storage & Recovery. It uses the existing interruption-safe journal and small background steps, without creating full firmware backups automatically.
-- **Reliable storage feedback:** bounded finding-log retries, counted queue losses and visible storage warnings. Session filenames distinguish reboots/outings without needing Wi-Fi or a clock; rows include trusted epoch time when available and explicitly say when time is unset.
-- **Long backups:** an authorized backup continues behind PIN auto-lock. Its percentage is visible without exposing findings; unlock to access or cancel it. History copying releases file handles between steps so normal logging can continue.
-- **Research pairs:** clearly marked REDACTED and PRIVATE reports share one report ID. Only REDACTED is intended for submission. The offline checker and prepared GitHub workflow detect complete MAC addresses in pasted reports; they cannot prevent arbitrary attachments from reaching GitHub.
-- **Masked Mode:** renamed from Privacy Mode. It masks supported screens only; logs, backups and Pocket Reader files are not anonymized. Charge Mode now explicitly directs users to Safe Shutdown before removing power or the card.
-- **Upstream features retained:** compatible v1.26/v1.27 features, Legend aura, wizard outfit, terminal secrets, runtime history and bidirectional time zones remain. DNSP menu organization and detection rules retain priority.
-
-
-## Retained from v1.2.1
-
-Remington's Flying Toasters pass now lasts **seven seconds**. Three quick taps on the background summon him (each gap within 600 ms and all three within 1.2 seconds). Existing menu buttons keep their actions; use an open part of the background. Automatic appearances keep their varied 15–30-second gaps.
-
-Backups now copy and read back each history file in **1 KiB steps**, keeping screen updates and cancellation responsive between storage calls. Progress shows elapsed time and file/firmware byte counts. A healthy backup may take more than five minutes; cancellation occurs after **two minutes without progress**, rather than five minutes total.
-
-Readable history saves a checked cursor after each complete record and journals the pending record. Ordinary subsequent refreshes avoid rescanning all old text for every new event. Interrupted records are checked for duplicates before retrying. The first refresh of older-format history may take longer while it performs the compatibility checks. A fixed snapshot keeps the export head stable while scanning continues; if the flash ring overwrites a captured sector, the export fails visibly and can be retried. Logs already on the same microSD remain in place rather than being duplicated into every backup. Automatic readable refresh is incremental, not an independent backup of the whole card. Copy the card to a computer for protection against card loss or failure.
-
-## New in v1.2
-
-- Wi-Fi password entry repaints the keyboard correctly during banded screen rendering, addressing the black-screen behavior reported on hardware.
-- System Credits now scrolls through the full text using the same controls as Update, including the independent ALPR researchers.
-- **Alerts & Detections → Set Location** provides a manual 24-character label, Home/Work/Driving/Con presets and Clear. Each stored detection retains its original label; unset events say `no-label-set`.
-- A label assigned while connected to authenticated Wi-Fi is remembered for that network. **Remember for verified Wi-Fi** also lets you associate a label after a successful connection earlier in the current boot. Scanning an SSID is insufficient. Clear forgets the relevant association. Manually selected labels survive disconnect for that session; automatically recalled labels survive the intentional boot radio release and remain visibly marked as recalled. A fresh boot starts unlabeled until a network recalls a label.
-- Location metadata appears in detection history, research and Remote ID capture, readable exports, rule incidents and backups. Backups include the label dictionary and remembered network names, without Wi-Fi passwords. Location labels remain visible in research's redacted mode: avoid sensitive names when sharing files.
-- **DNSP Tools → Remington**, the final item, shows the supplied dog photograph. Double-tap to return. Remington's approved pixel head also appears as a sparkling shooting star in Flying Toasters at varied 15–30-second intervals between passes; triple-tap an open area to summon him.
-
-Location storage is deliberately bounded: 64 unique labels and six Wi-Fi associations. Existing labels remain reusable at capacity; new entries fail visibly instead of evicting historical label text. Allowed characters are letters, numbers, spaces, hyphens, dots and underscores; a label cannot begin with a hyphen. Old records without location metadata remain unlabeled.
+Use v1.5.1 in place of v1.5. The ILI9341 build passed compilation and integrity checks; its hardware validation is still pending. Full release details are in [CHANGELOG-DNSP.md](CHANGELOG-DNSP.md).
 
 ## What DNSquachWatch adds
 
-### Detection and alerts
+These are the additions and refinements in DNSP's edition. The original Squachy features remain available in their own menu; compatible upstream improvements are retained alongside DNSP's menus, research rules, and recovery choices.
 
-- Longer 15, 30, 45, and 60-second device popups, with 30 seconds as the default.
-- A bounded popup queue, an **X more** indicator, and **Snooze All** for crowded environments.
-- Qualitative confidence and **Why This Matched** explanations that distinguish a clue from proof.
-- Expanded Flock, Raven, Axon, other ALPR, Meta, tracker, Remote ID, FPV, and ExpressLRS research coverage.
-- Stored history for every retained alert event, with separate boot, crash, and system history.
-- A **Sketchy Environment** rule that raises a second caution when an ALPR clue and a Wi-Fi deauthentication burst are observed within 90 seconds. The paired evidence is saved without claiming that the two events are causally connected.
-- Per-source DEAUTH tracking. Six frames from unrelated claimed transmitters can no longer combine into one alert. Each claimed source has its own six-frame, three-second burst threshold and 15-second cooldown.
-- DEAUTH evidence can retain the claimed transmitter, receiver targets, BSSID, reason code, protection bit, channel, signal, and observed burst details. The interface warns that 802.11 management addresses can be spoofed.
-- Adjustable Stationary, Balanced, Fast Sweep, Maximum, and Custom scanning profiles. Maximum returns to Balanced after 30 minutes and after a reboot.
+### Detection with evidence you can inspect
 
-Radio matches remain observations rather than certain identification. Manufacturer prefixes can be shared by unrelated products, signal strength is not distance or direction, and Remote ID broadcasts are not authenticated. The ESP32 sees legacy BLE and 2.4 GHz Wi-Fi; it cannot receive 5.8 GHz FPV video or BLE Coded PHY. Channel hopping, radio coexistence, interference, and transmission timing can all cause a device to be missed.
+Expanded research covers **Flock, Raven, Axon, other ALPR clues, Meta glasses, trackers, Remote ID, and FPV/ExpressLRS equipment**. **Why This Matched**, qualitative confidence, and contextual help explain the observation rather than assigning a definite identity from one manufacturer prefix. ALPR guidance points users toward further information and independent verification.
 
-### Research, history, and microSD
+Device popups can last **15, 30, 45, or 60 seconds**, with 30 seconds as the default. Queued alerts show **X more**, and **Snooze All** helps when sightings arrive back-to-back. Stored Alert History includes every retained detection event, rather than just special rule incidents; boot, crash, and system records have separate views.
 
-- Research sessions with Balanced, Bluetooth-only, and Wi-Fi-only profiles, visible elapsed time, activity counters, coverage information, redacted/raw choices, and explicit save progress.
-- Incremental **Refresh Files** output with stable record identifiers and an interruption-safe journal.
-- **Export & Organize** for a numbered, permanent, human-readable snapshot.
-- Pocket Reader support for the generated text files.
-- microSD status showing card type, filesystem, capacity, use, and mount health where the hardware and FAT layer expose them.
-- Recovery controls in the ordinary **Storage & Recovery** menu and in Safe Mode: remount/find the card, test read/write, and a deliberately confirmed format operation.
-- Verified backups containing the running application, complete readable history, current log, labels, Ignore entries, alert-rule state, radio profile, public preferences, and active Watch/Hunt targets.
-- The installation guide is included in completed backups. PINs, Duress state, Wi-Fi credentials, and authentication secrets are deliberately excluded.
+Wi-Fi **DEAUTH** findings require six observed frames from the **same claimed transmitter** within three seconds, with a separate 15-second cooldown for each source. Evidence can include BSSID, receiver targets, reason code, protection status, channel, signal strength, and burst details. Addresses can be spoofed; this is an observation of repeated traffic, not identification of an attacker.
 
-**Safe Shutdown** stops acquisition, drains pending Bluetooth, Wi-Fi, DEAUTH, normal event-log, BlackBox, Research, and Drone/Remote ID capture records, saves counters, synchronizes the card, and unmounts it. Wait for the confirmation screen before removing power or the card. Safe Shutdown does not automatically create a new **Refresh Files**, **Export & Organize**, or full firmware backup. A running full backup is canceled and remains incomplete without `COMPLETE.txt`.
+The **Sketchy Environment** rule adds a caution when an ALPR clue and a deauthentication burst occur within **90 seconds**. It retains the paired evidence and exports an incident record to microSD, without claiming that the events are causally connected.
 
-### Security and recovery
+Scanning profiles include **Stationary, Balanced, Fast Sweep, Maximum, and Custom**. Maximum returns to Balanced after 30 minutes and on reboot. Radio Activity provides a view of observed activity within the ESP32's reception limits.
 
-- An optional interface PIN lock with clearer setup, removal, retry, and wipe confirmations.
-- A separately configured Duress PIN that is accepted only from the lock screen.
-- Duress enters the persistent **Pixel Tide** decoy and attempts bounded cleanup of DNSP-owned internal and microSD data.
-- Duress cleanup is best effort. It is not encryption, secure whole-card erasure, or a guarantee against forensic recovery.
-- Ordinary reflashing can leave NVS state, including Pixel Tide, intact. Follow the full erase/recovery instructions when recovering from Duress.
-- Safe Mode can start after repeated short boots or qualifying crashes. Holding the touchscreen during startup also requests recovery startup, which is useful when normal touch navigation or optional services are failing.
-- Crash information is retained as separate bounded records and can be exported after a later successful boot.
-- Gift Preparation restores the requested touch and color setup flow and explains that installing ordinary upstream firmware replaces DNSP’s modifications.
+### Device labels, location context, and research contributions
 
-The PIN protects the interface; it does not encrypt flash or the microSD card. Treat readable exports, backups, research captures, user labels, and device identifiers as private data.
+Give individual devices names and tags so repeated observations are easier to interpret. **Alerts & Detections > Set Location** adds a manual label of up to **24 characters**, with Home, Work, Driving, Con, and Clear choices. Events retain the location active when they were stored; unset locations say `no-label-set`.
 
-### Interface, accessibility, and tools
+A location assigned to verified Wi-Fi can be recalled when that saved network is joined again. The interface distinguishes manual labels from recalled labels. Recall uses the network name, so check it when travelling or encountering another network with the same name. Saved Wi-Fi is attempted at normal boot independently of Update Check, including PIN-locked boots, to synchronize time and recall a label before returning the radio to detection. **Wi-Fi Networks > CONNECT** also connects without requesting an update.
 
-- Landscape orientation defaults to the USB-C port on the left, with rotation lock enabled by default.
-- A marked DNSP splash and detailed credits separate the custom firmware from upstream responsibility.
-- A skippable walkthrough, contextual help, fuller troubleshooting, progress indicators, and clearer descriptions for average users.
-- Optional high contrast, larger common controls, reduced motion, left-handed footer placement, Auto Brightness, runtime display speed, and a dependable switch that disables transition/glitch effects while retaining meaningful celebrations.
-- English plus preview catalogs for Spanish, French, German, Japanese, Simplified Chinese, and hidden Hebrew. Hold the English language choice for three seconds to reveal Hebrew. Hebrew, Japanese, and Chinese use compatible bundled glyphs rather than the optional Latin fantasy style.
-- Original Squachy features remain grouped together. DNSP tools, games, research, alerts, FPV features, storage, and system controls have their own clear menu destinations.
-- DNSP tools include Screen Light and Morse, SOS/rainbow/caution light patterns, Coin Flip, Dowsing Rod, Timer and Counter, Pocket Reader, and Radio Activity.
-- **Squach Snacks**, a whimsical Breakout game, runs while preserving the device’s alert behavior.
+Research sessions offer **Balanced, Bluetooth-only, and Wi-Fi-only** profiles, explicit RAW/redacted choices, elapsed time, activity and coverage information, and visible save progress. Exported findings can support independent research instead of disappearing with an on-screen popup.
 
-## Menu map
+Research reports come in paired **REDACTED / PRIVATE** files with a shared report ID. REDACTED keeps the observed prefix, replaces the device-specific MAC suffix with `XX:XX:XX`, and omits advertised names. **Location labels remain visible: avoid sensitive location names when sharing.** The offline checker and GitHub submission workflow flag complete MAC addresses in pasted reports; they cannot prevent arbitrary attachments from being uploaded. Submissions are unverified until supported by independent observations. See [CONTRIBUTING-RESEARCH.md](CONTRIBUTING-RESEARCH.md).
 
-The principal destinations are:
+### Readable history, backups, and card recovery
 
-- **Alerts & Detection:** enabled detection types, popup behavior, confidence/help, rules, stored alert history, Watch/Hunt, and detection troubleshooting.
-- **Research:** timed research sessions, raw/redacted capture choice, reports, readable history, and research guidance.
-- **FPV:** drone readings, Remote ID capture, pit/frequency planning, ELRS clues, and supported own-equipment telemetry.
-- **Squachy:** the original mascot and inherited Squachy modules.
-- **DNSP:** DNSP walkthrough, Squach Snacks, Pocket Reader, Timer and Counter, Screen Light/Morse, Coin Flip, Dowsing Rod, and Radio Activity.
-- **Storage & Recovery:** microSD information and recovery, readable files, organized exports, backup/restore, crash reports, and safe storage guidance.
-- **Appearance & Accessibility:** theme-related choices, Auto Brightness, transition effects, language, contrast, control sizing, motion, and layout options.
-- **System:** Masked Mode, Charge Mode, Last Run, display speed, diagnostics, Device Health export, credits, Safe Mode/recovery information, reboot, and Safe Shutdown.
+**Refresh Files** incrementally maintains text copies of retained findings for **Pocket Reader**. Automatic refresh is enabled by default when microSD is mounted. **Export & Organize** creates a permanent numbered snapshot for later review. Session log filenames distinguish outings even without Wi-Fi or a clock; trusted time is included when available.
 
-Some labels move slightly with display orientation or enabled features, but tools stay in their subject area rather than a favorites-only duplicate.
+**Backup & Restore** saves the running firmware, retained readable history, current log, labels, Ignore entries, rule state, scanning profile, public preferences, and active Watch/Hunt targets. Completed backups include the installation guide and a **COMPLETE.txt** marker. Progress remains visible during long operations, and an authorized backup continues behind PIN auto-lock; unlock to access or cancel it. Files already on the same card are not redundantly copied into every backup, and PINs, Duress state, Wi-Fi passwords, and authentication secrets are excluded.
 
-## Installation and recovery material
+microSD information shows card type, filesystem, capacity, usage, and mount health where the card and filesystem expose them. **Storage & Recovery** and Safe Mode offer remount/find, read/write testing, and a deliberately confirmed format operation. Storage failures produce warnings and bounded retries. Crash records can be exported separately; Device Health exports report their destination.
 
-Detailed flashing commands are intentionally kept out of this README while DNSP revises that section. Each release ZIP is self-contained and includes:
+**Safe Shutdown** stops acquisition, saves pending records, synchronizes microSD, and unmounts it. Wait for the safe-to-power-down confirmation. It does not create a new full backup or organized export; a running backup is canceled and remains incomplete. **Charge Mode** lowers activity and power use but does not replace Safe Shutdown. Keep a computer copy of the card: a backup on that same card cannot protect against losing or damaging it.
 
-- `bootloader.bin`
-- `partitions.bin`
-- `boot_app0.bin`
-- `firmware.bin`
-- `manifest.json`
-- `SHA256SUMS`
-- `install_dnsp.py` (optional offline installer)
-- `DNSQUACHWATCH INSTALLATION.txt`
-- recovery, Duress, research and release documentation (the exact inventory varies by kit)
+### PIN security, Duress, and recovery
 
-Keep all four binary files from this kit together. Do not combine files from different firmware versions. Follow `DNSQUACHWATCH INSTALLATION.txt` for the exact offsets, backup location, erase choices, macOS/Linux commands, and recovery procedure.
+An optional interface PIN includes clearer setup, removal, retry, and wipe confirmations. The separate **Duress PIN** works only at the lock screen, attempts cleanup of DNSP-owned internal and card data, and enters the persistent **Pixel Tide** decoy.
 
-The repository's older browser-flasher assets are not this release's installation path. Use the complete matching v1.5.1 kit. It contains all four binary images; no second source folder is required to flash it.
+The PIN does **not** encrypt flash or microSD. Duress cleanup is best effort, not secure whole-card erasure or a guarantee against forensic recovery. Ordinary reflashing can preserve Pixel Tide and other settings; use [the recovery guide](RECOVERY.md) when a full erase is needed. See [DURESS.md](DURESS.md) before enabling it.
 
-## Build and validation status
+**Safe Mode** can be requested by holding the touchscreen through startup, or entered automatically after qualifying repeated short boots or crashes. Recovery remains available when optional services fail. **Gift Preparation** restores the touch/color setup flow. Updates use DNSP's repository and signatures bound to the correct display target.
 
-Dependencies remain pinned. The release build targets are `cyd-fast` (ST7789) and `cyd-ili9341-fast` (ILI9341). v1.5.1 backup has passed the reported ST7789 hardware test; this does not establish reliability on all cards or units. The application slot is 1,966,080 bytes; the measured image size and remaining space are recorded in SIZE-AUDIT.md. The photograph uses lossless per-row compression; fonts use bounded lossless decoding. Neither needs another framebuffer or a heap-backed content cache. BlackBox detection records remain 64 bytes.
+### A friendlier interface, FPV tools, and some whimsy
 
-Host tests, simulator UI checks and the real ESP32 build are recorded in TEST-REPORT.md. These checks cannot establish hardware stability. Please validate Wi-Fi entry, credits scrolling, label recall, exports, microSD backup/restore and Remington on the physical device. Avata 2 field validation and human translation review remain pending. Source, contribution workflows, card content and the primary firmware are published together; see [firmware/v1.5.1](firmware/v1.5.1) for display-specific images.
+The skippable **DNSP walkthrough** covers the menus, labels, research submissions, storage, and security. Contextual help and progress feedback explain what is happening. Menus group Alerts, Research, FPV, Squachy, DNSP tools, Storage & Recovery, Appearance, and System by purpose.
+
+Appearance options include **Auto Brightness**, high contrast, larger common controls, reduced motion, left-handed footer placement, optional Latin fantasy-style fonts, and a switch for transition/glitch effects. Landscape orientation defaults to USB-C on the left with rotation lock on. English is built in; Spanish, French, German, Japanese, Simplified Chinese, and hidden Hebrew have preview catalogs awaiting human review. Hold the **English** language choice for three seconds to reveal Hebrew; Hebrew, Japanese, and Chinese use compatible glyphs.
+
+The **FPV** menu gathers drone/Remote ID information and capture, pit/frequency planning, ExpressLRS clues, and supported own-equipment telemetry. These tools do not make non-Remote-ID aircraft universally identifiable.
+
+**DNSP tools** include Pocket Reader, Timer & Counter, Coin Flip, Dowsing Rod, Screen Light, Morse, and SOS/rainbow/caution patterns. **Squach Snacks** adds a whimsical Breakout game. RuneScape-inspired touches and extra easter eggs sit alongside the original Squachy features.
+
+**Remington** has his own photo viewer—double-tap to return—and crosses the Flying Toasters background as a sparkling shooting star. Three quick taps on an open part of that background summon him. His photo and sprite remain part of the firmware.
+
+## Limits and validation
+
+Radio matches are clues, not proof of a particular device or owner. Manufacturer prefixes can be shared, signal strength is not distance or direction, and received Remote ID is not authenticated. Counts reflect frames observed during channel dwell, not every packet on a network. The classic ESP32 receives legacy BLE and **2.4 GHz Wi-Fi**; it cannot receive **5.8 GHz FPV video or BLE Coded PHY**. Radio coexistence, timing, and interference can cause missed sightings.
+
+**Masked Mode** hides identifiers on supported screens; it does not anonymize logs, backups, or Pocket Reader files. Treat those files as private data.
+
+Both display builds and automated tests passed. ST7789 backup completion was confirmed on hardware; ILI9341 hardware checks, Avata 2 field testing, and human translation review remain pending. See [TEST-REPORT.md](TEST-REPORT.md), [TEST-REPORT-v1.5.1.md](TEST-REPORT-v1.5.1.md), and [SIZE-AUDIT.md](SIZE-AUDIT.md) for details. Build targets are `cyd-fast` and `cyd-ili9341-fast`.
 
 ## Credits and thanks
 
@@ -183,7 +106,7 @@ Additional protocol references and third-party notices are preserved in the sour
 
 ## License
 
-DNSquachWatch retains the project’s **GNU General Public License v3.0** licensing. See [LICENSE](LICENSE). The upstream README is preserved as [README-UPSTREAM.md](README-UPSTREAM.md).
+DNSquachWatch retains the project’s **GNU General Public License v3.0** licensing. See [LICENSE](LICENSE).
 
 ## Gifts and support
 

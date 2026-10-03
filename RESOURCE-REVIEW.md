@@ -28,7 +28,7 @@ No screen, effect, language, radio feature, protocol, authentication check or pe
 - Link-time optimization was attempted in an isolated copy. The pinned toolchain failed with LTO plugin/link errors; no LTO flags enter the release. A toolchain migration would require its own compatibility work.
 - The build already uses -Os, function/data sections and linker garbage collection. These are not new savings to claim.
 - Large individual mapped symbols include mascot drawing, snowfall/starfield/backdrops and several formatting functions. Shared code and data can be investigated, but these symbols implement existing behavior and cannot simply be deleted. Their symbol sizes are not guaranteed independently recoverable savings.
-- `size-before.json` and `size-after.json` contain reproducible image sizes and largest mapped flash symbols. `tools/size_audit.py` recreates those snapshots using the toolchain nm utility.
+- `tools/size_audit.py` generates image-size reports and lists the largest mapped flash symbols using the toolchain nm utility. Generated audit snapshots are not included in the repository.
 
 ## SD-based content
 
