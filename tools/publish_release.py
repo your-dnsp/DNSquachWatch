@@ -6,11 +6,14 @@ ROOT=Path(__file__).resolve().parents[1]
 def main():
  repo=os.environ['GITHUB_REPOSITORY'];commit=os.environ['GITHUB_SHA'];token=os.environ['GITHUB_TOKEN']
  if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+',repo) or not re.fullmatch(r'[0-9a-f]{40}',commit):raise ValueError('Invalid release target')
- version='1.5.1';folder=ROOT/'firmware/v1.5.1/ST7789-80MHz';name='DNSquachWatch-v1.5.1-ST7789-80MHz.zip'
- manifest=json.loads((folder/'manifest.json').read_text());assert manifest['internal_version']==version and manifest['target']=='cyd-fast'
- for entry in manifest['files']:
-  p=folder/entry['file'];assert p.parent==folder and hashlib.sha256(p.read_bytes()).hexdigest()==entry['sha256']
- archive=folder/name;digest=hashlib.sha256(archive.read_bytes()).hexdigest();sums=folder/'RELEASE-SHA256SUMS';sums.write_text(digest+'  '+name+'\n')
+ version='1.5.1';archives=[];lines=[]
+ for board,target in [('ST7789','cyd-fast'),('ILI9341','cyd-ili9341-fast')]:
+  folder=ROOT/('firmware/v'+version)/(board+'-80MHz');name='DNSquachWatch-v'+version+'-'+board+'-80MHz.zip'
+  manifest=json.loads((folder/'manifest.json').read_text());assert manifest['internal_version']==version and manifest['target']==target
+  for entry in manifest['files']:
+   p=folder/entry['file'];assert p.parent==folder and hashlib.sha256(p.read_bytes()).hexdigest()==entry['sha256']
+  archive=folder/name;archives.append(archive);lines.append(hashlib.sha256(archive.read_bytes()).hexdigest()+'  '+name+'\n')
+ sums=ROOT/'firmware/v1.5.1/RELEASE-SHA256SUMS';sums.write_text(''.join(lines))
  base='https://api.github.com/repos/'+repo
  def api(path,method='GET',data=None,binary=False):
   url=path if path.startswith('https://uploads.github.com/') else base+path
@@ -22,14 +25,18 @@ def main():
  try:release=api('/releases/tags/v'+version)
  except urllib.error.HTTPError as e:
   if e.code!=404:raise
-  release=api('/releases','POST',dict(tag_name='v'+version,target_commitish=commit,name='DNSquachWatch v'+version+' — ST7789-80MHz',body=(ROOT/'.github/release-notes/v1.5.1.md').read_text(),draft=True,prerelease=False))
- if not release['draft']:
-  assert all(any(a['name']==p.name and a['size']==p.stat().st_size for a in release['assets']) for p in [archive,sums]);print('Release already published; left unchanged.');return
+  release=api('/releases','POST',dict(tag_name='v'+version,target_commitish=commit,name='DNSquachWatch v'+version+' — ST7789 / ILI9341, 80MHz',body=(ROOT/'.github/release-notes/v1.5.1.md').read_text(),draft=True,prerelease=False))
  existing=api('/releases/'+str(release['id'])+'/assets');upload=release['upload_url'].split('{')[0]
- for p in [archive,sums]:
-  for old in existing:
-   if old['name']==p.name:api('/releases/assets/'+str(old['id']),'DELETE')
+ for p in archives+[sums]:
+  digest='sha256:'+hashlib.sha256(p.read_bytes()).hexdigest()
+  old=next((a for a in existing if a['name']==p.name),None)
+  if old and old.get('digest')==digest and old['size']==p.stat().st_size:continue
+  # Keep already-published firmware immutable. Only the combined checksum list changes.
+  if old:
+   if p!=sums:raise ValueError('Published firmware differs: '+p.name)
+   api('/releases/assets/'+str(old['id']),'DELETE')
   asset=api(upload+'?name='+p.name,'POST',p.read_bytes(),True);assert asset['size']==p.stat().st_size
- api('/releases/'+str(release['id']),'PATCH',dict(draft=False,body=(ROOT/'.github/release-notes/v1.5.1.md').read_text()))
- print('Published v'+version+' with checked ST7789 ZIP and SHA256.')
+  if asset.get('digest'):assert asset['digest']==digest
+ api('/releases/'+str(release['id']),'PATCH',dict(draft=False,name='DNSquachWatch v'+version+' — ST7789 / ILI9341, 80MHz',body=(ROOT/'.github/release-notes/v1.5.1.md').read_text()))
+ print('Published v'+version+' with checked ST7789 and ILI9341 ZIPs and SHA256.')
 if __name__=='__main__':main()

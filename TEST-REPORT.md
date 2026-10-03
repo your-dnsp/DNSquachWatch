@@ -9,3 +9,7 @@
 - USB kit image headers/digests, archive integrity and per-file SHA-256 checks are validated before delivery.
 
 These are software/build checks. This v1.5 image has not been flashed by the assistant. Hardware testing remains required for long backups on busy/slow cards, saved home Wi-Fi join/time/location, both display panels, and a full signed network update. Avata 2 field validation and human translation review remain pending. No destructive device/card test was performed.
+
+## v1.5.1 ILI9341-80MHz publication
+
+Built `cyd-ili9341-fast` successfully from the v1.5.1 source. Complete image checksum and validation hash passed esptool inspection; the board-bound OTA signature verified with the release public key. All four package binaries have checked SHA256 entries. The ILI9341 hardware has not been tested in this publication. GitHub validation builds both CYD display targets and reruns host regressions before publishing the added release asset. Existing ST7789 release binaries remain unchanged.

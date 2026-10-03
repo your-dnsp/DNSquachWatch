@@ -11,7 +11,7 @@ DNSquachWatch is maintained by **dnsprincess**. Bugs and design choices in this 
 
 ## This release's hardware
 
-The v1.5.1 primary release targets the **2.8-inch classic ESP32 CYD with ST7789**, with an initial **80 MHz display clock**. The ILI9341 80 MHz build will be published separately after the primary release. The System menu can switch the display bus to 40 MHz if a panel is unstable. The flash bus remains at 40 MHz.
+The v1.5.1 primary release targets the **2.8-inch classic ESP32 CYD with ST7789**, with an initial **80 MHz display clock**. A separate **ILI9341 80 MHz** kit supports older CYD batches. It uses the same v1.5.1 source and backup correction; ILI9341 hardware validation remains pending. The System menu can switch the display bus to 40 MHz if a panel is unstable. The flash bus remains at 40 MHz.
 
 Booting, scanning, essential recovery, and Remington remain built in. The complete walkthrough and installation document now require the supplied **microSD-content/DNSP Content/v1.5/** files on the card. Backups require the checked installation document. Flashing the ESP32 does not populate microSD. Firmware and microSD content are separate downloads for manual installation. Both are also provided in this repository. The optional offline installer can copy content and flash the board. No Wi-Fi content download is used. See [INSTALL-CONTENT.md](INSTALL-CONTENT.md) for the separate installation guide.
 
@@ -24,9 +24,9 @@ See [GitHub Releases](https://github.com/your-dnsp/DNSquachWatch/releases) and [
 
 - [ST7789 80 MHz firmware kit](firmware/v1.5.1/ST7789-80MHz/DNSquachWatch-v1.5.1-ST7789-80MHz.zip)
 - [microSD content](firmware/v1.5/DNSquachWatch-v1.5-microSD-content.zip) — copy the version-matched content; the on-card path is **DNSP Content/v1.5**.
-- [ILI9341 80 MHz status](firmware/v1.5/ILI9341-80MHz/README.md)
+- [ILI9341 80 MHz firmware kit](firmware/v1.5.1/ILI9341-80MHz/DNSquachWatch-v1.5.1-ILI9341-80MHz.zip)
 
-If you are unsure which CYD display you have, try the ST7789 image. A solid white screen may mean the other controller is fitted: try ILI9341 when available. Keep all four flashing binaries from the same kit together. See [INSTALL-CONTENT.md](INSTALL-CONTENT.md) for flashing and manual card copying; source code is not required for flashing.
+If you are unsure which CYD display you have, try the ST7789 image. A solid white screen may mean the other controller is fitted: try the ILI9341 image. Keep all four flashing binaries from the same kit together. See [INSTALL-CONTENT.md](INSTALL-CONTENT.md) for flashing and manual card copying; source code is not required for flashing.
 
 ## New in v1.5.1
 
@@ -162,9 +162,9 @@ The repository's older browser-flasher assets are not this release's installatio
 
 ## Build and validation status
 
-Dependencies remain pinned. The release build target is `cyd-fast`. v1.5.1 backup has passed the reported ST7789 hardware test; this does not establish reliability on all cards or units. The application slot is 1,966,080 bytes; the measured image size and remaining space are recorded in SIZE-AUDIT.md. The photograph uses lossless per-row compression; fonts use bounded lossless decoding. Neither needs another framebuffer or a heap-backed content cache. BlackBox detection records remain 64 bytes.
+Dependencies remain pinned. The release build targets are `cyd-fast` (ST7789) and `cyd-ili9341-fast` (ILI9341). v1.5.1 backup has passed the reported ST7789 hardware test; this does not establish reliability on all cards or units. The application slot is 1,966,080 bytes; the measured image size and remaining space are recorded in SIZE-AUDIT.md. The photograph uses lossless per-row compression; fonts use bounded lossless decoding. Neither needs another framebuffer or a heap-backed content cache. BlackBox detection records remain 64 bytes.
 
-Host tests, simulator UI checks and the real ESP32 build are recorded in TEST-REPORT.md. These checks cannot establish hardware stability. Please validate Wi-Fi entry, credits scrolling, label recall, exports, microSD backup/restore and Remington on the physical device. Avata 2 field validation and human translation review remain pending. Source, contribution workflows, card content and the primary firmware are published together; see [firmware/v1.5](firmware/v1.5) for display-specific images.
+Host tests, simulator UI checks and the real ESP32 build are recorded in TEST-REPORT.md. These checks cannot establish hardware stability. Please validate Wi-Fi entry, credits scrolling, label recall, exports, microSD backup/restore and Remington on the physical device. Avata 2 field validation and human translation review remain pending. Source, contribution workflows, card content and the primary firmware are published together; see [firmware/v1.5.1](firmware/v1.5.1) for display-specific images.
 
 ## Credits and thanks
 

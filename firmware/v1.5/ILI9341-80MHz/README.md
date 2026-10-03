@@ -1,3 +1,3 @@
-# ILI9341-80MHz v1.5
+# ILI9341-80MHz
 
-Pending: the ST7789 primary kit is published first. No ILI9341 v1.5 image is available in this publication. Do not flash the ST7789 kit on an ILI9341 panel.
+Use the corrected [v1.5.1 ILI9341 kit](../../v1.5.1/ILI9341-80MHz/DNSquachWatch-v1.5.1-ILI9341-80MHz.zip). v1.5 is superseded. Keep existing DNSP Content/v1.5. ILI9341 hardware validation is pending.
