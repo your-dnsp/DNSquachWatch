@@ -22,3 +22,8 @@ dnsp-backup-*/
 # Signing secrets never belong in the repository
 *.pem
 *.key
+
+# Generated local size-audit reports
+/SIZE-AUDIT-*.json
+/size-before.json
+/size-after.json

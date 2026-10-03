@@ -688,7 +688,6 @@
       <option value="./manifest-cyd35-fast.json" data-ocnote="The 3.5&quot; only ships at 80MHz, so there is no slower build to fall back to.">3.5&quot; &mdash; ST7796 (BETA)</option>
       <option value="./manifest-twatch-s3.json">LilyGo T-Watch S3 (BETA)</option>
       <option value="./manifest-freenove-s3.json">Freenove ESP32-S3 2.8&quot; (BETA)</option>
-      <option value="./manifest-crowpanel7.json">Elecrow CrowPanel 7&quot; (BETA)</option>
     </select>
     <p class="white-screen-note" id="whiteScreenNote">
       The 2.8&quot; CYD ships with one of two different display drivers depending on manufacturing
@@ -1428,8 +1427,7 @@
         ['./manifest-lab-cyd.json', './manifest-lab-cyd-fast.json',
          './manifest-lab-cyd-ili9341.json', './manifest-lab-cyd-ili9341-fast.json',
          './manifest-lab-rlphantom-r.json', './manifest-lab-freenove32.json',
-         './manifest-lab-twatch-s3.json', './manifest-lab-freenove-s3.json',
-         './manifest-lab-crowpanel7.json'].forEach(function (path) {
+         './manifest-lab-twatch-s3.json', './manifest-lab-freenove-s3.json'].forEach(function (path) {
           fetch(path, { cache: 'no-store' })
             .then(function (r) { return r.ok ? r.json() : null; })
             .then(function (m) {

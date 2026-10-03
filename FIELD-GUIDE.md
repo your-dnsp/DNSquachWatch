@@ -12,7 +12,7 @@ Exact ExpressLRS setup SSIDs are LOW-confidence equipment clues. They do not pro
 
 ## Optional own-equipment telemetry
 
-Copy `dnsp-telemetry.example.txt` to `/dnsp-telemetry.txt` on microSD and replace every value for your own compatible MAVLink-over-WiFi network. All five keys are required and duplicates/unknown keys are rejected. File limit: 255 bytes. Password may be empty for an open network, otherwise 8–63 ASCII characters. `source` is the expected sender IPv4 address; `system` is the MAVLink system ID (1–255); `port` is the local UDP listening port.
+Copy `examples/dnsp-telemetry.example.txt` to `/dnsp-telemetry.txt` on microSD and replace every value for your own compatible MAVLink-over-WiFi network. All five keys are required and duplicates/unknown keys are rejected. File limit: 255 bytes. Password may be empty for an open network, otherwise 8–63 ASCII characters. `source` is the expected sender IPv4 address; `system` is the MAVLink system ID (1–255); `port` is the local UDP listening port.
 
 Open Own Telemetry and explicitly connect. Scanning and mesh activity pause during this mode. Leaving or locking stops the connection. No flight-control commands are sent. Normal WiFi connection traffic is transmitted. Only selected source/system packets with supported messages and valid CRC are accepted; signed MAVLink frames are rejected because this build does not verify their signatures. CRC is not authentication. Battery, GPS and radio fields depend on the sender; radio RSSI is shown as a raw protocol value.
 

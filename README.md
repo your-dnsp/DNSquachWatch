@@ -87,7 +87,7 @@ Radio matches are clues, not proof of a particular device or owner. Manufacturer
 
 **Masked Mode** hides identifiers on supported screens; it does not anonymize logs, backups, or Pocket Reader files. Treat those files as private data.
 
-Both display builds and automated tests passed. ST7789 backup completion was confirmed on hardware; ILI9341 hardware checks, Avata 2 field testing, and human translation review remain pending. See [TEST-REPORT.md](TEST-REPORT.md), [TEST-REPORT-v1.5.1.md](TEST-REPORT-v1.5.1.md), and [SIZE-AUDIT.md](SIZE-AUDIT.md) for details. Build targets are `cyd-fast` and `cyd-ili9341-fast`.
+Both display builds and automated tests passed. ST7789 backup completion was confirmed on hardware; ILI9341 hardware checks, Avata 2 field testing, and human translation review remain pending. See [TEST-REPORT.md](docs/validation/TEST-REPORT.md), [TEST-REPORT-v1.5.1.md](docs/validation/TEST-REPORT-v1.5.1.md), and [SIZE-AUDIT.md](docs/development/SIZE-AUDIT.md) for details. Build targets are `cyd-fast` and `cyd-ili9341-fast`.
 
 ## Credits and thanks
 

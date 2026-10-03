@@ -22,7 +22,7 @@ namespace BlackBox {
 namespace {
 
 #if defined(SQW_S3) || defined(CROWPANEL7)
-const uint32_t BASE    = 0x810000;   // the gap after app1; partitions_twatch.csv (both SQW_S3 boards) and partitions_crowpanel7.csv, the same 16 MB shape
+const uint32_t BASE    = 0x810000;   // the gap after app1; partitions_twatch.csv (16 MB SQW_S3 boards)
 #else
 const uint32_t BASE    = 0x3D0000;   // the gap after app1; see partitions_ota.csv
 #endif

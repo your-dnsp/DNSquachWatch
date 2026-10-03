@@ -6,7 +6,7 @@ The compiler uses link-time optimization. English text/font stays onboard; exten
 
 Backup's former 6,592-byte start frame is replaced with separately scoped, non-inlined helpers. Measured helper frames are 320 bytes for partition hashing, 752 for the current log, 1,152 for operational settings, 1,248 for public preferences and 2,336 for location metadata. The loop frame is 1,328 bytes; Backup::tick is 2,304 bytes. These are compiler stack-frame measurements, not proof of worst-case runtime stack use. Hardware stack high-water checks remain necessary.
 
-GitHub update checks temporarily lend the display buffer to the TLS client; cancellation waits for task cleanup before radio/display recovery. The update task reserves 12 KiB. Static RAM and complete symbol data are recorded in SIZE-AUDIT-v1.5-ST7789.json; dynamic radio/TLS/SD heap peaks require hardware measurements.
+GitHub update checks temporarily lend the display buffer to the TLS client; cancellation waits for task cleanup before radio/display recovery. The update task reserves 12 KiB. Generated symbol snapshots are intentionally excluded from the repository; tools/size_audit.py can regenerate them. Dynamic radio/TLS/SD heap peaks require hardware measurements.
 
 ## v1.5.1 corrective builds
 

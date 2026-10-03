@@ -75,7 +75,7 @@ IDs are 1000–65535 and unique within the file. Types: 1 Flock, 2 Axon, 3 Meta,
 
 Fingerprint imports are experimental class matches and cannot establish that a randomized address belongs to an earlier device. Built-in rules retain precedence where they already match. Combined exports flag that an imported rule also matched, but currently retain only one winning rule ID rather than every matching imported rule ID.
 
-The included `dnsp-signatures.example.txt` is a **synthetic example**, not a new detection database. Replace it with reviewed rules before actual use.
+The included `examples/dnsp-signatures.example.txt` is a **synthetic example**, not a new detection database. Replace it with reviewed rules before actual use.
 
 ## Sources reviewed and how they were used
 

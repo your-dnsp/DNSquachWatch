@@ -1,8 +1,0 @@
-{
-  "version": "1.2.1",
-  "target": "cyd-fast",
-  "image_bytes": 1954240,
-  "slot_bytes": 1966080,
-  "remaining_bytes": 11840,
-  "static_ram_bytes": 124016
-}
