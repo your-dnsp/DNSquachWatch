@@ -15,3 +15,9 @@ Independent comments can describe your own equipment, physical inspection, repea
 The offline checker runs before sharing. The prepared GitHub workflow scans pasted issue text and newly edited comments **after posting**, and warns about complete MACs, unredacted report fields, or unscreened attachments. It never downloads attachments or executes submitted content. Passing redaction checks does not confirm device identity.
 
 GitHub uploads an attachment as soon as it is attached. Issue-form prompts and after-posting checks cannot guarantee prevention, deletion, or recall of an upload, edit history, or notifications. If private data was shared accidentally, contact the maintainer promptly. Complete prevention would require a separate submission service that validates before publication; that is not part of this update.
+
+## Source and documentation changes
+
+For build requirements and checks, see [Build instructions](docs/BUILD.md). Keep changes focused, preserve DNSP menu organization and recovery behavior, and include the validation relevant to your change. Describe observed evidence and limitations when proposing detection rules. Never commit credentials, signing keys, private reports or personal device backups.
+
+For independent research review, use the [corroboration guide](docs/research/CORROBORATION.md).

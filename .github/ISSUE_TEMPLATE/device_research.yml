@@ -8,7 +8,7 @@ body:
         Reports begin **unverified**. A label concerns one observed device; it does not identify every device with the same prefix. Detector confidence is not researcher verification.
         Retain your PRIVATE copy locally. Submit ONLY the REDACTED copy, whose MAC ends `XX:XX:XX` and whose advertised name is omitted. Paste its JSON contents below so the checker can inspect it. Do not attach files, backups, raw captures or card images.
         Automated checks run AFTER posting; they cannot prevent uploads or remove attachment data already held by GitHub. Review subtags and free text yourself.
-        Read [the research guide](https://github.com/your-dnsp/DNSquachWatch/blob/master/CONTRIBUTING-RESEARCH.md). Others can add independent evidence in comments. A maintainer records the final status.
+        Read [the research guide](https://github.com/your-dnsp/DNSquachWatch/blob/master/CONTRIBUTING.md). Others can add independent evidence in comments. A maintainer records the final status.
   - type: textarea
     id: report
     attributes:

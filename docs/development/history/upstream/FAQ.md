@@ -1,3 +1,5 @@
+> Historical reference. This document describes an earlier release or inherited upstream work; use the current [README](../../../../README.md) for DNSP behavior and supported releases.
+
 # FAQ
 
 Hey. It's me, the Sasquach. Yes, I know how to use GitHub. No, I don't know why that surprises people every time.
@@ -29,13 +31,13 @@ Either way: no GPS, no extra modules, and nothing that makes a sound unless you 
 
 No. That's what the [web flasher](https://squachwatch.com/) is for — plug your board into a computer running Firefox, Chrome, Edge, or Brave, hit Connect & Install, and the firmware goes straight from your browser onto the board. No compiler, no IDE, no me judging your PlatformIO setup (I would never. probably).
 
-If you *do* want to build from source — maybe you're modifying something, maybe you just don't trust browsers with USB access, respectable — grab [PlatformIO](https://platformio.org/) and follow [docs/BUILD.md](docs/BUILD.md).
+If you *do* want to build from source — maybe you're modifying something, maybe you just don't trust browsers with USB access, respectable — grab [PlatformIO](https://platformio.org/) and follow [docs/BUILD.md](../../../BUILD.md).
 
 ## How does detection actually work?
 
 Every detection type has its own fingerprint — a WiFi OUI prefix, a BLE service UUID, a manufacturer ID, sometimes an SSID pattern. The board passively listens (it never transmits anything to provoke a response — this is 100% receive-only, no active probing) and checks every WiFi/BLE packet it overhears against that list. Match found? You get a full-screen ALERT: what it thinks it saw, how confident it is, the MAC, RSSI, channel, and a little radar widget because I have a flair for the dramatic.
 
-Confidence matters — some signatures are rock-solid (Flock, Axon, Meta glasses), some are best-effort (AirTag, Raven). The ALERT screen tells you which is which so you're not treating a maybe like a certainty. Full technical breakdown, per-type, with sources: [docs/DETECTIONS.md](docs/DETECTIONS.md).
+Confidence matters — some signatures are rock-solid (Flock, Axon, Meta glasses), some are best-effort (AirTag, Raven). The ALERT screen tells you which is which so you're not treating a maybe like a certainty. Full technical breakdown, per-type, with sources: [docs/DETECTIONS.md](DETECTIONS.md).
 
 ## Is this legal? Am I going to get in trouble for owning one?
 
@@ -65,7 +67,7 @@ Rotation lives in the top-right corner of the title bar — tap to cycle through
 
 ## Can I contribute?
 
-Sure. PRs welcome, especially new detection signatures with real sources behind them (see [docs/DETECTIONS.md](docs/DETECTIONS.md) for the format — I take provenance seriously, I don't want to flag your neighbor's baby monitor as a Flock camera because someone guessed at an OUI). The whole project is MIT-licensed. Fork it, break it, make it weirder, send it back.
+Sure. PRs welcome, especially new detection signatures with real sources behind them (see [docs/DETECTIONS.md](DETECTIONS.md) for the format — I take provenance seriously, I don't want to flag your neighbor's baby monitor as a Flock camera because someone guessed at an OUI). The whole project is MIT-licensed. Fork it, break it, make it weirder, send it back.
 
 ## Any relation to talkingsasquach.com?
 

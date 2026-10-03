@@ -97,7 +97,7 @@ def main():
     except (ValueError, KeyError, OSError, UnicodeError, TypeError) as e:
         parser.exit(1, 'NOT VERIFIED: ' + str(e) + '\n')
     print('Integrity and layout checks passed. This is not publisher authentication or a hardware recovery test.')
-    print('Before writing, validate the ESP image with esptool image_info and read RECOVERY.md.')
+    print('Before writing, validate the ESP image with esptool image_info and read the recovery guide (docs/user/RECOVERY.md in the repository, RECOVERY.md in a release kit).')
     parts = ['python3', '-m', 'esptool', '--chip', 'esp32', '--port', 'PORT', 'write_flash', '--flash_mode', 'dio', '--flash_freq', '40m', '--flash_size', '4MB']
     for offset, path in [('0x1000', args.kit/'bootloader.bin'), ('0x8000', args.kit/'partitions.bin'), ('0xe000', args.kit/'boot_app0.bin'), ('0x10000', app)]:
         parts.extend([offset, str(path)])

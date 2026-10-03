@@ -1,3 +1,5 @@
+> Historical reference. This document describes an earlier release or inherited upstream work; use the current [README](../../../README.md) for DNSP behavior and supported releases.
+
 # v0.3 resource review
 
 CYD ST7789 `cyd-fast`: static RAM 101,936 / 327,680 bytes; application flash 1,820,509 / 1,966,080 bytes. Application headroom: 145,571 bytes. These are linker figures, not measured runtime free heap or stack peaks. v0.2 used 99,744 bytes static RAM and 1,739,617 bytes flash; v0.3 adds features and therefore remains larger overall despite optimizations.

@@ -1,3 +1,5 @@
+> Historical reference. This document describes an earlier release or inherited upstream work; use the current [README](../../../../README.md) for DNSP behavior and supported releases.
+
 # Detection signatures — provenance and confidence
 
 This file documents every signature SquachWatch-CYD matches, with

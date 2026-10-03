@@ -1,7 +1,7 @@
 # SquachWatch-CYD -- partition table for the 16 MB ESP32-S3 boards: the LilyGo
 # T-Watch S3 and the Freenove ESP32-S3 2.8" (every SQW_S3 build).
 #
-# The same shape as partitions_ota.csv, with the room a 16 MB part gives:
+# The same shape as cyd.csv, with the room a 16 MB part gives:
 # two 4 MB app slots for over-the-air updates, the black box in the unnamed
 # gap after them, and the crash summary last. NVS and otadata sit where they
 # do on every other board, so nothing that reads them changes.

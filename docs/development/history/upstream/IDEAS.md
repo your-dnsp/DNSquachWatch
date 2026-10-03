@@ -1,3 +1,5 @@
+> Historical reference. This document describes an earlier release or inherited upstream work; use the current [README](../../../../README.md) for DNSP behavior and supported releases.
+
 # Ideas
 
 Things worth building that nobody has started. Each one carries what it would

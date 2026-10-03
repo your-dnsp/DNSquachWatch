@@ -1,3 +1,5 @@
+> Historical reference. This document describes an earlier release or inherited upstream work; use the current [README](../../../README.md) for DNSP behavior and supported releases.
+
 # Upstream integration for DNSP v1.3
 
 Compared SquachWatch v1.25.0 to tags v1.26.0 and v1.27.0 (v1.27.0 commit 3d2ab4f). Applied compatible shared source changes with a three-way merge; resolved conflicting menus and application states in favor of DNSP. Detection.cpp and detection.h have no upstream changes in this tag range; existing DNSP research signatures and per-source DEAUTH logic remain unchanged.

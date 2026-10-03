@@ -20,7 +20,7 @@ def check(root):
     sectors=int(re.search(r'SECTORS\s*=\s*(\d+)',code)[1])
     regions=[('partition table',0x8000,0x9000),('BlackBox',base,base+sector*sectors)]
     names=set();apps={};data={}
-    for row in csv.reader((root/'partitions_ota.csv').read_text().splitlines()):
+    for row in csv.reader((root/'config/partitions/cyd.csv').read_text().splitlines()):
         if not row or row[0].strip().startswith('#'):continue
         name,kind,sub,offset,size=(v.strip() for v in row[:5])
         if name in names:raise ValueError('Duplicate partition '+name)

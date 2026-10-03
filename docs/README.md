@@ -1,10 +1,28 @@
 # Documentation
 
-Start with the [project overview](../README.md) and [release history](../CHANGELOG-DNSP.md).
+## Using your device
 
-- [Validation records](validation/): software checks, hardware confirmations and their limits.
-- [Translation material](translations/TRANSLATION-STRINGS-EN.txt): English strings for human translation review.
-- [Development notes](development/): resource measurements and historical upstream integration decisions.
-- [Configuration examples](../examples/README.md): optional research and telemetry templates.
+- [Installation and microSD content](user/INSTALLATION.md)
+- [Recovery and safe boot](user/RECOVERY.md)
+- [PIN and duress behavior](user/DURESS.md)
+- [Drone detection and limitations](user/DRONES.md)
+- [Field and FPV tools](user/FIELD-TOOLS.md)
+- [Printable installation document](user/DNSQUACHWATCH%20INSTALLATION.txt)
 
-DNSP release packages target the 2.8-inch CYD with ST7789 or ILI9341 displays. Other inherited board configurations are not DNSP release targets.
+## Research and contributions
+
+- [Research guide](research/RESEARCH-GUIDE.md)
+- [Submit redacted observations](../CONTRIBUTING.md)
+- [Corroborate or challenge an observation](research/CORROBORATION.md)
+- [Optional configuration templates](../examples/README.md)
+
+## Development and validation
+
+- [Build instructions](BUILD.md)
+- [Validation records](validation/)
+- [Known limitations and remaining hardware checks](validation/KNOWN-LIMITATIONS.md)
+- [Translation source strings](translations/TRANSLATION-STRINGS-EN.txt)
+- [Development notes](development/)
+- [Historical references](development/history/)
+
+Historical documents are retained for traceability, not as current user instructions. Start with the [README](../README.md) and [changelog](../CHANGELOG.md) for current behavior.

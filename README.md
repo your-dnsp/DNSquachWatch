@@ -4,7 +4,7 @@ DNSquachWatch is **dnsprincess's friends-and-family edition of SquachWatch** for
 
 **SquachWatch was created by Talking Sasquach / skizzophrenic.** This edition builds on that work; DNSP is responsible for the modifications. For the original firmware, visit [squachwatch.com](https://squachwatch.com/) or [the upstream project](https://github.com/skizzophrenic/SquachWatch-CYD).
 
-**Label devices and contribute research:** open **Research & Data > Device Research**, then hold a LOG row to label or tag an individual device. **RESEARCH REPORT...** creates **REDACTED** and **PRIVATE** copies. Keep PRIVATE locally and submit only REDACTED through [the research form](https://github.com/your-dnsp/DNSquachWatch/issues/new?template=device_research.yml). Reports start unverified; others can comment with corroborating observations. A personal label does not identify every device sharing its manufacturer prefix. See [the contribution guide](CONTRIBUTING-RESEARCH.md).
+**Label devices and contribute research:** open **Research & Data > Device Research**, then hold a LOG row to label or tag an individual device. **RESEARCH REPORT...** creates **REDACTED** and **PRIVATE** copies. Keep PRIVATE locally and submit only REDACTED through [the research form](https://github.com/your-dnsp/DNSquachWatch/issues/new?template=device_research.yml). Reports start unverified; others can comment with corroborating observations. A personal label does not identify every device sharing its manufacturer prefix. See [the contribution guide](CONTRIBUTING.md).
 
 ## Downloads and hardware
 
@@ -17,13 +17,13 @@ Both kits target the **classic 2.8-inch ESP32 CYD** and start with an **80 MHz d
 
 Also obtain the [microSD content](firmware/v1.5/DNSquachWatch-v1.5-microSD-content.zip) and copy **DNSP Content/v1.5/** to the card root. **Existing v1.5 card content remains compatible with v1.5.1.** Flashing the ESP32 does not copy files to microSD. The full walkthrough, extended language content, and installation document use the supplied card files; backups require the checked installation document. Boot, scanning, essential recovery, and Remington remain built in. No Wi-Fi content download is used.
 
-Each firmware ZIP includes all four flashing binaries, image checksums, an optional offline installer, and recovery instructions. See [INSTALL-CONTENT.md](INSTALL-CONTENT.md) for installation and manual card copying, or [GitHub Releases](https://github.com/your-dnsp/DNSquachWatch/releases/tag/v1.5.1) for both kits and download checksums.
+Each firmware ZIP includes all four flashing binaries, image checksums, an optional offline installer, and recovery instructions. See [installation guide](docs/user/INSTALLATION.md) for installation and manual card copying, or [GitHub Releases](https://github.com/your-dnsp/DNSquachWatch/releases/tag/v1.5.1) for both kits and download checksums.
 
 ## Latest update
 
 **v1.5.1 fixes the backup crash reported during v1.5 testing.** Backup completion has been confirmed on DNSP's ST7789 device. Both display kits also show the correct **DNSP v1.5.1** splash label. No new microSD content is needed.
 
-Use v1.5.1 in place of v1.5. The ILI9341 build passed compilation and integrity checks; its hardware validation is still pending. Full release details are in [CHANGELOG-DNSP.md](CHANGELOG-DNSP.md).
+Use v1.5.1 in place of v1.5. The ILI9341 build passed compilation and integrity checks; its hardware validation is still pending. Full release details are in [changelog](CHANGELOG.md).
 
 ## What DNSquachWatch adds
 
@@ -49,7 +49,7 @@ A location assigned to verified Wi-Fi can be recalled when that saved network is
 
 Research sessions offer **Balanced, Bluetooth-only, and Wi-Fi-only** profiles, explicit RAW/redacted choices, elapsed time, activity and coverage information, and visible save progress. Exported findings can support independent research instead of disappearing with an on-screen popup.
 
-Research reports come in paired **REDACTED / PRIVATE** files with a shared report ID. REDACTED keeps the observed prefix, replaces the device-specific MAC suffix with `XX:XX:XX`, and omits advertised names. **Location labels remain visible: avoid sensitive location names when sharing.** The offline checker and GitHub submission workflow flag complete MAC addresses in pasted reports; they cannot prevent arbitrary attachments from being uploaded. Submissions are unverified until supported by independent observations. See [CONTRIBUTING-RESEARCH.md](CONTRIBUTING-RESEARCH.md).
+Research reports come in paired **REDACTED / PRIVATE** files with a shared report ID. REDACTED keeps the observed prefix, replaces the device-specific MAC suffix with `XX:XX:XX`, and omits advertised names. **Location labels remain visible: avoid sensitive location names when sharing.** The offline checker and GitHub submission workflow flag complete MAC addresses in pasted reports; they cannot prevent arbitrary attachments from being uploaded. Submissions are unverified until supported by independent observations. See [contribution guide](CONTRIBUTING.md).
 
 ### Readable history, backups, and card recovery
 
@@ -65,7 +65,7 @@ microSD information shows card type, filesystem, capacity, usage, and mount heal
 
 An optional interface PIN includes clearer setup, removal, retry, and wipe confirmations. The separate **Duress PIN** works only at the lock screen, attempts cleanup of DNSP-owned internal and card data, and enters the persistent **Pixel Tide** decoy.
 
-The PIN does **not** encrypt flash or microSD. Duress cleanup is best effort, not secure whole-card erasure or a guarantee against forensic recovery. Ordinary reflashing can preserve Pixel Tide and other settings; use [the recovery guide](RECOVERY.md) when a full erase is needed. See [DURESS.md](DURESS.md) before enabling it.
+The PIN does **not** encrypt flash or microSD. Duress cleanup is best effort, not secure whole-card erasure or a guarantee against forensic recovery. Ordinary reflashing can preserve Pixel Tide and other settings; use [the recovery guide](docs/user/RECOVERY.md) when a full erase is needed. See [DURESS.md](docs/user/DURESS.md) before enabling it.
 
 **Safe Mode** can be requested by holding the touchscreen through startup, or entered automatically after qualifying repeated short boots or crashes. Recovery remains available when optional services fail. **Gift Preparation** restores the touch/color setup flow. Updates use DNSP's repository and signatures bound to the correct display target.
 
@@ -87,7 +87,7 @@ Radio matches are clues, not proof of a particular device or owner. Manufacturer
 
 **Masked Mode** hides identifiers on supported screens; it does not anonymize logs, backups, or Pocket Reader files. Treat those files as private data.
 
-Both display builds and automated tests passed. ST7789 backup completion was confirmed on hardware; ILI9341 hardware checks, Avata 2 field testing, and human translation review remain pending. See [TEST-REPORT.md](docs/validation/TEST-REPORT.md), [TEST-REPORT-v1.5.1.md](docs/validation/TEST-REPORT-v1.5.1.md), and [SIZE-AUDIT.md](docs/development/SIZE-AUDIT.md) for details. Build targets are `cyd-fast` and `cyd-ili9341-fast`.
+Both display builds and automated tests passed. ST7789 backup completion was confirmed on hardware; ILI9341 hardware checks, Avata 2 field testing, and human translation review remain pending. See [validation report](docs/validation/TEST-REPORT.md), [v1.5.1 validation](docs/validation/TEST-REPORT-v1.5.1.md), and [resource audit](docs/development/SIZE-AUDIT.md) for details. Build targets are `cyd-fast` and `cyd-ili9341-fast`.
 
 ## Credits and thanks
 
@@ -113,3 +113,20 @@ DNSquachWatch retains the project’s **GNU General Public License v3.0** licens
 **dnsprincess only gives out devices running DNSquachWatch as gifts. You cannot buy a prepared device kit from DNSP.** If you received one as a gift, you can reach out to DNSP for help or modifications.
 
 The v1.5 card-content download also contains the extended font and translated text. English recovery text remains built in; missing or corrupt translation records fall back to English. Copy the version-matched content before using other languages.
+
+## Finding your way around the project
+
+| Location | Contents |
+|---|---|
+| [Documentation](docs/README.md) | User guides, research guidance, recovery, validation and translation material |
+| [Firmware](firmware/README.md) | Complete, versioned flashing kits for both CYD display drivers |
+| `microSD-content/` | Files to copy to your card, with an integrity manifest |
+| `src/` and `include/` | Firmware implementation and headers |
+| `config/` | Flash partition layouts |
+| `tools/` | Build checks, offline installation, backup verification and research submission tools |
+| `test/` and `sim/` | Regression tests and desktop UI simulator |
+| `examples/` | Optional research and telemetry configuration templates |
+| `assets/` | Original artwork and supporting asset sources |
+| `ota/` | Signed, board-specific DNSP update images and manifests |
+
+For source builds, see [Build instructions](docs/BUILD.md). For using a device, start with [Documentation](docs/README.md).

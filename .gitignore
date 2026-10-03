@@ -27,3 +27,4 @@ dnsp-backup-*/
 /SIZE-AUDIT-*.json
 /size-before.json
 /size-after.json
+/GITHUB-REVIEW.txt

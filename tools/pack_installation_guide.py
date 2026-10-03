@@ -3,7 +3,7 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-src = (ROOT / "DNSQUACHWATCH INSTALLATION.txt").read_bytes()
+src = (ROOT / "docs/user/DNSQUACHWATCH INSTALLATION.txt").read_bytes()
 out = bytearray()
 i = 0
 # Two-byte matches carry a 10-bit backward distance and six-bit length.

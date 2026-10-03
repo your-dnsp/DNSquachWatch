@@ -1,10 +1,12 @@
+> Historical reference. This document describes an earlier release or inherited upstream work; use the current [README](../../../README.md) for DNSP behavior and supported releases.
+
 # Upstream v1.25.0 integration
 
 Source: <https://github.com/skizzophrenic/SquachWatch-CYD/releases/tag/v1.25.0>
 
 DNSquachWatch previously used the SquachWatch v1.20.0 foundation. This release selectively merges applicable original-project work through v1.25.0 while treating established DNSP decisions and menu organization as authoritative where the projects differ.
 
-The v1.25.0 merge corrects printed Bluetooth MAC byte order with compatibility for older history, adds seven status-light brightness levels while preserving saved output levels, and makes Settings headings non-folding labels. The T-Watch-only GPS hardware, spare-flash wardrive store, and web-flasher controls were not copied onto the CYD. The hardware-independent NMEA parser is included for future external-GPS work; see `GPS-WIGLE-READINESS.md`.
+The v1.25.0 merge corrects printed Bluetooth MAC byte order with compatibility for older history, adds seven status-light brightness levels while preserving saved output levels, and makes Settings headings non-folding labels. The T-Watch-only GPS hardware, spare-flash wardrive store, and web-flasher controls were not copied onto the CYD. The hardware-independent NMEA parser is included for future external-GPS work; see `../GPS-WIGLE-READINESS.md`.
 
 Included upstream behavior:
 

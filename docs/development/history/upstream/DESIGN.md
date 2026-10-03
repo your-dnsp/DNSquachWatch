@@ -1,3 +1,5 @@
+> Historical reference. This document describes an earlier release or inherited upstream work; use the current [README](../../../../README.md) for DNSP behavior and supported releases.
+
 # SquachWatch-CYD — Design Contract
 
 This document is the single source of truth for the SquachWatch-CYD firmware.
@@ -57,7 +59,7 @@ build_flags =
 A TFT_eSPI user setup header for the CYD's ILI9341 + XPT2046 pinout.
 Pin map (verify against current Sunton schematic; the values below match
 the most common "ESP32-2432S028R" variant — the "USB-C 2" rev has slightly
-different pins, which is documented in `docs/PINOUT.md`):
+different pins, which is documented in `PINOUT.md`):
 
 | Signal    | GPIO |
 |---|---|
@@ -245,7 +247,7 @@ DetectionType lookupMfgId(uint16_t mfgId);
 
 Signatures are aggregated from three independent research streams. The
 implementation MUST include every entry below; provenance lives in
-`docs/DETECTIONS.md`.
+`DETECTIONS.md`.
 
 #### 6.1.1 Flock Safety (~30 OUIs) — from `colonelpanichacks/flock-you`
 research by `@NitekryDPaul` and `DeFlockJoplin`. ESP32-module OUIs in
@@ -551,7 +553,7 @@ void loop() {
 **MIT.** Match the user's existing projects (`Cardputer-CSI-Human-Detector`,
 `M5PORKCHOP_DualScreen`). Full text in `LICENSE`.
 
-Per-section attribution lives in `docs/DETECTIONS.md`:
+Per-section attribution lives in `DETECTIONS.md`:
 
 - Flock OUI research: `@NitekryDPaul`, `DeFlockJoplin`, `colonelpanichacks/flock-you`
   (MIT). SquachWatch-CYD redistributes the OUI list as data (not code); credit

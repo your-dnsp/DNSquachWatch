@@ -1,3 +1,5 @@
+> Historical reference. This document describes an earlier release or inherited upstream work; use the current [README](../../../../README.md) for DNSP behavior and supported releases.
+
 # Pinout — ESP32-2432S028R ("CYD")
 
 Pin assignments used by SquachWatch-CYD. Verified against the most

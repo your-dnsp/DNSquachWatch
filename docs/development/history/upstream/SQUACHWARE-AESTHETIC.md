@@ -1,3 +1,5 @@
+> Historical reference. This document describes an earlier release or inherited upstream work; use the current [README](../../../../README.md) for DNSP behavior and supported releases.
+
 # SquachWare → CYD aesthetic mapping
 
 For future maintainers porting SquachWatch to other boards, or just

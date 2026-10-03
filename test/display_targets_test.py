@@ -15,7 +15,7 @@ class Targets(unittest.TestCase):
     header='cyd_ili9341_user_setup.h' if 'ili9341' in target else 'cyd_user_setup.h'
     self.assertIn(header,flags)
     self.assertEqual('SPI_FREQUENCY=80000000' in flags,target.endswith('-fast'))
-    self.assertIn("'"+target+"'",(ROOT/'extra_script.py').read_text())
+    self.assertIn("'"+target+"'",(ROOT/'tools/build_version.py').read_text())
  def test_panels_have_same_bus_and_separate_drivers(self):
   a=(ROOT/'include/cyd_user_setup.h').read_text();b=(ROOT/'include/cyd_ili9341_user_setup.h').read_text()
   for name in ('TFT_MISO','TFT_MOSI','TFT_SCLK','TFT_CS','TFT_DC','TFT_RST','TFT_BL','SPI_READ_FREQUENCY'):
