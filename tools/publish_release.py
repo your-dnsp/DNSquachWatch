@@ -31,9 +31,13 @@ def main():
   digest='sha256:'+hashlib.sha256(p.read_bytes()).hexdigest()
   old=next((a for a in existing if a['name']==p.name),None)
   if old and old.get('digest')==digest and old['size']==p.stat().st_size:continue
-  # Keep already-published firmware immutable. Only the combined checksum list changes.
+  # One explicitly authorized splash-label correction may replace these exact old kits.
+  # Any other firmware mismatch still fails instead of silently overwriting a release.
+  prior_splash_assets={
+   'DNSquachWatch-v1.5.1-ST7789-80MHz.zip':'sha256:e745bcabfa9f8442f7b35cc750706613034d353af7d5c74ab7234441fffcdb47',
+   'DNSquachWatch-v1.5.1-ILI9341-80MHz.zip':'sha256:10e4a6d2267e19ce7e51a9629453fc27b043e2130a2c5fbd962d413806b4298b'}
   if old:
-   if p!=sums:raise ValueError('Published firmware differs: '+p.name)
+   if p!=sums and old.get('digest')!=prior_splash_assets.get(p.name):raise ValueError('Published firmware differs: '+p.name)
    api('/releases/assets/'+str(old['id']),'DELETE')
   asset=api(upload+'?name='+p.name,'POST',p.read_bytes(),True);assert asset['size']==p.stat().st_size
   if asset.get('digest'):assert asset['digest']==digest

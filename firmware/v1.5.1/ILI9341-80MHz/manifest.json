@@ -36,7 +36,8 @@
       "file": "firmware.bin",
       "offset": "0x10000",
       "bytes": 1950176,
-      "sha256": "bf5bff7090004e74333e14001a9d9c8bab85b534bbc1bfc794bb484dd9abdacb"
+      "sha256": "500cdb5e2a653cfee6d3d9f184de8e79d005ac3a36768d738fbb1b4445c6012a"
     }
-  ]
+  ],
+  "package_revision": "splash-label-correction-2026-10-02"
 }

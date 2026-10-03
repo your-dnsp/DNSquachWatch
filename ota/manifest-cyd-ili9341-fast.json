@@ -3,6 +3,7 @@
   "target": "cyd-ili9341-fast",
   "release_name": "DNSquachWatch v1.5.1",
   "whats_new": [
+    "Corrected splash version label to DNSP v1.5.1",
     "Same backup stack correction as hardware-tested ST7789 build; ILI9341 field validation required",
     "Bounded history scan and scheduler yields",
     "Keep existing DNSP Content/v1.5; diagnostic serial 115200"

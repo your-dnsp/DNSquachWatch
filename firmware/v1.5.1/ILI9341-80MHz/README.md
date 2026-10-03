@@ -34,3 +34,5 @@ History preparation and file-copy work have separate stack frames. A fixed curso
 Host regression tests, full 1,800-event history export, retry/duplicate checks, snapshot overwrite handling, card write failures, installer safety checks and UI simulations passed. ESP32 compilation and complete-image validation passed. Firmware size: 1950176 bytes of 1,966,080 (15904 bytes free). This package is for ILI9341 only. Use the separate ST7789 kit for ST7789 panels. If your CYD shows a solid white screen, try the other display-driver kit; keep each kit’s four binaries together.
 
 The original SquachWatch project is by Talking Sasquach (skizzophrenic). DNSquachWatch modifications are by dnsprincess/DNSP. Device research credits include ReconGrunt, zmattmanz, Ringmast4r (especially the OUI intelligence), and rpriven. See the project README and LICENSE for additional context.
+
+Package correction (2026-10-02): the splash now shows DNSP v1.5.1 using the build version. This replaces the earlier same-version image; backup and card content are unchanged.

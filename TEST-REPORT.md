@@ -13,3 +13,7 @@ These are software/build checks. This v1.5 image has not been flashed by the ass
 ## v1.5.1 ILI9341-80MHz publication
 
 Built `cyd-ili9341-fast` successfully from the v1.5.1 source. Complete image checksum and validation hash passed esptool inspection; the board-bound OTA signature verified with the release public key. All four package binaries have checked SHA256 entries. The ILI9341 hardware has not been tested in this publication. GitHub validation builds both CYD display targets and reruns host regressions before publishing the added release asset. Existing ST7789 release binaries remain unchanged.
+
+## v1.5.1 splash-label correction
+
+Both ESP32 display builds passed. Both complete firmware images contain `DNSP v1.5.1 | base v1.27.0` and no longer contain the old `DNSP v1.5 | base v1.27.0` splash label. Both target-bound update signatures verified. Package image hashes and ZIP integrity were checked. Only the boot version text changed; hardware backup validation applies to the prior functionally equivalent ST7789 image.

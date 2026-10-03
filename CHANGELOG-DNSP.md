@@ -17,3 +17,7 @@ Repository cleanup: Linux test header fix, expanded installer/submission/content
 Saved Wi-Fi connects at ordinary boot independently of Update Check; selected networks can connect without requesting updates. Introduced DNSP-signed public-repository updates and separate v1.5 card content. Backup still had a main-task stack overflow; use v1.5.1.
 
 Earlier DNSP features are described in README.md. Inherited upstream notes are kept separately under .github/upstream-release-notes and do not describe DNSP versions.
+
+### Splash-label correction — 2026-10-02
+
+Both v1.5.1 display kits and signed update images were rebuilt to show **DNSP v1.5.1 | base v1.27.0** on boot. The splash now reads the build version instead of a hard-coded label. The corrected kits replace the earlier same-version downloads; SHA256 checksums have changed. Detection, backup behavior, settings and card content are unchanged. An already-flashed device keeps its old splash label until the corrected image is flashed.

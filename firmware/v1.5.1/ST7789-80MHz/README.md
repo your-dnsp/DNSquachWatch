@@ -31,6 +31,8 @@ The included verify_backup.py provides additional recovery checks using the back
 
 History preparation and file-copy work have separate stack frames. A fixed cursor advances through the captured flash history with at most eight 64-byte reads per step, rather than rescanning all earlier records. A scheduler tick is yielded between backup steps. New empty readable-history collections avoid unnecessary legacy duplicate scans; interrupted and existing collections retain recovery/duplicate checks.
 
-Host regression tests, full 1,800-event history export, retry/duplicate checks, snapshot overwrite handling, card write failures, installer safety checks and UI simulations passed. ESP32 compilation and complete-image validation passed. Firmware size: 1950096 bytes of 1,966,080 (15984 bytes free). This package is for ST7789 only; ILI9341 remains pending a separate build and publication.
+Host regression tests, full 1,800-event history export, retry/duplicate checks, snapshot overwrite handling, card write failures, installer safety checks and UI simulations passed. ESP32 compilation and complete-image validation passed. Firmware size: 1950096 bytes of 1,966,080 (15984 bytes free). This package is for ST7789 only; a separate ILI9341-80MHz kit is available.
 
 The original SquachWatch project is by Talking Sasquach (skizzophrenic). DNSquachWatch modifications are by dnsprincess/DNSP. Device research credits include ReconGrunt, zmattmanz, Ringmast4r (especially the OUI intelligence), and rpriven. See the project README and LICENSE for additional context.
+
+Package correction (2026-10-02): the splash now shows DNSP v1.5.1 using the build version. This replaces the earlier same-version image; backup and card content are unchanged.
