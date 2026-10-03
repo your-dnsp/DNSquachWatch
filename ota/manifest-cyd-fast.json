@@ -1,11 +1,10 @@
 {
-  "version": "1.5.0",
+  "version": "1.5.1",
   "target": "cyd-fast",
-  "release_name": "DNSquachWatch v1.5",
+  "release_name": "DNSquachWatch v1.5.1",
   "whats_new": [
-    "Saved Wi-Fi connects without Update Check",
-    "Backup startup stack fix",
-    "Confirmed optional erase for USB recovery",
-    "DNSP-signed updates from DNSP GitHub"
+    "Backup stack overflow corrected; ST7789 hardware backup confirmed by DNSP",
+    "Bounded history scan and scheduler yields",
+    "Keep existing DNSP Content/v1.5; diagnostic serial 115200"
   ]
 }

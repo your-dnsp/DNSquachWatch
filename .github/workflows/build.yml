@@ -15,6 +15,8 @@ jobs:
           persist-credentials: false
       - run: make -C test -j2
       - run: python3 test/installer_test.py
+      - run: python3 test/install_tools_test.py
+      - run: python3 tools/check_language_content.py
   firmware:
     runs-on: ubuntu-latest
     steps:
@@ -23,3 +25,17 @@ jobs:
           persist-credentials: false
       - run: python3 -m pip install platformio==6.1.18
       - run: pio run -e cyd-fast
+  release:
+    needs: [native, firmware]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Publish checked hardware-tested v1.5.1 assets
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 tools/publish_release.py

@@ -11,6 +11,7 @@
 #include "clock.h"
 #include <cstring>
 #include <cstdlib>
+#include <algorithm>
 
 // The two things blackbox.cpp asks of the clock.
 namespace Clock {
@@ -173,6 +174,26 @@ int main() {
     ck("normal history retains live sightings",BlackBox::readDetections(0,1,rows)==1&&macNo(rows[0])==12);
     for(unsigned i=0;i<2200;i++)BlackBox::noteDetection(det(i+100),false);
     ck("overwritten snapshot fails visibly",!BlackBox::historyIntact(snapshot)&&BlackBox::readDetectionsSnapshot(snapshot,0,1,rows)==0);
+
+    suite("Cooperative snapshot cursor is bounded and preserves ordering");
+    BlackBox::wipe();for(unsigned i=1;i<=1800;++i)BlackBox::noteDetection(det(i),false);
+    BlackBox::captureHistory(snapshot);BlackBox::HistoryCursor cursor;BlackBox::cursorBegin(cursor);
+    unsigned count=0,maxReads=0;BlackBox::DetRecord row{};auto result=BlackBox::CursorResult::WAIT;
+    BlackBox::testResetReadStats();
+    while(result!=BlackBox::CursorResult::END){unsigned before=BlackBox::testReadCalls();result=BlackBox::nextDetection(snapshot,cursor,row);maxReads=std::max(maxReads,BlackBox::testReadCalls()-before);if(result==BlackBox::CursorResult::RECORD){++count;ck("newest-first cursor record",macNo(row)==1801-count);}else if(result==BlackBox::CursorResult::INVALID)break;}
+    ck("all 1800 records read",count==1800);
+    ck("no step reads more than eight records",maxReads<=8);
+    ck("linear flash work, not repeated prefix scans",BlackBox::testReadCalls()<1900);
+    BlackBox::cursorReverseFromRecord(snapshot.dets,cursor);count=0;result=BlackBox::CursorResult::WAIT;
+    while(result!=BlackBox::CursorResult::END){result=BlackBox::nextDetection(snapshot,cursor,row);if(result==BlackBox::CursorResult::RECORD){++count;ck("oldest-first cursor record",macNo(row)==count);}else if(result==BlackBox::CursorResult::INVALID)break;}
+    ck("reverse cursor reads every row",count==1800);
+    BlackBox::cursorBegin(cursor);BlackBox::noteDetection(det(1801),false);unsigned captured=0;
+    while((result=BlackBox::nextDetection(snapshot,cursor,row))!=BlackBox::CursorResult::END){if(result==BlackBox::CursorResult::RECORD)++captured;else if(result==BlackBox::CursorResult::INVALID)break;}
+    ck("cursor excludes live append after capture",captured==1800);
+    for(unsigned i=0;i<2100;++i)BlackBox::noteDetection(det(2000+i),false);
+    ck("cursor rejects an overwritten snapshot",BlackBox::nextDetection(snapshot,cursor,row)==BlackBox::CursorResult::INVALID);
+    BlackBox::wipe();BlackBox::noteDetection(det(1),false);BlackBox::markCleared();BlackBox::noteDetection(det(2),false);BlackBox::captureHistory(snapshot);BlackBox::cursorBegin(cursor);
+    ck("cursor honors latest clear boundary",BlackBox::nextDetection(snapshot,cursor,row)==BlackBox::CursorResult::RECORD&&macNo(row)==2&&BlackBox::nextDetection(snapshot,cursor,row)==BlackBox::CursorResult::END);
 
     return report();
 }

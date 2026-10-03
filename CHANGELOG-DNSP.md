@@ -1,4 +1,6 @@
-# DNSquachWatch v1.5.1 — ST7789-80MHz
+# DNSquachWatch changelog
+
+## v1.5.1
 
 Corrects the v1.5 backup crash confirmed as a loopTask stack-canary failure. History preparation and copying now use separate stack frames; a bounded cursor reads captured flash history without repeated full rescans. Backup yields between steps. Fresh empty readable collections skip unnecessary legacy duplicate scans; existing and interrupted collections retain recovery checks.
 
@@ -9,3 +11,9 @@ Download the ST7789 kit; all four flashing binaries are together. **Keep existin
 v1.5 is superseded because backup could crash. ILI9341 remains pending and has no v1.5.1 download. Display starts at 80 MHz; flash bus is 40 MHz. Diagnostic serial is 115200 baud. App image is 1,950,096 bytes of a 1,966,080-byte slot (15,984 bytes free).
 
 Repository cleanup: Linux test header fix, expanded installer/submission/content checks, DNSP bug-report form, accurate package inventory, separate upstream release history and a tagged release with checksummed assets.
+
+## v1.5 — superseded
+
+Saved Wi-Fi connects at ordinary boot independently of Update Check; selected networks can connect without requesting updates. Introduced DNSP-signed public-repository updates and separate v1.5 card content. Backup still had a main-task stack overflow; use v1.5.1.
+
+Earlier DNSP features are described in README.md. Inherited upstream notes are kept separately under .github/upstream-release-notes and do not describe DNSP versions.

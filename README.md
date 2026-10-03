@@ -1,4 +1,4 @@
-# DNSquachWatch v1.5
+# DNSquachWatch v1.5.1
 
 DNSquachWatch is a friends-and-family modified edition of **SquachWatch** for the classic 2.8-inch ESP32 Cheap Yellow Display (CYD). It keeps Squachy, the original visual identity, the core detection model, and the spirit of the upstream project while adding device & microSD recovery, additional OUI and device research, labeling and OUI research contribution mechanisms, accessibility tools, security enhancements, additional scanning and logging capabilities, additional drone detection & support for FPV pilots, and whimsical additions.
 
@@ -11,20 +11,30 @@ DNSquachWatch is maintained by **dnsprincess**. Bugs and design choices in this 
 
 ## This release's hardware
 
-The v1.5 primary release targets the **2.8-inch classic ESP32 CYD with ST7789**, with an initial **80 MHz display clock**. The ILI9341 80 MHz build will be published separately after the primary release. The System menu can switch the display bus to 40 MHz if a panel is unstable. The flash bus remains at 40 MHz.
+The v1.5.1 primary release targets the **2.8-inch classic ESP32 CYD with ST7789**, with an initial **80 MHz display clock**. The ILI9341 80 MHz build will be published separately after the primary release. The System menu can switch the display bus to 40 MHz if a panel is unstable. The flash bus remains at 40 MHz.
 
 Booting, scanning, essential recovery, and Remington remain built in. The complete walkthrough and installation document now require the supplied **microSD-content/DNSP Content/v1.5/** files on the card. Backups require the checked installation document. Flashing the ESP32 does not populate microSD. Firmware and microSD content are separate downloads for manual installation. Both are also provided in this repository. The optional offline installer can copy content and flash the board. No Wi-Fi content download is used. See [INSTALL-CONTENT.md](INSTALL-CONTENT.md) for the separate installation guide.
 
 
 ## Downloads
 
-- [ST7789 80 MHz firmware kit](firmware/v1.5/ST7789-80MHz/DNSquachWatch-v1.5-ST7789-80MHz.zip)
+**v1.5 is superseded: backup could crash. Use the hardware-tested v1.5.1 ST7789 build.** Existing `/DNSP Content/v1.5/` remains compatible; card content is repackaged only when it changes.
+
+See [GitHub Releases](https://github.com/your-dnsp/DNSquachWatch/releases) and [DNSP changelog](CHANGELOG-DNSP.md).
+
+- [ST7789 80 MHz firmware kit](firmware/v1.5.1/ST7789-80MHz/DNSquachWatch-v1.5.1-ST7789-80MHz.zip)
 - [microSD content](firmware/v1.5/DNSquachWatch-v1.5-microSD-content.zip) — copy the version-matched content; the on-card path is **DNSP Content/v1.5**.
 - [ILI9341 80 MHz status](firmware/v1.5/ILI9341-80MHz/README.md)
 
 If you are unsure which CYD display you have, try the ST7789 image. A solid white screen may mean the other controller is fitted: try ILI9341 when available. Keep all four flashing binaries from the same kit together. See [INSTALL-CONTENT.md](INSTALL-CONTENT.md) for flashing and manual card copying; source code is not required for flashing.
 
-## New in v1.5
+## New in v1.5.1
+
+- Corrected the backup stack overflow; backup completion was confirmed by DNSP on the physical ST7789-80MHz device.
+- Captured history is read using fixed cursors with at most eight 64-byte flash reads per step, and backup yields between steps.
+- Diagnostic serial rate is 115200 baud. Card content remains v1.5.
+
+## Included from v1.5
 
 - Saved Wi-Fi is attempted at ordinary boot, including PIN-locked boots, regardless of **Update Check**. A successful connection attempts time sync and recalls a remembered network location. The radio then returns to detection; this is not a permanent Wi-Fi connection. Safe boot and persistent duress mode retain their radio restrictions.
 - **Wi-Fi Networks > CONNECT** joins the selected saved network and synchronizes time without checking for updates. It also makes that network preferred at the next boot. Connection failures are visible; a timeout is not reported as a wrong password.
@@ -142,17 +152,17 @@ Detailed flashing commands are intentionally kept out of this README while DNSP 
 - `firmware.bin`
 - `manifest.json`
 - `SHA256SUMS`
-- `flash-macos-linux.sh`
+- `install_dnsp.py` (optional offline installer)
 - `DNSQUACHWATCH INSTALLATION.txt`
-- recovery, Duress, feature-status, research, size-audit, and test documents
+- recovery, Duress, research and release documentation (the exact inventory varies by kit)
 
 Keep all four binary files from this kit together. Do not combine files from different firmware versions. Follow `DNSQUACHWATCH INSTALLATION.txt` for the exact offsets, backup location, erase choices, macOS/Linux commands, and recovery procedure.
 
-The repository's older browser-flasher assets are not this release's installation path. Use the complete matching v1.5 kit. It contains all four binary images; no second source folder is required to flash it.
+The repository's older browser-flasher assets are not this release's installation path. Use the complete matching v1.5.1 kit. It contains all four binary images; no second source folder is required to flash it.
 
 ## Build and validation status
 
-Dependencies remain pinned. The release build target is `cyd-fast`. The application slot is 1,966,080 bytes; the measured image size and remaining space are recorded in SIZE-AUDIT.md. The photograph uses lossless per-row compression; fonts use bounded lossless decoding. Neither needs another framebuffer or a heap-backed content cache. BlackBox detection records remain 64 bytes.
+Dependencies remain pinned. The release build target is `cyd-fast`. v1.5.1 backup has passed the reported ST7789 hardware test; this does not establish reliability on all cards or units. The application slot is 1,966,080 bytes; the measured image size and remaining space are recorded in SIZE-AUDIT.md. The photograph uses lossless per-row compression; fonts use bounded lossless decoding. Neither needs another framebuffer or a heap-backed content cache. BlackBox detection records remain 64 bytes.
 
 Host tests, simulator UI checks and the real ESP32 build are recorded in TEST-REPORT.md. These checks cannot establish hardware stability. Please validate Wi-Fi entry, credits scrolling, label recall, exports, microSD backup/restore and Remington on the physical device. Avata 2 field validation and human translation review remain pending. Source, contribution workflows, card content and the primary firmware are published together; see [firmware/v1.5](firmware/v1.5) for display-specific images.
 

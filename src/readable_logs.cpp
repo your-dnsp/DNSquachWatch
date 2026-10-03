@@ -28,7 +28,7 @@ bool appendUnique(const char* leaf,const char* id,const char* text){return conta
 bool saveCheckpoint();
 char resumedId[32]{},liveId[32]{};bool fastRecords=false;
 const char* pendingPath="/DNSP Readable Logs/Current/.pending-record-v121";
-File uniqueFile;IdScan uniqueScan;bool uniqueActive=false;BlackBox::DetRecord heldDet{};BlackBox::BootRecord heldBoot{};bool haveDet=false,haveBoot=false;SketchyRule::Incident heldRule{};bool haveRule=false;BlackBox::HistorySnapshot history;
+File uniqueFile;IdScan uniqueScan;bool uniqueActive=false;BlackBox::DetRecord heldDet{};BlackBox::BootRecord heldBoot{};bool haveDet=false,haveBoot=false;SketchyRule::Incident heldRule{};bool haveRule=false;BlackBox::HistorySnapshot history;BlackBox::HistoryCursor detectionCursor,bootCursor,lastNewDetection,lastNewBoot;
 // Commit a cursor after each complete record. A durable pending ID identifies
 // the sole record that might have been partially appended across a power cut.
 // Normal new records avoid scanning old history; that one recovery record (or
@@ -104,8 +104,9 @@ int copySdStep(){
 bool start(Mode m){if(busy())return false;autoOwner=false;mode=m;scanAt=newDet=writeAt=bootAt=newBoot=0;lastDet=lastBoot=nextDet=nextBoot=lastRule=nextRule=0;copyIx=sdIx=0;checkpointGeneration=0;activity=0;detLeaf=0;ruleCeiling=0;
 #if defined(ARDUINO_ARCH_ESP32) || defined(READABLE_LOGS_TEST)
  SketchyRule::Incident newestRule{};if(SketchyRule::recent(0,newestRule))ruleCeiling=newestRule.id;
- sdSourceName[0]=0;BlackBox::captureHistory(history);haveDet=haveBoot=haveRule=false;uniqueFile.close();uniqueActive=false;
- if(!dirs()){p=FAILED;strcpy(msg,"microSD unavailable or folders could not be created.");return false;}readCheckpoint();readPending();nextDet=lastDet;nextBoot=lastBoot;nextRule=lastRule;
+ sdSourceName[0]=0;BlackBox::captureHistory(history);BlackBox::cursorBegin(detectionCursor);BlackBox::cursorBegin(bootCursor);haveDet=haveBoot=haveRule=false;uniqueFile.close();uniqueActive=false;
+ if(!dirs()){p=FAILED;strcpy(msg,"microSD unavailable or folders could not be created.");return false;}// Only a brand-new collection can skip legacy duplicate scans before its first checkpoint.
+ const bool freshHistory=!SD.exists("/DNSP Readable Logs/Current/SCAN-HISTORY.txt")&&!SD.exists("/DNSP Readable Logs/Current/ALL-ALERTS.txt")&&!SD.exists("/DNSP Readable Logs/Current/ALERT-HISTORY-v1.2.csv")&&!SD.exists("/DNSP Readable Logs/Current/SYSTEM-HISTORY.txt");readCheckpoint();readPending();if(freshHistory&&!resumedId[0])fastRecords=true;nextDet=lastDet;nextBoot=lastBoot;nextRule=lastRule;
  if(!ensure("ALERT-HISTORY-v1.2.csv","boot,uptime_s,type,mac,rssi,channel,hits,flags,vendor,name,location,record_id\n")||!ensure("ALL-ALERTS.txt","DNSquachWatch stored alert history\n")||!ensure("SCAN-HISTORY.txt","DNSquachWatch stored scan history\n")||!ensure("SYSTEM-HISTORY.txt","DNSquachWatch boot, crash and system history\n")){p=FAILED;strcpy(msg,"Readable files could not be created.");return false;}
  p=FIND_DET;strcpy(msg,"Finding new stored scan events...");strcpy(outPath,"/DNSP Readable Logs/Current");return true;
 #else
@@ -115,10 +116,36 @@ bool start(Mode m){if(busy())return false;autoOwner=false;mode=m;scanAt=newDet=w
 void tick(){
 #if defined(ARDUINO_ARCH_ESP32) || defined(READABLE_LOGS_TEST)
  if(!busy())return;++activity;if(!BlackBox::historyIntact(history)){uniqueFile.close();uniqueActive=false;p=FAILED;strcpy(msg,"Stored history wrapped during export. Retry to capture the new head.");return;}
- if(p==FIND_DET){BlackBox::DetRecord r{};if(!BlackBox::readDetectionsSnapshot(history,scanAt,1,&r)){newDet=scanAt;writeAt=newDet;p=WRITE_DET;return;}uint32_t h=hash(&r,sizeof r);if(scanAt==0)nextDet=h;if(lastDet&&h==lastDet){newDet=scanAt;writeAt=newDet;p=WRITE_DET;return;}if(++scanAt>=BlackBox::detectionsKept()){newDet=scanAt;writeAt=newDet;p=WRITE_DET;}return;}
- if(p==WRITE_DET){if(!writeAt){p=FIND_BOOT;strcpy(msg,"Finding new device and system records...");return;}if(!haveDet)haveDet=BlackBox::readDetectionsSnapshot(history,writeAt-1,1,&heldDet);int q=haveDet?writeDet(heldDet):-1;if(q<0){p=FAILED;strcpy(msg,"Could not write readable scan history.");}else if(q>0){nextDet=hash(&heldDet,sizeof heldDet);nextBoot=lastBoot;if(!commitRecord()){p=FAILED;strcpy(msg,"Scan cursor commit failed; retry is safe.");return;}--writeAt;haveDet=false;}return;}
- if(p==FIND_BOOT){BlackBox::BootRecord r{};if(!BlackBox::readBootsSnapshot(history,bootAt,1,&r)){newBoot=bootAt;writeAt=newBoot;p=WRITE_BOOT;return;}uint32_t h=hash(&r,sizeof r);if(bootAt==0)nextBoot=h;if(lastBoot&&h==lastBoot){newBoot=bootAt;writeAt=newBoot;p=WRITE_BOOT;return;}if(++bootAt>=BlackBox::bootsKept()){newBoot=bootAt;writeAt=newBoot;p=WRITE_BOOT;}return;}
- if(p==WRITE_BOOT){if(!writeAt){p=WRITE_RULES;strcpy(msg,"Writing rule alerts and export summary...");return;}if(!haveBoot)haveBoot=BlackBox::readBootsSnapshot(history,writeAt-1,1,&heldBoot);int q=haveBoot?writeBoot(heldBoot):-1;if(q<0){p=FAILED;strcpy(msg,"Could not write readable system history.");}else if(q>0){nextBoot=hash(&heldBoot,sizeof heldBoot);if(!commitRecord()){p=FAILED;strcpy(msg,"System cursor commit failed; retry is safe.");return;}--writeAt;haveBoot=false;}return;}
+ if(p==FIND_DET){
+  BlackBox::DetRecord r{};auto result=BlackBox::nextDetection(history,detectionCursor,r);
+  if(result==BlackBox::CursorResult::WAIT)return;
+  if(result==BlackBox::CursorResult::INVALID){p=FAILED;strcpy(msg,"Could not read captured scan history. Retry backup.");return;}
+  uint32_t h=result==BlackBox::CursorResult::RECORD?hash(&r,sizeof r):0;
+  if(result==BlackBox::CursorResult::END||(lastDet&&h==lastDet)){
+   newDet=scanAt;writeAt=newDet;if(newDet){detectionCursor=lastNewDetection;BlackBox::cursorReverseFromRecord(history.dets,detectionCursor);}p=WRITE_DET;return;
+  }
+  if(!scanAt)nextDet=h;lastNewDetection=detectionCursor;++scanAt;return;
+ }
+ if(p==WRITE_DET){
+  if(!writeAt){p=FIND_BOOT;strcpy(msg,"Finding new device and system records...");return;}
+  if(!haveDet){auto result=BlackBox::nextDetection(history,detectionCursor,heldDet);if(result==BlackBox::CursorResult::WAIT)return;if(result!=BlackBox::CursorResult::RECORD){p=FAILED;strcpy(msg,"Captured scan record unavailable. Retry backup.");return;}haveDet=true;}
+  int q=writeDet(heldDet);if(q<0){p=FAILED;strcpy(msg,"Could not write readable scan history.");}else if(q>0){nextDet=hash(&heldDet,sizeof heldDet);nextBoot=lastBoot;if(!commitRecord()){p=FAILED;strcpy(msg,"Scan cursor commit failed; retry is safe.");return;}--writeAt;haveDet=false;}return;
+ }
+ if(p==FIND_BOOT){
+  BlackBox::BootRecord r{};auto result=BlackBox::nextBoot(history,bootCursor,r);
+  if(result==BlackBox::CursorResult::WAIT)return;
+  if(result==BlackBox::CursorResult::INVALID){p=FAILED;strcpy(msg,"Could not read captured system history. Retry backup.");return;}
+  uint32_t h=result==BlackBox::CursorResult::RECORD?hash(&r,sizeof r):0;
+  if(result==BlackBox::CursorResult::END||(lastBoot&&h==lastBoot)){
+   newBoot=bootAt;writeAt=newBoot;if(newBoot){bootCursor=lastNewBoot;BlackBox::cursorReverseFromRecord(history.boots,bootCursor);}p=WRITE_BOOT;return;
+  }
+  if(!bootAt)nextBoot=h;lastNewBoot=bootCursor;++bootAt;return;
+ }
+ if(p==WRITE_BOOT){
+  if(!writeAt){p=WRITE_RULES;strcpy(msg,"Writing rule alerts and export summary...");return;}
+  if(!haveBoot){auto result=BlackBox::nextBoot(history,bootCursor,heldBoot);if(result==BlackBox::CursorResult::WAIT)return;if(result!=BlackBox::CursorResult::RECORD){p=FAILED;strcpy(msg,"Captured system record unavailable. Retry backup.");return;}haveBoot=true;}
+  int q=writeBoot(heldBoot);if(q<0){p=FAILED;strcpy(msg,"Could not write readable system history.");}else if(q>0){nextBoot=hash(&heldBoot,sizeof heldBoot);if(!commitRecord()){p=FAILED;strcpy(msg,"System cursor commit failed; retry is safe.");return;}--writeAt;haveBoot=false;}return;
+ }
  if(p==WRITE_RULES){if(!ensure("SKETCHY-ENVIRONMENT.txt","DNSquachWatch Sketchy Environment rule history\n")){p=FAILED;strcpy(msg,"Could not create rule history.");return;}if(!haveRule){for(uint8_t i=0;i<SketchyRule::count();i++){SketchyRule::Incident candidate{};if(SketchyRule::recent(i,candidate)&&candidate.id>nextRule&&candidate.id<=ruleCeiling&&(!haveRule||candidate.id<heldRule.id)){heldRule=candidate;haveRule=true;}}}if(haveRule){const auto& in=heldRule;if(in.id>nextRule)nextRule=in.id;char a[24],d[24],id[28],line[384];mac(a,sizeof a,in.alpr.mac);mac(d,sizeof d,in.deauth.mac);snprintf(id,sizeof id,"R-%010lu",(unsigned long)in.id);snprintf(line,sizeof line,"Incident %lu | %s %s + DEAUTH %s | gap %lus | microSD %s | ALPR location %s | DEAUTH location %s | ID %s\n",(unsigned long)in.id,detectionTypeName(in.alpr.type),a,d,(unsigned long)in.gapSeconds,in.sdExported?"saved":"pending",LocationLabel::text(in.alpr.locationKey),LocationLabel::text(in.deauth.locationKey),id);int q=appendUniqueStep("SKETCHY-ENVIRONMENT.txt",id,line);if(q<0){p=FAILED;strcpy(msg,"Could not write rule history.");return;}if(q>0){if(!commitRecord()){p=FAILED;strcpy(msg,"Rule cursor commit failed; retry is safe.");return;}haveRule=false;}return;}if(nextRule<lastRule)nextRule=lastRule;
   char sum[420];snprintf(sum,sizeof sum,"DNSquachWatch readable log collection\nNew scan records this refresh: %u\nNew system records: %u\nStored scan records currently on board: %u\nStored system records currently on board: %u\nRule incidents currently retained: %u\nRecords are ordered by boot number and uptime because this board has no reliable clock. Original data remains unchanged.\n",(unsigned)newDet,(unsigned)newBoot,(unsigned)BlackBox::detectionsKept(),(unsigned)BlackBox::bootsKept(),(unsigned)SketchyRule::count());SD.remove("/DNSP Readable Logs/Current/EXPORT-SUMMARY.txt");if(!append("EXPORT-SUMMARY.txt",sum)||!saveCheckpoint()||!ensure(".cooperative-v121","1\n")){p=FAILED;strcpy(msg,"Readable files were written, but the refresh checkpoint failed.");return;}
   if(mode==Mode::BACKUP_INTERNAL){p=DONE;strcpy(msg,"Internal readable history prepared for backup.");return;}p=COPY_SD_LOGS;strcpy(msg,"Updating readable copies of existing microSD logs...");return;

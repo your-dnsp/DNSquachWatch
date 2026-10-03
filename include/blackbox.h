@@ -145,6 +145,17 @@ struct RingSnapshot{uint32_t seq[32]{};int8_t head=-1;uint16_t used=0;};
 struct HistorySnapshot{RingSnapshot dets,boots;};
 void captureHistory(HistorySnapshot& out);
 bool historyIntact(const HistorySnapshot& snapshot); // false if a captured sector was overwritten
+// Cooperative snapshot reader: at most eight 64-byte flash reads per step.
+// Cursor stores physical position, never restarts a walk from the newest row.
+struct HistoryCursor {
+ uint32_t visited=0;int16_t slot=-1;int8_t sector=-1;
+ int8_t recordSector=-1;uint16_t recordSlot=0;bool newestFirst=true,finished=false;
+};
+enum class CursorResult:uint8_t{WAIT,RECORD,END,INVALID};
+void cursorBegin(HistoryCursor& cursor);
+void cursorReverseFromRecord(const RingSnapshot&,HistoryCursor& cursor);
+CursorResult nextDetection(const HistorySnapshot&,HistoryCursor&,DetRecord&);
+CursorResult nextBoot(const HistorySnapshot&,HistoryCursor&,BootRecord&);
 uint16_t readDetectionsSnapshot(const HistorySnapshot&,uint16_t from,uint16_t max,DetRecord* out);
 uint16_t readBootsSnapshot(const HistorySnapshot&,uint16_t from,uint16_t max,BootRecord* out);
 
@@ -165,6 +176,8 @@ void dump();
 // restart would; the emulator's flash; where the next sighting will land.
 void     testReopen();
 uint8_t* testFlash();
+void testResetReadStats();
+uint32_t testReadCalls();
 bool     testNextDetectionSlot(uint32_t& offset);
 #endif
 

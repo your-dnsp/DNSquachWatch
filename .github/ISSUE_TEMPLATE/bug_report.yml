@@ -1,78 +1,38 @@
-name: Bug report
-description: Something on the device is wrong
+name: DNSquachWatch bug report
+description: Report a problem with DNSP's modified firmware.
 labels: [bug]
 body:
   - type: markdown
     attributes:
       value: |
-        Two questions up front, because they decide almost every answer.
-
-        **A white or blank screen is nearly always the wrong display driver.**
-        The 2.8" board ships with either an ST7789 or an ILI9341 panel
-        depending on manufacturing batch, with no way to tell from the
-        outside. If that is what you are seeing, flash the other variant
-        before filing anything: pick the ILI9341 option in the flasher if
-        you used the default, or the default if you used ILI9341.
-
+        Report DNSP custom-firmware bugs here, not to the original creator. Never paste PINs, passwords, PRIVATE research exports or raw identifying logs.
+        A solid white screen may indicate the other CYD display controller or an unstable 80 MHz display clock. Use the matching ST7789/ILI9341 kit; System can switch to 40 MHz once the screen works. See INSTALL-CONTENT.md for recovery. Do not erase flash unless you intend to delete stored security state and settings.
   - type: dropdown
-    id: board
+    id: display
     attributes:
-      label: Which board and which build?
-      description: Whatever you picked in the web flasher, or the -e name you built with.
+      label: Display kit
       options:
-        - 2.8" CYD (default / ST7789)
-        - 2.8" CYD, ILI9341 variant
-        - 2.8" CYD, 80MHz overclock
-        - 2.8" CYD, ILI9341 + 80MHz overclock
-        - AWOK 2.4"
-        - 3.5" CYD (frozen, known to boot loop)
-        - Not sure
+        - ST7789-80MHz
+        - ILI9341-80MHz
+        - Unsure
     validations:
       required: true
-
   - type: input
     id: version
     attributes:
-      label: Firmware version
-      description: >
-        Settings > SQUACHY'S DIARY shows it, and it is on the boot screen and
-        in the serial banner at 2,000,000 baud.
-      placeholder: v1.5.17
+      label: DNSP firmware version
+      placeholder: v1.5
     validations:
       required: true
-
   - type: textarea
-    id: what
+    id: behavior
     attributes:
-      label: What happened, and what did you expect instead?
+      label: What happened and how can it be repeated?
+      description: Include expected behavior, microSD presence/content version, display clock setting, and the actions before the problem. Review screenshots for private information.
     validations:
       required: true
-
   - type: textarea
-    id: repro
+    id: crash
     attributes:
-      label: How do we get it to happen?
-      description: >
-        Which screen, which background, which outfit, and what you tapped.
-        A lot of this firmware is background-specific, so those details are
-        usually the whole answer.
-      placeholder: |
-        1. CLEAR screen, SNOWFALL background
-        2. Tapped the lodge five times
-        3. ...
-
-  - type: textarea
-    id: serial
-    attributes:
-      label: Serial output, if you have it
-      description: >
-        2,000,000 baud, not 115200 -- at the wrong rate it reads as garbage.
-        Paste from the boot banner onward. Optional, but it usually settles
-        the question on its own.
-      render: text
-
-  - type: input
-    id: hardware
-    attributes:
-      label: Anything unusual about the hardware?
-      description: SD card fitted, powered from a battery, a case, a modified board.
+      label: Optional crash summary
+      description: Redact personal data. A LAST CRASH task/address summary is helpful; do not upload raw logs or backups.

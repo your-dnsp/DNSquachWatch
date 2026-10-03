@@ -147,7 +147,7 @@ bool start(bool card,uint32_t now,const DetectionEngine* engine){
  if(!SD.mkdir(dir)){strcpy(message,"Cannot create backup directory.");return false;}
  // Keep each preparation buffer on a separate, bounded stack frame. The
  // old inlined snapshots consumed 6592 bytes before filesystem calls on an
- // 8192-byte loop task, causing backup-start crashes on physical hardware.
+ // 8192-byte loop task, leaving too little room for filesystem calls.
  if(!partitionHash()){strcpy(message,"Cannot read partition layout. Backup incomplete.");return false;}
  if(!writePreferences()){strcpy(message,"Preferences verification failed. Backup incomplete.");return false;}
  if(!engine||!writeCurrentLog(*engine)){strcpy(message,"Current LOG snapshot failed. Backup incomplete.");return false;}
@@ -156,15 +156,15 @@ bool start(bool card,uint32_t now,const DetectionEngine* engine){
  if(!ReadableLogs::start(ReadableLogs::Mode::BACKUP_INTERNAL)){strcpy(message,"Readable history preparation failed. Backup incomplete.");return false;}
  preparingLogs=true;copyingLogs=false;detail[0]=0;watch.start(now,ReadableLogs::progressToken());strcpy(message,"Exporting complete readable history; scanning continues.");return true;
 }
-void tick(){
- if(!busy())return;
- if(watch.stalled(millis())){cancel();strcpy(message,"No backup progress for 2 minutes. Incomplete slot retained.");return;}
+static __attribute__((noinline)) void preparationTick(){
  if(preparingLogs){
   ReadableLogs::tick();watch.observe(millis(),ReadableLogs::progressToken());if(ReadableLogs::busy())return;
   preparingLogs=false;if(!ReadableLogs::succeeded()){ReadableLogs::cancel();job.phase=Copy::Phase::FAILED;snprintf(message,sizeof message,"Readable history failed: %.70s",ReadableLogs::status());return;}
   if(!beginHistoryCopy()){job.phase=Copy::Phase::FAILED;strcpy(message,"Readable history could not be opened.");return;}
   watch.last=millis();watch.token=0;return;
  }
+}
+static __attribute__((noinline)) void copyTick(){
  if(copyingLogs){
   if(!historyTick()){copyingLogs=false;job.phase=Copy::Phase::FAILED;strcpy(message,"History read/write verification failed. Backup incomplete.");return;}
   watch.observe(millis(),copyDone+job.at+uint32_t(copyIndex)*17+uint32_t(job.phase));
@@ -182,12 +182,20 @@ void tick(){
  // The app backup deliberately excludes bootloader, NVS, keys, history and
  // partition-table writes. Recovery uses the matching release kit on a PC.
  char manifest[1024];int n=snprintf(manifest,sizeof manifest,
-  "DNSP_BACKUP_V2\nfirmware=DNSquachWatch v1.5\nbase=SquachWatch v1.27.0\nbuild=%s\napp_bytes=%lu\nsource_address=0x%lx\nsha256=%s\napp_only=true\npartition_sector_sha256=%s\npreferences=public-v3\noperational_state=operational-state.bin\nlocation_labels=location-labels.bin\nreadable_history=complete\ncurrent_log=current-log.csv\ncurrent_log_rows=%u\nUse the matching board release kit and DNSQUACHWATCH INSTALLATION.txt. Hash is integrity, not authenticity.\nPINs, Duress state and authentication secrets are never included. Device identifiers, manual location labels, associated Wi-Fi network names, user labels and active Watch/Hunt targets are included. Existing microSD research files are not duplicated. Historical logs are readable and are not replayed during restore.\n",
+  "DNSP_BACKUP_V2\nfirmware=DNSquachWatch v1.5.1\nbase=SquachWatch v1.27.0\nbuild=%s\napp_bytes=%lu\nsource_address=0x%lx\nsha256=%s\napp_only=true\npartition_sector_sha256=%s\npreferences=public-v3\noperational_state=operational-state.bin\nlocation_labels=location-labels.bin\nreadable_history=complete\ncurrent_log=current-log.csv\ncurrent_log_rows=%u\nUse the matching board release kit and DNSQUACHWATCH INSTALLATION.txt. Hash is integrity, not authenticity.\nPINs, Duress state and authentication secrets are never included. Device identifiers, manual location labels, associated Wi-Fi network names, user labels and active Watch/Hunt targets are included. Existing microSD research files are not duplicated. Historical logs are readable and are not replayed during restore.\n",
   OtaCore::buildName(),(unsigned long)part->size,(unsigned long)part->address,hex,layoutHash,(unsigned)logRows);
  ok=ok&&writeInstallationGuide();
  ok=ok&&n>0&&size_t(n)<sizeof manifest&&writeFile("COMPLETE.txt",manifest,n);
  if(ok)ok=verifyWritten("COMPLETE.txt",manifest,n);
  if(ok){verified=true;snprintf(message,sizeof message,"Verified backup in /dnsp-backup-%u. Copy it to a computer.",selected);}else{pathFor("COMPLETE.txt");SD.remove(path);job.phase=Copy::Phase::FAILED;strcpy(message,"Manifest verification failed. Backup incomplete.");}
+}
+void tick(){
+ if(!busy())return;
+ if(watch.stalled(millis())){cancel();strcpy(message,"No backup progress for 2 minutes. Incomplete slot retained.");return;}
+ if(preparingLogs)preparationTick();else copyTick();
+ // A bounded step must also actually let the idle task run. Always yield a
+ // scheduler tick even when storage work consumes the entire display budget.
+ delay(1);
 }
 bool exportHealth(bool card,const char* report){
  healthPath[0]=0;

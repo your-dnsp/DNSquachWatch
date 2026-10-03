@@ -1,3 +1,3 @@
-# ST7789-80MHz v1.5
+# v1.5 — superseded
 
-Download DNSquachWatch-v1.5-ST7789-80MHz.zip here, and the separate v1.5 microSD-content ZIP one folder above. Copy DNSP Content to the card root. Flash all four binaries from the firmware kit as documented in INSTALL-CONTENT.md. Other display drivers require their own kit.
+Do not choose this version for a new installation: backup has a confirmed stack-overflow crash. Use [v1.5.1 ST7789-80MHz](../../v1.5.1/ST7789-80MHz/DNSquachWatch-v1.5.1-ST7789-80MHz.zip). Existing v1.5 card content remains compatible. These original files are retained for historical reference.

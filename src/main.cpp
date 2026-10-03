@@ -208,7 +208,7 @@ static void crashReportInit() {
     if(panicked || r==ESP_RST_BROWNOUT) {
         CrashReports::Record report;
         report.resetReason=uint32_t(r);report.crash=g_lastCrash;
-        snprintf(report.firmware,sizeof report.firmware,"DNSP v1.5");
+        snprintf(report.firmware,sizeof report.firmware,"DNSP v1.5.1");
         if(g_crumb.magic==CRUMB_MAGIC){report.crash.valid=true;report.crash.uptimeMs=g_crumb.uptimeMs;report.crash.heapFree=g_crumb.heapFree;report.crash.heapBlock=g_crumb.heapBlock;report.crash.screen=g_crumb.screen;report.lightReading=g_crumb.light;report.backlightDuty=g_crumb.duty;report.ldr=g_crumb.ldr;report.displayMhz=g_crumb.displayMhz;}
         if(!CrashReports::enqueue(report))Serial.println("[crash] Could not queue report; see core dump / BlackBox.");
     }
@@ -2465,7 +2465,7 @@ static void printBootBanner() {
     // "v1.5.16-dirty" and a commit past a tag as "v1.5.16-3-g554330d", both
     // of which walk the border off the end of the line. Truncated here only;
     // the boot screen and the diary still show the version in full.
-    Serial.println("DNSquachWatch v1.5 by DNSP | SquachWatch base 1.27.0");
+    Serial.println("DNSquachWatch v1.5.1 by DNSP | SquachWatch base 1.27.0");
     Serial.printf ("║  |   -   |     TALKING SASQUACH  .  %-13.13s║\n", FIRMWARE_VERSION);
     // Same %-34s trick as the version line above: the reason is variable
     // length ("interrupt watchdog" is the longest at eighteen characters)
@@ -6498,5 +6498,6 @@ void loop() {
         lc.screenDark   = s_screenDimmed && Settings::dimLevel() == 0;
         StatusLight::tick(now, lc);
     }
+    if(ReadableLogs::busy()&&!Backup::busy())delay(1);
     prevTouchValid = tp.valid;
 }

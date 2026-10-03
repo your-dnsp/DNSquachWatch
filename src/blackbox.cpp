@@ -77,7 +77,8 @@ uint8_t* simFlash() {
     if (!s_sim) { s_sim = new uint8_t[SIZE]; memset(s_sim, 0xFF, SIZE); }
     return s_sim;
 }
-bool flashRead(uint32_t off, uint8_t* out, uint32_t n)        { memcpy(out, simFlash() + off, n); return true; }
+static uint32_t readCalls=0;
+bool flashRead(uint32_t off, uint8_t* out, uint32_t n)        { ++readCalls;memcpy(out, simFlash() + off, n); return true; }
 bool flashWrite(uint32_t off, const uint8_t* in, uint32_t n)  {
     uint8_t* f = simFlash() + off;
     for (uint32_t i = 0; i < n; i++) f[i] &= in[i];     // NOR: writes only clear bits
@@ -405,6 +406,50 @@ uint16_t readDetections(uint16_t from, uint16_t max, DetRecord* out) {
 
 void captureHistory(HistorySnapshot& out){auto capture=[](const Ring& r,RingSnapshot& s){memcpy(s.seq,r.seq,sizeof s.seq);s.head=r.head;s.used=r.used;};capture(s_dets,out.dets);capture(s_boots,out.boots);}
 bool historyIntact(const HistorySnapshot& snapshot){auto valid=[](const Ring& r,const RingSnapshot& s){for(uint8_t i=0;i<r.count;i++)if(s.seq[i]&&s.seq[i]!=r.seq[i])return false;return true;};return s_ready&&valid(s_dets,snapshot.dets)&&valid(s_boots,snapshot.boots);}
+void cursorBegin(HistoryCursor& c){c=HistoryCursor{};}
+void cursorReverseFromRecord(const RingSnapshot& snapshot,HistoryCursor& c){
+ const int8_t sector=c.recordSector;const uint16_t slot=c.recordSlot;
+ c=HistoryCursor{};c.newestFirst=false;
+ if(sector<0||sector>=32||!snapshot.seq[sector]){c.finished=true;return;}
+ c.sector=sector;c.slot=slot;
+ // Older sectors are outside the new-record range already found. Start at
+ // its oldest record and advance toward the captured newest head.
+ for(unsigned i=0;i<32;++i)if(snapshot.seq[i]&&snapshot.seq[i]<=snapshot.seq[sector])c.visited|=uint32_t(1)<<i;
+}
+static __attribute__((noinline)) CursorResult cursorRead(const Ring& ring,const RingSnapshot& snapshot,HistoryCursor& c,uint8_t wanted,uint8_t* out){
+ if(c.finished)return CursorResult::END;
+ uint8_t record[REC];
+ for(unsigned scanned=0;scanned<8;++scanned){
+  while(c.sector<0||c.slot<0||c.slot>=(c.sector==snapshot.head?snapshot.used:PER)){
+   int8_t pick=-1;
+   for(uint8_t i=0;i<ring.count;++i)if(snapshot.seq[i]&&!(c.visited&(uint32_t(1)<<i))&&(pick<0||(c.newestFirst?snapshot.seq[i]>snapshot.seq[pick]:snapshot.seq[i]<snapshot.seq[pick])))pick=i;
+   if(pick<0){c.finished=true;return CursorResult::END;}
+   c.sector=pick;c.visited|=uint32_t(1)<<pick;
+   const uint16_t used=pick==snapshot.head?snapshot.used:PER;
+   c.slot=c.newestFirst?int16_t(used)-1:0;
+  }
+  const uint16_t slot=c.slot;
+  c.slot+=c.newestFirst?-1:1;
+  if(!flashRead(ring.sectorOff(c.sector)+REC*(1u+slot),record,REC))return CursorResult::INVALID;
+  if(erased(record,REC)||record[REC-1]!=crc8(record,REC-1))continue;
+  if(wanted==KIND_DET&&record[0]==KIND_CLEAR){c.finished=true;return CursorResult::END;}
+  if(record[0]!=wanted)continue;
+  memcpy(out,record,REC);c.recordSector=c.sector;c.recordSlot=slot;return CursorResult::RECORD;
+ }
+ return CursorResult::WAIT;
+}
+CursorResult nextDetection(const HistorySnapshot& snapshot,HistoryCursor& c,DetRecord& out){
+ if(!historyIntact(snapshot))return CursorResult::INVALID;
+ auto result=cursorRead(s_dets,snapshot.dets,c,KIND_DET,reinterpret_cast<uint8_t*>(&out));
+ if(result==CursorResult::RECORD){if(!out.channel&&!(out.flags&DET_PRINTED)){for(uint8_t i=0;i<3;++i){uint8_t t=out.mac[i];out.mac[i]=out.mac[5-i];out.mac[5-i]=t;}}out.vendor[sizeof out.vendor-1]=0;out.name[sizeof out.name-1]=0;}
+ return result;
+}
+CursorResult nextBoot(const HistorySnapshot& snapshot,HistoryCursor& c,BootRecord& out){
+ if(!historyIntact(snapshot))return CursorResult::INVALID;
+ auto result=cursorRead(s_boots,snapshot.boots,c,KIND_BOOT,reinterpret_cast<uint8_t*>(&out));
+ if(result==CursorResult::RECORD){out.version[sizeof out.version-1]=0;out.task[sizeof out.task-1]=0;}
+ return result;
+}
 uint16_t readDetectionsSnapshot(const HistorySnapshot& snapshot,uint16_t from,uint16_t max,DetRecord* out){
  if(!historyIntact(snapshot)||!out||!max)return 0;
  struct C{uint16_t skip,max,n;DetRecord* out;} c{from,max,0,out};
@@ -464,6 +509,8 @@ void wipe() {
 #ifdef BLACKBOX_TEST
 void testReopen() { s_ready = false; begin(); }
 uint8_t* testFlash() { return simFlash(); }
+void testResetReadStats(){readCalls=0;}
+uint32_t testReadCalls(){return readCalls;}
 bool testNextDetectionSlot(uint32_t& offset) {
     if (s_dets.head < 0 || s_dets.used >= PER) return false;
     offset = s_dets.sectorOff((uint8_t)s_dets.head) + REC * (1u + s_dets.used);

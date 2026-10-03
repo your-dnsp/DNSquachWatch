@@ -5,6 +5,7 @@
 #include "sketchy_rule.h"
 #include "location_label.h"
 #include "SD.h"
+#include <algorithm>
 #include <fstream>
 #include <sstream>
 #include <unistd.h>
@@ -33,4 +34,14 @@ int main(){char root[]="/tmp/dnsp-history-test-XXXXXX";ck("isolated card",mkdtem
  ck("SD file refresh completes",ReadableLogs::start(ReadableLogs::Mode::REFRESH)&&finish());
  auto raw=read("SD-squachwatch-session-00000001.log.txt");ck("SD text contains every row",lines(raw)==400);
  ck("repeat SD copy completes",ReadableLogs::start(ReadableLogs::Mode::REFRESH)&&finish());ck("SD copy is incremental",read("SD-squachwatch-session-00000001.log.txt")==raw);
+ // Reproduce a densely populated flash history, not just a long SD text file.
+ BlackBox::wipe();std::filesystem::remove_all(TestSD::root+"/DNSP Readable Logs");
+ for(unsigned i=0;i<1800;++i)BlackBox::noteDetection(event(i),false);
+ BlackBox::testResetReadStats();ck("full flash-ring backup preparation starts",ReadableLogs::start(ReadableLogs::Mode::BACKUP_INTERNAL));
+ ticks=0;unsigned maxFlashReads=0;while(ReadableLogs::busy()&&ticks++<20000){unsigned beforeCalls=BlackBox::testReadCalls();ReadableLogs::tick();maxFlashReads=std::max(maxFlashReads,BlackBox::testReadCalls()-beforeCalls);}
+ ck("full-ring backup preparation completes",ReadableLogs::succeeded()&&ticks<20000);
+ ck("full-ring scan work is bounded per tick",maxFlashReads<=8);
+ ck("full-ring preparation reads each record twice, not quadratically",BlackBox::testReadCalls()<4000);
+ ck("all 1800 readable events preserved",lines(read("SCAN-HISTORY.txt"))==1801);
+ ck("full-ring retry creates no duplicates",ReadableLogs::start(ReadableLogs::Mode::BACKUP_INTERNAL)&&finish()&&lines(read("SCAN-HISTORY.txt"))==1801);
  ck("at most two card handles",TestSD::peakHandles<=2);std::filesystem::remove_all(root);return report();}

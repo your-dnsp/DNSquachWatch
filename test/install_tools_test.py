@@ -16,18 +16,18 @@ def rejects(fn):
     except ValueError:return
     raise AssertionError('Operation should have been refused')
 with tempfile.TemporaryDirectory() as temp:
-    root=Path(temp);content=root/'microSD-content';source=content/'DNSP Content/v1.4';source.mkdir(parents=True)
+    root=Path(temp);content=root/'microSD-content';source=content/'DNSP Content/v1.5';source.mkdir(parents=True)
     body=b'example card content';(source/'guide-000.txt').write_bytes(body)
-    manifest={'files':{'DNSP Content/v1.4/guide-000.txt':hashlib.sha256(body).hexdigest()}}
+    manifest={'files':{'DNSP Content/v1.5/guide-000.txt':hashlib.sha256(body).hexdigest()}}
     (content/'manifest.json').write_text(json.dumps(manifest));card=root/'card';card.mkdir();(card/'my-log.txt').write_bytes(b'keep')
     with patch('install_dnsp.os.path.ismount',return_value=True):
         install_card(content,card,True,False);assert not (card/'DNSP Content').exists()
-        install_card(content,card,False,False);assert (card/'DNSP Content/v1.4/guide-000.txt').read_bytes()==body
-        target=card/'DNSP Content/v1.4/guide-000.txt';target.write_bytes(b'changed');rejects(lambda:install_card(content,card,False,False))
+        install_card(content,card,False,False);assert (card/'DNSP Content/v1.5/guide-000.txt').read_bytes()==body
+        target=card/'DNSP Content/v1.5/guide-000.txt';target.write_bytes(b'changed');rejects(lambda:install_card(content,card,False,False))
         install_card(content,card,False,True);assert target.read_bytes()==body;assert (card/'my-log.txt').read_bytes()==b'keep'
         rejects(lambda:entries(content,{'files':{'../my-log.txt':'bad'}}))
         rejects(lambda:entries(content,{'files':{'my-log.txt':'bad'}}))
-        outside=root/'outside';outside.mkdir();(card/'DNSP Content/v1.4').rename(card/'saved');(card/'DNSP Content/v1.4').symlink_to(outside,target_is_directory=True)
+        outside=root/'outside';outside.mkdir();(card/'DNSP Content/v1.5').rename(card/'saved');(card/'DNSP Content/v1.5').symlink_to(outside,target_is_directory=True)
         rejects(lambda:install_card(content,card,False,True))
     with patch('install_dnsp.os.path.ismount',return_value=False):rejects(lambda:install_card(content,card,True,False))
     kit=root/'kit';kit.mkdir();(kit/'manifest.json').write_text(json.dumps({'display':'ST7789','target':'cyd-fast'}));lines=[]
