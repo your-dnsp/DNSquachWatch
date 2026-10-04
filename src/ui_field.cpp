@@ -137,10 +137,10 @@ uint8_t currentPage() {
     return page;
 }
 static int rowY(int h, int i) {
-    return 40 + i * ((h - 88) / 4);
+    return 40 + i * ((h - 88) / (page==ACCESS?5:4));
 }
 static int rowH(int h) {
-    return (h - 88) / 4 - 3;
+    return (h - 88) / (page==ACCESS?5:4) - 3;
 }
 static void line(TFT_eSPI &t, const char *text, int y, bool translate = true) {
     Lang::draw(t, text, 10, y, t.width() - 20, 18, Theme::WHITE, translate);
@@ -370,6 +370,7 @@ void draw(TFT_eSPI &t, uint32_t now, const DetectionEngine &eng) {
         row(t, 1, "REDUCED MOTION", Field::config.reduced);
         row(t, 2, "LEFT HANDED", Field::config.left);
         row(t, 3, "LARGE CONTROLS", Field::config.large);
+        row(t, 4, "GLITCH EFFECTS", Settings::glitchEffects());
     } else if (page == LANGUAGE) {
         Lang::button(t, 8, 54, w - 16, 40, Lang::name(Field::config.language));
         paragraph(t, "Language preview. Translations need human review.", 108, h - 156);
@@ -593,7 +594,7 @@ bool tap(int x, int y, int w, int h, uint32_t now, const DetectionEngine &eng) {
         return false;
     }
     int r = -1;
-    for (int i = 0; i < 4; i++)
+    for (int i = 0; i < (page==ACCESS?5:4); i++)
         if (y >= rowY(h, i) && y < rowY(h, i) + rowH(h))
             r = i;
     if (r < 0)
@@ -612,7 +613,8 @@ bool tap(int x, int y, int w, int h, uint32_t now, const DetectionEngine &eng) {
     } else if (page == ACCESS) {
         uint8_t *options[] = {&Field::config.contrast, &Field::config.reduced, &Field::config.left,
                               &Field::config.large};
-        *options[r] = !*options[r];
+        if(r==4)Settings::toggleGlitchEffects();
+        else *options[r] = !*options[r];
         Field::save();
         Theme::applyPalette(Settings::paletteIndex());
     } else if(page==RULES){

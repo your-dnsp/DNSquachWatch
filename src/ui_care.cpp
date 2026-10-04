@@ -21,11 +21,23 @@
 namespace CareUI {
 static Page current=Page::BACKUP;static uint8_t step=0;static bool dirty=true,confirm=false;static uint32_t drawnAt=0;
 static char notice[72]{};
+static uint8_t textPage=0,textPages=1;static int textBottom=88;
 static bool backupPending=false, pendingRendered=false;
+static uint8_t sdAction=0;static bool sdRendered=false;
+static bool recoveryBusy(){return Backup::busy()||BackupMaintenance::busy()||!Research::settled()||!DroneWatch::settled()||DroneWatch::focused()||Field::telemetryActive()||!OtaWifi::settled();}
 static uint8_t sdConfirm=0;static uint8_t maintenanceConfirm=0;
 bool working(){return backupPending||Backup::busy()||ReadableLogs::busy()||BackupMaintenance::busy();}
 void runPending(bool visible,uint32_t now,DetectionEngine& eng){
- if(!visible){backupPending=false;return;}
+ if(!visible){backupPending=false;sdAction=0;sdRendered=false;return;}
+ if(sdAction&&sdRendered){
+  const uint8_t action=sdAction;sdAction=0;sdRendered=false;
+  if(recoveryBusy())Theme::showToast("STORAGE BUSY","Finish active tools before recovery",Theme::AMBER);
+  else {ReadableLogs::cancel();CardContent::reset();
+   const bool ok=action==1?eng.sd().recoveryRemount():action==2?eng.sd().recoveryTest():eng.sd().recoveryFormat();
+   Theme::showToast(ok?"MICROSD RECOVERY OK":"MICROSD RECOVERY FAILED",eng.sd().recoveryStatus(),ok?Theme::CYAN:Theme::AMBER);
+  }
+  textPage=0;dirty=true;
+ }
  if(backupPending&&pendingRendered){backupPending=false;pendingRendered=false;Backup::start(eng.sd().ready(),now,&eng);dirty=true;}
  if(!Backup::busy())ReadableLogs::tick();
 }
@@ -43,8 +55,7 @@ void drawBackupProgress(TFT_eSPI& t,unsigned percent,const char* phase,uint32_t 
  }else Lang::draw(t,"Keep power on. Please wait.",12,82,w-24,28,Theme::WHITE,false);
 }
 
-static uint8_t textPage=0,textPages=1;static int textBottom=88;
-void open(Page p){backupPending=false;pendingRendered=false;current=p;step=0;textPage=0;textPages=1;confirm=false;sdConfirm=0;maintenanceConfirm=0;notice[0]=0;dirty=true;}
+void open(Page p){sdAction=0;sdRendered=false;backupPending=false;pendingRendered=false;current=p;step=0;textPage=0;textPages=1;confirm=false;sdConfirm=0;maintenanceConfirm=0;notice[0]=0;dirty=true;}
 Page page(){return current;}
 bool needsDraw(uint32_t now,int width,int height){static int oldW=0,oldH=0;static uint8_t oldLang=255;
  if(oldW!=width||oldH!=height||oldLang!=Field::config.language){dirty=true;oldW=width;oldH=height;oldLang=Field::config.language;textPage=0;}
@@ -98,8 +109,9 @@ void draw(TFT_eSPI& t,uint32_t now,DetectionEngine& eng){
  else if(current==Page::REPORT){auto s=Research::stats();snprintf(b,sizeof b,"Last session: %lu; %s. Saved %lu; omitted %lu; errors %lu. A readable, identifier-free report is saved when a session finishes. Source JSONL/CSV contains evidence; raw mode can include private data. %s",(unsigned long)s.session,s.active?"RECORDING":!Research::settled()?"SAVING - KEEP POWER ON":"finished",(unsigned long)s.saved,(unsigned long)s.dropped,(unsigned long)s.errors,notice);prose(t,b);}
  else if(current==Page::HEALTH){auto v=Care::health();snprintf(b,sizeof b,"%s Uptime %lus; loops %lu. Min heap %lu bytes; min contiguous block %lu. Longest loop gap %lums; gaps over 250ms: %lu. %s This is a measurement log, not a hardware pass. Use the endurance checklist.",notice,(unsigned long)(now/1000),(unsigned long)v.loops,(unsigned long)v.minHeap,(unsigned long)v.minBlock,(unsigned long)v.maxGap,(unsigned long)v.over250,Care::bootReady(now)?"30-second boot check reached.":"Boot check pending.");prose(t,b);}
  else if(current==Page::SD_RECOVERY){
-  if(sdConfirm){snprintf(b,sizeof b,"FORMAT ERASES THE ENTIRE MICROSD: backups, exports and unrelated files. This cannot be undone. Confirmation step %u of 4.",(unsigned)sdConfirm);prose(t,b,132);Lang::button(t,8,h-126,w-16,36,sdConfirm==1?"STEP 1 - TAP 3":sdConfirm==2?"STEP 2 - TAP 2":sdConfirm==3?"STEP 3 - TAP 1":"FORMAT NOW");Lang::button(t,8,h-84,w-16,36,"CANCEL FORMAT");}
-  else {snprintf(b,sizeof b,"%s\nFind & Remount is non-destructive. Test Card creates, reads and removes one tiny file. Format is the last resort and erases the entire card.",eng.sd().recoveryStatus());prose(t,b,174);Lang::button(t,8,h-168,w-16,36,"FIND & REMOUNT");Lang::button(t,8,h-126,w-16,36,"TEST CARD");Lang::button(t,8,h-84,w-16,36,"FORMAT MICROSD...");}
+  if(sdAction){prose(t,"Working on the card. Please wait; do not remove power.",142);sdRendered=true;}
+  else if(sdConfirm){snprintf(b,sizeof b,"FORMAT ERASES THE ENTIRE MICROSD: backups, exports and unrelated files. This cannot be undone. Confirmation step %u of 4.",(unsigned)sdConfirm);prose(t,b,132);Lang::button(t,8,h-126,w-16,36,sdConfirm==1?"STEP 1 - TAP 3":sdConfirm==2?"STEP 2 - TAP 2":sdConfirm==3?"STEP 3 - TAP 1":"FORMAT NOW");Lang::button(t,8,h-84,w-16,36,"CANCEL FORMAT");}
+  else {snprintf(b,sizeof b,"%s\nFind & Remount is non-destructive. Test Card creates, reads and removes one tiny file. Format is the last resort and erases the entire card.",eng.sd().recoveryStatus());prose(t,b,142);Lang::button(t,8,h-136,w-16,28,"FIND & REMOUNT");Lang::button(t,8,h-104,w-16,28,"TEST CARD");Lang::button(t,8,h-72,w-16,28,"FORMAT MICROSD...");}
  }
  else if(current==Page::READABLE_LOGS){
   if(ReadableLogs::busy())drawBackupProgress(t,ReadableLogs::percent(),ReadableLogs::phase(),now);
@@ -113,17 +125,22 @@ void draw(TFT_eSPI& t,uint32_t now,DetectionEngine& eng){
 SettingsRow tap(int x,int y,int w,int h,uint32_t now,DetectionEngine& eng){
  if(x<8||x>=w-8||y<40)return SettingsRow::NONE;dirty=true;
  if(current==Page::SD_RECOVERY){
-  if(Backup::busy()||BackupMaintenance::busy()||!Research::settled()||!DroneWatch::settled()||DroneWatch::focused()||Field::telemetryActive()||!OtaWifi::settled()){Theme::showToast("STORAGE BUSY","Finish active tools before recovery",Theme::AMBER);return SettingsRow::NONE;}
-  ReadableLogs::cancel();CardContent::reset();
-  if(y>=h-40)return SettingsRow::BACK;
+  // Navigation never needs storage ownership, including while a tool is busy.
+  if(y>=h-40){sdAction=0;sdRendered=false;return SettingsRow::BACK;}
+  if(y<h-textBottom&&textPages>1){textPage=(textPage+1)%textPages;return SettingsRow::NONE;}
+  if(sdAction)return SettingsRow::NONE;
+  if(sdConfirm&&y>=h-84&&y<h-48){sdConfirm=0;textPage=0;return SettingsRow::NONE;}
+  const bool actionHit=sdConfirm?(y>=h-126&&y<h-90):(y>=h-136&&y<h-44);
+  if(!actionHit)return SettingsRow::NONE;
+  if(recoveryBusy()){Theme::showToast("STORAGE BUSY","Finish active tools before recovery",Theme::AMBER);return SettingsRow::NONE;}
   if(sdConfirm){
-   if(y>=h-84&&y<h-48){sdConfirm=0;return SettingsRow::NONE;}
-   if(y>=h-126&&y<h-90){if(sdConfirm<4)sdConfirm++;else{sdConfirm=0;eng.sd().recoveryFormat();}return SettingsRow::NONE;}
+   if(y>=h-126&&y<h-90){if(sdConfirm<4)sdConfirm++;else{sdConfirm=0;sdAction=3;}}
   }else{
-   if(y>=h-168&&y<h-132)eng.sd().recoveryRemount();
-   else if(y>=h-126&&y<h-90)eng.sd().recoveryTest();
-   else if(y>=h-84&&y<h-48)sdConfirm=1;
+   if(y>=h-136&&y<h-108)sdAction=1;
+   else if(y>=h-104&&y<h-76)sdAction=2;
+   else if(y>=h-72&&y<h-44)sdConfirm=1;
   }
+  textPage=0;sdRendered=false;
   return SettingsRow::NONE;
  }
  if(current==Page::READABLE_LOGS){

@@ -27,15 +27,34 @@ public:
  size_t write(const uint8_t* p,size_t n){++TestSD::writes;if(!d||TestSD::writesLeft==0)return 0;if(TestSD::writesLeft>0)--TestSD::writesLeft;d->io.write((const char*)p,n);return d->io?n:0;}
  bool seek(uint32_t n){if(!d)return false;d->io.clear();d->io.seekg(n);return bool(d->io);}
  void flush(){if(d&&!d->dir){d->io.flush();if(TestSD::flushDelayMs)SimClock::nowMs+=TestSD::flushDelayMs;}}
+ size_t print(const char* s){return write((const uint8_t*)s,strlen(s));}
  void close(){if(d&&!d->dir)d->io.close();d.reset();}
 };
+#ifdef SD_LOG_TEST
+constexpr int CARD_SDHC=2;
+namespace CardTest {inline bool mounted=false,mountOk=true,createOk=true,rootOk=true;inline unsigned mounts=0,missingRemoves=0;inline uint32_t clock=0;}
+#endif
 struct SDClass {
+#ifdef SD_LOG_TEST
+ bool begin(uint8_t,SPIClass& bus,uint32_t clock,const char*,uint8_t){CardTest::clock=clock;bus.begin();++CardTest::mounts;CardTest::mounted=CardTest::mountOk;return CardTest::mounted;}
+ void end(){CardTest::mounted=false;}
+ int cardType(){return CARD_SDHC;}
+ uint64_t totalBytes(){return cardSize();} uint64_t usedBytes(){return 512;}
+#endif
  bool exists(const char* p){if(std::string(p)=="/DNSP Readable Logs/Current/.location-schema-v1.2")++TestSD::locationChecks;return std::filesystem::exists(TestSD::root+p);}
  bool mkdir(const char* p){return std::filesystem::create_directory(TestSD::root+p);}
- bool remove(const char* p){return std::filesystem::remove(TestSD::root+p);}
+ bool remove(const char* p){
+#ifdef SD_LOG_TEST
+ if(!exists(p))++CardTest::missingRemoves;
+#endif
+ return std::filesystem::remove(TestSD::root+p);}
  bool rmdir(const char* p){return std::filesystem::remove(TestSD::root+p);}
  bool rename(const char* a,const char* b){++TestSD::renames;std::error_code e;std::filesystem::rename(TestSD::root+a,TestSD::root+b,e);return !e;}
  uint64_t cardSize(){return 1024ull*1024*1024;}
- File open(const char* p,int m=FILE_READ){return File(TestSD::root+p,m);}
+ File open(const char* p,int m=FILE_READ){
+#ifdef SD_LOG_TEST
+ if(!CardTest::mounted||(!CardTest::createOk&&m==FILE_WRITE)||(!CardTest::rootOk&&std::string(p)=="/"))return File();
+#endif
+ return File(TestSD::root+p,m);}
 };
 inline SDClass SD;

@@ -56,6 +56,29 @@ static void testDetection(DetectionType type,unsigned id) {
     d.active=true;d.hits=1;d.firstSeen=d.lastSeen=millis();engine.postBle(d);
 }
 static int runDnspUiChecks() {
+    if(getenv("DNSP_SD_UI_TEST")){
+      for(bool portrait:{false,true}){
+        TFT_eSPI panel(portrait?240:320,portrait?320:240);const int w=panel.width(),h=panel.height();
+        auto hash=[&](){uint32_t v=0;for(int y=42;y<h-142;y++)for(int x=12;x<w-12;x++)v=v*33+panel.readPixel(x,y);return v;};
+        CareUI::open(CareUI::Page::SD_RECOVERY);CareUI::draw(panel,millis(),engine);const auto first=hash();
+        DroneWatch::setFocused(true,millis());CareUI::tap(30,62,w,h,millis(),engine);CareUI::draw(panel,millis(),engine);
+        ck("recovery text pages while busy (both orientations)",hash()!=first);
+        ck("recovery Back works while busy (both orientations)",CareUI::tap(30,h-22,w,h,millis(),engine)==SettingsRow::BACK);
+        DroneWatch::setFocused(false,millis());CareUI::open(CareUI::Page::SD_RECOVERY);
+        char previous[120];snprintf(previous,sizeof previous,"%s",engine.sd().recoveryStatus());
+        CareUI::tap(30,h-90,w,h,millis(),engine);CareUI::runPending(true,millis(),engine);
+        ck("card action waits for first rendered frame",strcmp(previous,engine.sd().recoveryStatus())==0);
+        CareUI::draw(panel,millis(),engine);CareUI::runPending(true,millis(),engine);CareUI::draw(panel,millis(),engine);
+        ck("card failure has an explicit result",strstr(engine.sd().recoveryStatus(),"cannot create")!=nullptr);
+        auto shot=[&](const char* name){const char* dir=getenv("DNSP_TEST_SHOTS");if(!dir)return;std::vector<uint8_t> rgb;for(auto v:panel.pixelsRGB565()){rgb.push_back(((v>>11)&31)*255/31);rgb.push_back(((v>>5)&63)*255/63);rgb.push_back((v&31)*255/31);}char path[1024];snprintf(path,sizeof path,"%s/%s-%s.png",dir,name,portrait?"portrait":"landscape");ck("recovery layout screenshot",PngWriter::write(path,w,h,rgb.data()));};
+        shot("recovery-result");
+        FieldUI::openAccessibility();FieldUI::draw(panel,millis(),engine);const bool old=Settings::glitchEffects();
+        FieldUI::tap(30,40+4*((h-88)/5)+8,w,h,millis(),engine);
+        ck("Accessibility shares saved Glitch setting",Settings::glitchEffects()!=old);
+        Settings::toggleGlitchEffects();FieldUI::draw(panel,millis(),engine);shot("accessibility");
+      }
+      return report();
+    }
     suite("Board backlight pin isolation");
     ck("resistive CYD backlight only on GPIO21",SimPwm::pins[0]==21&&SimPwm::bits[0]==8);
     ck("no touch pin / mixed-resolution timer backlight",SimPwm::pins[1]==0&&SimPwm::pins[2]==0);
@@ -234,7 +257,7 @@ static int runDnspUiChecks() {
     suite("Field tools: layout, persistence, hidden language and accessibility");
     Field::config=Field::Config{};Field::reset();engine.clearLog();state=AppState::FIELD_TOOLS;FieldUI::open();testStep();
     auto fieldOpen=[&](){FieldUI::open();state=AppState::FIELD_TOOLS;testStep(400);};
-    auto rowTap=[&](int row){testTap(tft.width()/2,40+row*((tft.height()-88)/4)+8);};
+    auto rowTap=[&](int row){testTap(tft.width()/2,40+row*((tft.height()-88)/(FieldUI::currentPage()==7?5:4))+8);};
     ck("pit board opens",FieldUI::currentPage()==2);
     testTap(tft.width()-30,48);ck("pilot channel changed",Field::config.channels[0]==1);
     Field::config.channels[1]=1;testShot("fpv-pit-board");ck("channel collision",Field::conflict(0,1));
@@ -293,6 +316,8 @@ static int runDnspUiChecks() {
     Field::config.language=0;fieldOpen();FieldUI::openAccessibility();testStep();rowTap(0);rowTap(1);rowTap(3);
     ck("contrast, motion and controls switch",Field::config.contrast&&Field::config.reduced&&Field::config.large);
     ck("large shared navigation",Theme::computeButtonBar(tft.width(),tft.height()).h>=34);
+    rowTap(4);ck("accessibility shares glitch preference",!Settings::glitchEffects());
+    Settings::toggleGlitchEffects();ck("display control updates same setting",Settings::glitchEffects());
     rowTap(2);ck("left handed toggles",Field::config.left);testShot("accessibility");
     testTap(tft.width()-30,tft.height()-24);ck("mirrored back returns to settings",state==AppState::SETTINGS);
     state=AppState::FIELD_TOOLS;FieldUI::openAccessibility();testStep();
@@ -551,6 +576,24 @@ static int runDnspUiChecks() {
     CareUI::open(CareUI::Page::WELCOME);testShot("care-welcome");
     CareUI::open(CareUI::Page::HEALTH);testShot("care-health");
     CareUI::open(CareUI::Page::REPORT);testShot("care-report");
+    suite("MicroSD recovery navigation and visible failure");
+    auto pixels=[](){uint32_t hash=0;for(int y=42;y<98;y++)for(int x=12;x<tft.width()-12;x++)hash=hash*33+tft.readPixel(x,y);return hash;};
+    CareUI::open(CareUI::Page::SD_RECOVERY);CareUI::draw(tft,millis(),engine);
+    const uint32_t firstHelp=pixels();
+    DroneWatch::setFocused(true,millis());
+    CareUI::tap(30,62,tft.width(),tft.height(),millis(),engine);CareUI::draw(tft,millis(),engine);
+    ck("recovery text pages even when busy",pixels()!=firstHelp);
+    ck("busy recovery still allows Back",CareUI::tap(30,tft.height()-22,tft.width(),tft.height(),millis(),engine)==SettingsRow::BACK);
+    DroneWatch::setFocused(false,millis());
+    CareUI::open(CareUI::Page::SD_RECOVERY);
+    CareUI::tap(30,tft.height()-90,tft.width(),tft.height(),millis(),engine);
+    CareUI::runPending(true,millis(),engine);
+    ck("test waits for visible working frame",!strstr(engine.sd().recoveryStatus(),"cannot create"));
+    CareUI::draw(tft,millis(),engine);CareUI::runPending(true,millis(),engine);
+    ck("test failure reaches result text",strstr(engine.sd().recoveryStatus(),"cannot create")!=nullptr);
+    testShot("microsd-recovery-failed");
+    CareUI::tap(30,62,tft.width(),tft.height(),millis(),engine);testShot("microsd-recovery-next-text");
+
     ck("no false simulated backup success",!Backup::start(true,millis())&&!Backup::verifiedThisBoot());
     if(getenv("DNSP_SOAK")){
         suite("Accelerated mixed-screen endurance (simulator, not hardware)");

@@ -58,7 +58,14 @@ bool SdLog::begin() {
 #if defined(TWATCH_S3)
     return false;   // no card slot; GPIO19/20 are the S3's USB pins
 #endif
-    ff_diskio_get_drive(&_drive); // SD.begin reserves the next free FAT drive below.
+    // Discard any stale SDFS mount before reserving its physical drive.
+    // Recovery callers have already closed all file owners.
+    SD.end();
+    _drive = 255;
+    if (ff_diskio_get_drive(&_drive) != ESP_OK || _drive == 255) {
+        snprintf(_recovery,sizeof _recovery,"Mount failed: no free filesystem drive.");
+        return false;
+    }
     Serial.printf("[sd] mounting: heap %lu, largest block %lu\n", (unsigned long)heap_caps_get_free_size(MALLOC_CAP_8BIT), (unsigned long)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
 #if defined(CYD35)
     // (The RL Phantom used to land here too, and its SD card never worked as
@@ -119,10 +126,9 @@ bool SdLog::begin() {
 #elif defined(AWOK)
     if (!SD.begin(SD_CS_PIN, SPI, 4000000, "/sd", SD_MAX_FILES)) {
 #else
-    // Original board only: a genuinely separate, dedicated SD bus (not
-    // shared with the display), so it does need its own explicit begin()
-    // -- SD.begin()'s internal default-pin fallback happens to match
-    // this board's real wiring too, but stay explicit for clarity.
+    // The 2.8-inch CYD card has its own pins, although the hardware VSPI
+    // controller is also used by the display. Preserve the established
+    // Arduino SPI initialization and established card clock here.
     SPI.begin(18, 19, 23, SD_CS_PIN);  // SCK, MISO, MOSI, CS
     if (!SD.begin(SD_CS_PIN, SPI, 4000000, "/sd", SD_MAX_FILES)) {
 #endif
@@ -131,6 +137,8 @@ bool SdLog::begin() {
         // way to tell was to pull the card and look.
         Serial.println("[sd] no card, or it did not answer: nothing will be logged");
         _ready = false;
+        _drive = 255;
+        snprintf(_recovery,sizeof _recovery,"Mount failed: card did not answer or FAT volume could not open. Power off and reseat card.");
         return false;
     }
     Serial.printf("[sd] card mounted: %llu MB\n", (unsigned long long)(SD.cardSize() >> 20));
@@ -142,6 +150,19 @@ bool SdLog::begin() {
         Serial.println("[sd] insufficient working RAM; unmounting card to keep scanning safe");
         SD.end(); _ready=false; _memoryLimited=true; return false;
     }
+    FATFS* volume = nullptr; DWORD freeClusters = 0;
+    char drive[] = {char('0' + _drive), ':', 0};
+    const FRESULT result = f_getfree(drive, &freeClusters, &volume);
+    File root = result == FR_OK ? SD.open("/") : File();
+    const bool usable = result == FR_OK && volume && volume->n_fatent >= 2 && root && root.isDirectory();
+    root.close();
+    if (!usable) {
+        Serial.printf("[sd] mounted volume failed validation: FAT error %u\n",unsigned(result));
+        SD.end(); _drive=255; _ready=false;
+        snprintf(_recovery,sizeof _recovery,"Mount failed: filesystem validation (error %u). No format attempted.",unsigned(result));
+        return false;
+    }
+    snprintf(_recovery,sizeof _recovery,"Card mounted; FAT volume and root directory verified.");
     _ready = true;
     Research::setSink(Research::storageSink);
     Research::setReportSink(Research::storageReport);
@@ -185,8 +206,9 @@ void SdLog::describe(char* out, size_t cap) {
     FATFS* fs = nullptr;
     DWORD freeClusters = 0;
     char drive[] = {char('0' + _drive), ':', 0};
-    if (_drive > 9 || f_getfree(drive, &freeClusters, &fs) != FR_OK || !fs || fs->n_fatent < 2) {
-        snprintf(out, cap, "Card mounted at boot, but storage information cannot be read now. Power off before checking the card.");
+    FRESULT result = _drive > 9 ? FR_INVALID_DRIVE : f_getfree(drive, &freeClusters, &fs);
+    if (result != FR_OK || !fs || fs->n_fatent < 2) {
+        snprintf(out, cap, "Card mount lost filesystem access (FAT error %u). Use MicroSD Recovery > Find & Remount. Power off before reseating.",unsigned(result));
         return;
     }
     const char* format = fs->fs_type == FS_FAT12 ? "FAT12" : fs->fs_type == FS_FAT16 ? "FAT16"
@@ -311,11 +333,11 @@ bool SdLog::safeEnd() {
 
 bool SdLog::recoveryRemount() {
     if (_ready) safeEnd();
+    else SD.end();
+    _filename[0] = 0;
     _drive = 255;
     const bool ok = begin();
-    snprintf(_recovery, sizeof _recovery, "%s", ok
-        ? "Card found and remounted. Storage services are available."
-        : "Card could not be mounted. Power off, reseat it, and try again.");
+    if(ok) snprintf(_recovery,sizeof _recovery,"Card found and remounted; filesystem access verified.");
     return ok;
 }
 
@@ -323,9 +345,11 @@ bool SdLog::recoveryTest() {
     if (!_ready && !recoveryRemount()) return false;
     const char* path = "/.dnsp-card-test.tmp";
     static const char sample[] = "DNSP microSD read/write test v1\n";
-    SD.remove(path);
+    if(SD.exists(path) && !SD.remove(path)) {
+        snprintf(_recovery,sizeof _recovery,"Test FAILED: cannot remove previous temporary file."); return false;
+    }
     File f = SD.open(path, FILE_WRITE);
-    if (!f) { snprintf(_recovery,sizeof _recovery,"Test failed while creating a temporary file."); return false; }
+    if (!f) { snprintf(_recovery,sizeof _recovery,"Test FAILED: cannot create temporary file. Check card write access."); return false; }
     const bool wrote = f.write((const uint8_t*)sample, sizeof(sample)-1) == sizeof(sample)-1;
     f.flush(); f.close();
     char back[sizeof sample] = {};
@@ -335,7 +359,7 @@ bool SdLog::recoveryTest() {
     const bool same = wrote && read && memcmp(back,sample,sizeof(sample)-1)==0;
     const bool removed = SD.remove(path);
     if (same && removed) snprintf(_recovery,sizeof _recovery,"Read/write test passed; temporary file removed.");
-    else snprintf(_recovery,sizeof _recovery,"Card test failed: write %s, read-back %s, cleanup %s.",wrote?"ok":"failed",same?"ok":"failed",removed?"ok":"failed");
+    else snprintf(_recovery,sizeof _recovery,"Test FAILED: write %s, read-back %s, cleanup %s.",wrote?"ok":"failed",same?"ok":"failed",removed?"ok":"failed");
     return same && removed;
 }
 

@@ -30,8 +30,8 @@ bool DetectionEngine::shutdownTick(){return true;}
 void SdLog::logPressure(uint32_t, uint32_t) {}
 void SdLog::wipe() {}
 void SdLog::openDaily() {}
-bool SdLog::recoveryRemount() { return false; }
-bool SdLog::recoveryTest() { return false; }
+bool SdLog::recoveryRemount() { strcpy(_recovery,"Mount failed: no card in desktop simulator.");return false; }
+bool SdLog::recoveryTest() { strcpy(_recovery,"Test FAILED: cannot create temporary file. Check card write access.");return false; }
 bool SdLog::recoveryFormat() { return false; }
 
 // ---- DetectionEngine -------------------------------------------------

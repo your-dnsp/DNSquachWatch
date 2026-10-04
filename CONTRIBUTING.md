@@ -26,4 +26,4 @@ For independent research review, use the [corroboration guide](docs/research/COR
 
 ## Release numbering
 
-The current published firmware is v1.5.7. The next changed firmware starts the v1.6.x series at v1.6.0. Never reuse a version for changed firmware. Update the shared version source, device/report labels, documentation, manifests and package names together. Stored schema versions are independent and change only when their formats change.
+The current firmware is v1.6.5. Increment the version for the next changed firmware. Never reuse a version for changed firmware. Update the shared version source, device/report labels, documentation, manifests and package names together. Stored schema versions are independent and change only when their formats change.

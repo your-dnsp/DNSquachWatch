@@ -119,7 +119,11 @@ touchfit_test_SRCS           :=
 readable_storage_test_SRCS := $(SRC)/readable_logs.cpp $(SRC)/blackbox.cpp $(SRC)/location_label.cpp $(SRC)/care.cpp $(SRC)/field_tools.cpp $(SRC)/remote_id.cpp
 readable_storage_test_FLAGS := -DREADABLE_LOGS_TEST -DBLACKBOX_TEST -Istorage_shim
 
-TESTS += readable_storage_test backup_progress_test ble_advert_fields_test ambient_light_test crash_reports_test spam_test
+$(OUT)/sd_recovery_test: CXXFLAGS := -Isd_shim $(CXXFLAGS)
+sd_recovery_test_SRCS := $(SRC)/sd_log.cpp
+sd_recovery_test_FLAGS := -DSD_LOG_TEST -DCYD=1 -Isd_shim
+
+TESTS += sd_recovery_test readable_storage_test backup_progress_test ble_advert_fields_test ambient_light_test crash_reports_test spam_test
 crash_reports_test_SRCS := $(SRC)/crash_reports.cpp
 
 .PHONY: all clean

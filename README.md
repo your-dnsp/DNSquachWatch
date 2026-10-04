@@ -1,4 +1,4 @@
-# DNSquachWatch v1.5.7
+# DNSquachWatch v1.6.5
 
 DNSquachWatch is **dnsprincess's friends-and-family edition of SquachWatch** for the classic 2.8-inch ESP32 Cheap Yellow Display (CYD), based on **SquachWatch v1.28.0**. It keeps Squachy, the original visual identity, and the spirit of the project while adding device & microSD recovery, additional OUI and device research, labeling and OUI research contribution mechanisms, accessibility tools, security enhancements, additional scanning and logging capabilities, additional drone detection & support for FPV pilots, and whimsical additions.
 
@@ -10,20 +10,20 @@ DNSquachWatch is **dnsprincess's friends-and-family edition of SquachWatch** for
 
 | Your display | Firmware |
 |---|---|
-| ST7789, newer CYD batches | [ST7789-80MHz kit](firmware/v1.5.7/ST7789-80MHz/DNSquachWatch-v1.5.7-ST7789-80MHz.zip) |
-| ILI9341, older CYD batches | [ILI9341-80MHz kit](firmware/v1.5.7/ILI9341-80MHz/DNSquachWatch-v1.5.7-ILI9341-80MHz.zip) |
+| ST7789, newer CYD batches | [ST7789-80MHz kit](firmware/v1.6.5/ST7789-80MHz/DNSquachWatch-v1.6.5-ST7789-80MHz.zip) |
+| ILI9341, older CYD batches | [ILI9341-80MHz kit](firmware/v1.6.5/ILI9341-80MHz/DNSquachWatch-v1.6.5-ILI9341-80MHz.zip) |
 
 Both kits target the **classic 2.8-inch ESP32 CYD** and start with an **80 MHz display clock**. System settings can switch the display to 40 MHz; the flash clock stays at 40 MHz. If you are unsure which controller your CYD has, try ST7789 first. A solid white screen may mean it needs ILI9341: try the other kit. Keep each kit's four flashing binaries together.
 
-Also obtain the [microSD content](firmware/v1.5/DNSquachWatch-v1.5-microSD-content.zip) and copy **DNSP Content/v1.5/** to the card root. **Existing v1.5 card content remains compatible with v1.5.7.** Flashing the ESP32 does not copy files to microSD. The full walkthrough, extended language content, and installation document use the supplied card files; backups require the checked installation document. Boot, scanning, essential recovery, and Remington remain built in. No Wi-Fi content download is used.
+Also obtain the [microSD content](firmware/v1.5/DNSquachWatch-v1.5-microSD-content.zip) and copy **DNSP Content/v1.5/** to the card root. **Existing v1.5 card content remains compatible with v1.6.5.** Flashing the ESP32 does not copy files to microSD. The full walkthrough, extended language content, and installation document use the supplied card files; backups require the checked installation document. Boot, scanning, essential recovery, and Remington remain built in. No Wi-Fi content download is used.
 
-Each firmware ZIP includes all four flashing binaries, image checksums, an optional offline installer, and recovery instructions. See [installation guide](docs/user/INSTALLATION.md) for installation and manual card copying, or [GitHub Releases](https://github.com/your-dnsp/DNSquachWatch/releases/tag/v1.5.7) for both kits and download checksums.
+Each firmware ZIP includes all four flashing binaries, image checksums, an optional offline installer, and recovery instructions. See [installation guide](docs/user/INSTALLATION.md) for installation and manual card copying, or [GitHub Releases](https://github.com/your-dnsp/DNSquachWatch/releases) for published kits and download checksums.
 
 ## Latest update
 
-**v1.5.7 improves storage diagnostics and removes repeated card lookups.** Slow history steps now report the operation responsible for the longest delay, making physical-card stalls easier to investigate. Automatic refresh keeps its paced processing and interruption protections. Receiver simulation labeling remains, and device screens and new reports share one version source. Existing v1.5 card content remains compatible.
+**v1.6.5 fixes the MicroSD Recovery screen on both supported displays.** Results and instructions fit the screen, text paging works, Back remains available while tools are busy, and card actions show visible progress and results. Card tests explain failures clearly; mounting checks filesystem and root access before reporting readiness. Glitch Effects is also available in Accessibility using the same saved setting.
 
-Both display builds and host/UI checks are validated before packaging. Physical-card smoothness remains subject to hardware testing; previously confirmed ST7789 backup completion was on v1.5.1. Full release details are in [changelog](CHANGELOG.md).
+ST7789 hardware testing of the retained recovery implementation confirmed mounting, synchronization, remounting and backup completion with a working card. The failing green-card batch remained incompatible and is not claimed fixed. Both builds and focused display checks are verified for this release; ILI9341 physical testing remains pending. Existing v1.5 content is unchanged. See the [changelog](CHANGELOG.md).
 
 ## What DNSquachWatch adds
 

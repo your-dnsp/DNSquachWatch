@@ -1,5 +1,13 @@
 # DNSquachWatch changelog
 
+## v1.6.5
+
+- Repair MicroSD Recovery text pagination, landscape result layout and Back navigation while tools are busy. Show a working frame before running an action and display its result.
+- Report failed card-test creation/write/read/cleanup explicitly, validate filesystem/root access before marking a card ready, and preserve remount failure details.
+- Mirror the existing Glitch Effects preference in Accessibility.
+- Publish both ST7789 and ILI9341 80 MHz kits with consistent compiled versions. Keep v1.5 card content, partition layout, security and detection unchanged.
+- Exclude temporary SD-driver diagnostics, reset-response experiments and the standalone probe.
+
 ## v1.5.7
 
 - Identify the actual history-processing step and its slowest individual storage operation in slow-call serial diagnostics, instead of reporting the phase after a transition.
