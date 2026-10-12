@@ -54,7 +54,7 @@ int main(){
   source=root.parent/'platformio/packages/framework-arduinoespressif32/libraries/SD/src/sd_diskio.cpp'
   if not source.exists():self.skipTest('pinned SDK not installed')
   original=source.read_text();updated=patch(original)
-  self.assertEqual(updated.count('WRITE_PERI_REG(SPI_USER_REG(3), SPI_USR_MOSI | SPI_USR_MISO | SPI_DOUTDIN);'),2)
+  self.assertEqual(updated.count('WRITE_PERI_REG(SPI_USER_REG(2), SPI_USR_MOSI | SPI_USR_MISO | SPI_DOUTDIN);'),2)
   self.assertIn('AcquireSPI card_locked(card, 100000)',updated)
   self.assertIn('attempt<5',updated)
   self.assertIn('uint32_t(millis()-waitStart)<500',updated)

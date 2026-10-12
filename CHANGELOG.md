@@ -1,5 +1,11 @@
 # DNSquachWatch changelog
 
+## v1.8.2
+
+- Separate display and microSD SPI controllers; retain resistive-touch sampling through software SPI on existing pins.
+- Preserve DNSP Content/v1.5 and flash layout. Image grows by 96 bytes; exact receiver hardware validation remains pending.
+
+
 ## v1.8.1 (ST7789)
 
 - Integrate applicable upstream v1.34/v1.35 classic-CYD pet-movement, placement and brightness-button improvements.

@@ -70,6 +70,11 @@ void SdLog::scheduleBoot(uint32_t now) {
     Serial.println("[sd] startup wait: 10000 ms; no card access until the delay expires");
 }
 
+#if defined(CYD) && defined(DNSP_SD_COMPAT)
+// SD owns HSPI; display owns VSPI. Resistive touch uses software SPI.
+static SPIClass dnspCardSPI(HSPI);
+#endif
+
 bool SdLog::begin() {
     // Manual recovery must not bypass the startup experiment either.
     if (_bootPending && uint32_t(millis()-_bootStart) < 10000u) return false;
@@ -146,13 +151,13 @@ bool SdLog::begin() {
     if (!SD.begin(SD_CS_PIN, tft.getSPIinstance(), 4000000, "/sd", SD_MAX_FILES)) {
 #elif defined(AWOK)
     if (!SD.begin(SD_CS_PIN, SPI, 4000000, "/sd", SD_MAX_FILES)) {
+#elif defined(CYD)
+    // Separate the SD controller from the display, including across RST.
+    // Probe v1.6 passed cold boot and two resets on the affected Lerdisk card.
+    dnspCardSPI.begin(18, 19, 23, SD_CS_PIN);
+    pinMode(19, INPUT_PULLUP);
+    if (!SD.begin(SD_CS_PIN, dnspCardSPI, 1000000, "/sd", SD_MAX_FILES)) {
 #else
-    // The 2.8-inch CYD card has its own pins, although the hardware VSPI
-    // controller is also used by the display. Preserve the established
-    // Arduino SPI initialization here. This compatibility build uses a
-    // conservative 1 MHz data clock; the adapter initializes at 100 kHz.
-    SPI.begin(18, 19, 23, SD_CS_PIN);  // SCK, MISO, MOSI, CS
-    pinMode(19, INPUT_PULLUP); // Keep DO defined when the card releases it.
     if (!SD.begin(SD_CS_PIN, SPI, 1000000, "/sd", SD_MAX_FILES)) {
 #endif
         // Said out loud either way: a board with no card, or a card on the

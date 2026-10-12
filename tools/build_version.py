@@ -73,7 +73,7 @@ if env['PIOENV'] in ('cyd', 'cyd-fast'):
     env.AddBuildMiddleware(runtime_ble, '*NimBLEScan.cpp')
 
 # Local ST7789 compatibility experiment; installed Arduino files are untouched.
-if env['PIOENV'] == 'cyd-fast':
+if env['PIOENV'] in ('cyd', 'cyd-fast'):
     env.Append(BUILD_FLAGS=['-DDNSP_SD_COMPAT=1'])
     def runtime_sd(env, node):
         source = Path(node.srcnode().get_abspath())
@@ -85,6 +85,20 @@ if env['PIOENV'] == 'cyd-fast':
             destination.write_text(result)
         return env.File(str(destination))
     env.AddBuildMiddleware(runtime_sd, '*sd_diskio.cpp')
+
+# Keep the original touch filtering, pressure and rotation logic. Only its
+# short SPI transport moves to GPIO so SD can exclusively own HSPI.
+if env['PIOENV'] in ('cyd', 'cyd-fast'):
+    def runtime_touch(env, node):
+        source = Path(node.srcnode().get_abspath())
+        transform = runpy.run_path(str(_project/'tools/runtime_touch.py'))['patch']
+        result = transform(source.read_text())
+        destination = Path(env.subst('$BUILD_DIR'))/'dnsp-runtime'/'XPT2046_Touchscreen.cpp'
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if not destination.exists() or destination.read_text() != result:
+            destination.write_text(result)
+        return env.File(str(destination))
+    env.AddBuildMiddleware(runtime_touch, '*XPT2046_Touchscreen.cpp')
 
 # Emit compile-time stack estimates alongside objects for the resource audit.
 env.Append(CCFLAGS=["-fstack-usage"])

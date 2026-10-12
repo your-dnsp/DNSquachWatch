@@ -11,4 +11,4 @@ inline FRESULT f_mount(FATFS*,const char*,int){return FR_OK;}
 inline FRESULT f_mkfs(const char*,int,int,void*,int){return FR_OK;}
 inline void* heap_caps_malloc(size_t n,int){return malloc(n);}
 
-inline FATFS* dnsp_sd_volume(uint8_t d){return d<10&&FatTest::result==FR_OK ? &FatTest::volume : nullptr;}
+extern "C" inline FATFS* dnsp_sd_volume(uint8_t d){return d<10&&FatTest::result==FR_OK ? &FatTest::volume : nullptr;}

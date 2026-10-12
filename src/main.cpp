@@ -624,8 +624,17 @@ XPT2046_Touchscreen touch(TOUCH_CS, TOUCH_IRQ);
 // which uses tft.getSPIinstance() instead of this object. A second,
 // independent SPIClass(VSPI) pointed at the same pins TFT_eSPI already
 // owns fights it at the GPIO-matrix level rather than sharing cleanly;
-// touchSPI here is only ever used on the original (HSPI) board.
+// On DNSP CYD builds, the adapter uses GPIO SPI; this object is only
+// the library handle and does not initialize or transact on SD's HSPI.
 SPIClass         touchSPI(HSPI);
+static void beginResistiveTouch() {
+#if !defined(DNSP_SD_COMPAT)
+    touchSPI.begin(TOUCH_SCK, TOUCH_MISO, TOUCH_MOSI, TOUCH_CS);
+#endif
+    // The CYD compatibility adapter initializes software SPI on these pins.
+    touch.begin(touchSPI);
+}
+
 // Set once in setup() by probing for the capacitive controller —
 // decides which branch pollTouch() takes for the rest of the run.
 bool                usingCapTouch = false;
@@ -2561,7 +2570,7 @@ static void beginDuressDisplay(Duress::Boot boot) {
     // GPIO32 belongs to touch on this CYD, never drive it as backlight.
     tft.init();screenRotation=1;tft.setRotation(1);tft.invertDisplay(PANEL_NEEDS_INVERSION);
     CapTouch::begin(CAP_SDA,CAP_SCL,CAP_RST);usingCapTouch=CapTouch::probe();
-    if(!usingCapTouch){Wire.end();touchSPI.begin(TOUCH_SCK,TOUCH_MISO,TOUCH_MOSI,TOUCH_CS);touch.begin(touchSPI);touch.setRotation(0);}
+    if(!usingCapTouch){Wire.end();beginResistiveTouch();touch.setRotation(0);}
     s_touchFit=usingCapTouch
         ?TouchFit::fromRanges(CAP_NX_MIN,CAP_NX_MAX,CAP_NY_MIN,CAP_NY_MAX,240,320)
         :TouchFit::fromRanges(200,3800,200,3800,240,320);
@@ -2839,8 +2848,7 @@ void setup() {
     } else {
         Wire.end();
         Serial.println("No capacitive touch found -- assuming resistive XPT2046.");
-        touchSPI.begin(TOUCH_SCK, TOUCH_MISO, TOUCH_MOSI, TOUCH_CS);
-        touch.begin(touchSPI);
+        beginResistiveTouch();
         touch.setRotation(0);
     }
 #endif

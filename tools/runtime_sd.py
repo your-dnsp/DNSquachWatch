@@ -4,14 +4,14 @@ EXPECTED='aaaade8f55c0c33ab702d08eb1cc8a9bdbaab000eda95f2cfaef041f082c465b'
 def patch(source):
     if hashlib.sha256(source.encode()).hexdigest()!=EXPECTED:
         raise RuntimeError('SD driver changed; compatibility adapter requires review')
-    # Classic CYD display and SD pins share VSPI hardware. beginTransaction
+    # SD now owns HSPI; software touch leaves it untouched. beginTransaction
     # restores clock/mode/order but not TFT_eSPI's USER transfer flags.
     # Restore full-duplex byte transfers under the bus lock on every operation.
     source='#include "soc/spi_reg.h"\n#include "soc/soc.h"\n'+source
     for settings in ('card->frequency', 'frequency'):
         original=f'card->spi->beginTransaction(SPISettings({settings}, MSBFIRST, SPI_MODE0));'
         assert source.count(original)==1
-        source=source.replace(original, original+'\n        WRITE_PERI_REG(SPI_USER_REG(3), SPI_USR_MOSI | SPI_USR_MISO | SPI_DOUTDIN);',1)
+        source=source.replace(original, original+'\n        WRITE_PERI_REG(SPI_USER_REG(2), SPI_USR_MOSI | SPI_USR_MISO | SPI_DOUTDIN);',1)
     source=source.replace('''    digitalWrite(card->ssPin, HIGH);
 }
 
