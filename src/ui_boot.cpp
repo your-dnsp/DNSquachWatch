@@ -10,26 +10,6 @@
 // comment). Falls back to "unknown" so this still compiles standalone
 // (the PC emulator, an IDE's syntax pass) without the build flag.
 
-// A dozen one-liners for Squachy's boot-splash speech bubble — one is
-// picked at random each boot (see uiBootInit) so the splash doesn't
-// say the exact same thing every single time.
-static const char* BOOT_LINES[] = {
-    "Surveillance state? Not on my watch.",
-    "Smile! I'm watching the watchers.",
-    "No cameras were harmed. Yet.",
-    "Privacy is dead. I'm the eulogy.",
-    "Big Brother's ugly cousin, actually.",
-    "I collect MAC addresses, not friends.",
-    "They see everything. I see them too.",
-    "Cryptid by trade, snitch by hobby.",
-    "Somewhere, a camera just got nervous.",
-    "Not paranoid. Just well-informed.",
-    "Trust no lens.",
-    "Detecting nonsense since day one.",
-};
-static const uint8_t BOOT_LINE_COUNT = sizeof(BOOT_LINES) / sizeof(BOOT_LINES[0]);
-static uint8_t s_bootLineIdx = 0;
-
 // When this splash started, and how far through its scripted glitch
 // bursts we are. The subtitle's chromatic split rides the shared burst
 // (Theme::glitchActive()), but that rolls on its own every 5-10s while
@@ -45,7 +25,6 @@ void uiBootInit(TFT_eSPI& t) {
     // remnants when t is a sprite. fillRect() with the (virtual,
     // correctly-overridden) width()/height() clears the whole thing.
     t.fillRect(0, 0, t.width(), t.height(), Theme::BG);
-    s_bootLineIdx = (uint8_t)random(0, BOOT_LINE_COUNT);
     s_bootAt      = 0;
     s_glitchStage = 0;
 }
@@ -169,53 +148,19 @@ void uiBootTick(TFT_eSPI& t, uint32_t now) {
     // false, so this is safe to call every frame.
     Theme::drawGlitchStatic(t, sx - 4, sy - 2, sx + sw + 4, sy + 18);
 
-    // Squachy himself, standing on the floor just past the horizon,
-    // giving a friendly wave (and a little on-brand attitude) while
-    // everything spins up. Sized as big as the gap between the
-    // subtitle and INITIALIZING... below allows — dropping the v1.0
-    // line and tightening the title stack above is what buys him the
-    // extra room to be this big. Skipped in "boring mode" — the rest
-    // of the boot splash (wordmark, subtitle, INITIALIZING...) is
-    // unaffected, this only cuts the mascot cameo.
+    // Reserve the creator subtitle and DNSP footer. The splash cameo has
+    // no speech bubble: its old fixed offset covered TALKING SASQUACH once
+    // the two-line DNSP footer moved the mascot upward on the 320x240 CYD.
+    // Other screens retain their normal Squachy speech behavior.
     if (!Settings::boringMode()) {
-        // 2.0, up from 1.6, standing on h-19 rather than yHoriz+50.
-        //
-        // Measured off a render: the subtitle's ink ends at row 67 and
-        // INITIALIZING starts at 224, so there are about 150 usable rows and
-        // he was only occupying 94 of them. The rest was air above his head.
-        //
-        // Both numbers had to move together. drawWaving puts his speech
-        // bubble a fixed 34px above the head anchor, and the anchor is
-        // baseY - 58*scale, so growing him alone drives the bubble up into
-        // the subtitle -- at 1.6 it already sat only six rows clear. Lowering
-        // where he stands buys that back. His feet barely move either way,
-        // since they land at baseY - 5*scale.
-        //
-        // 2.06 is the hard ceiling with the bubble above him: 150 rows has to
-        // hold a 14px bubble, his 60 base units, and air at each end. 2.0 hits
-        // it exactly and leaves 2px top and bottom, which is a rounding error
-        // away from touching. 1.95 gives 4px at both ends instead.
-        // 1.95 was fitted by hand to a 240-tall panel, where the band between
-        // the subtitle and INITIALIZING is about 150 rows and the bubble above
-        // his head was what capped it. A 320-tall panel leaves 80 rows more and
-        // he sat in the middle of them, small, with air all round -- the same
-        // complaint the main screen's geometry solved years ago by sizing him
-        // from the band he is handed rather than from a constant.
-        //
-        // So on a wide panel he is sized from the band. The limit is unchanged:
-        // his head anchor is baseY - 58*scale and the bubble sits above that,
-        // so the scale that just clears the subtitle is (band / 58). Narrow
-        // panels keep the measured 1.95 exactly -- this is the one screen
-        // where the constant was chosen against a render, and it still holds
-        // there.
         float bootScale = 1.95f;
         if (w >= 400) {
-            const int band = (h - 21) - 34 - (sy + 16);   // feet, bubble, subtitle
-            bootScale = (float)(band - 10) / 58.0f;       // 10 rows of air at the top
+            const int band = (h - 33) - (sy + 16);
+            bootScale = float(band - 10) / 58.0f;
             if (bootScale < 1.95f) bootScale = 1.95f;
-            if (bootScale > 3.2f)  bootScale = 3.2f;
+            if (bootScale > 3.2f) bootScale = 3.2f;
         }
-        Squachy::drawWaving(t, w / 2, h - 33, now, bootScale, BOOT_LINES[s_bootLineIdx]);
+        Squachy::drawWaving(t, w / 2, h - 33, now, bootScale, nullptr);
     }
 
     // Paint attribution last, in a reserved footer clear of artwork and
@@ -231,7 +176,7 @@ void uiBootAttribution(TFT_eSPI& t) {
     t.setTextFont(1);t.setTextSize(1);t.setTextWrap(false);
     t.fillRect(0,h-28,w,28,Theme::BG);
     t.setTextColor(Theme::WHITE,Theme::BG);
-    const char* line="modified firmware by dnsp";
+    const char* line="modified by dnsprincess (your-dnsp)";
     t.setCursor((w-t.textWidth(line))/2,h-25);t.print(line);
     t.setTextColor(Theme::CYAN,Theme::BG);
     const char* version="DNSP v" FIRMWARE_VERSION " | base v" DNSP_BASE_VERSION;

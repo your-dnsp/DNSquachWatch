@@ -1,5 +1,11 @@
 # DNSquachWatch changelog
 
+## v1.8.4
+
+- Keep the creator subtitle visible by removing the boot-only speech bubble; update the modifier attribution to dnsprincess (your-dnsp).
+- Preserve v1.8.3 storage behavior and existing card content.
+
+
 ## v1.8.3
 
 - Require accepted SD write responses and programming completion; consume complete card-status responses.
