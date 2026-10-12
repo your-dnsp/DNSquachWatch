@@ -39,8 +39,8 @@ runpy.run_path(str(_project / 'tools/check_flash_layout.py'))['check'](_project)
 
 # TFT_eSPI normally compiles its write clock into every transaction. Generate
 # a narrow adapter without editing the installed library or changing touch/read
-# clocks. Only these four pinned 2.8-inch CYD targets use it; DMA is not used here.
-if env['PIOENV'] in ('cyd', 'cyd-fast', 'cyd-ili9341', 'cyd-ili9341-fast'):
+# clocks. Only these pinned ST7789 2.8-inch CYD targets use it; DMA is not used here.
+if env['PIOENV'] in ('cyd', 'cyd-fast'):
     def runtime_display(env, node):
         source = Path(node.srcnode().get_abspath())
         header = source.parent / 'TFT_eSPI.h'
@@ -57,7 +57,7 @@ if env['PIOENV'] in ('cyd', 'cyd-fast', 'cyd-ili9341', 'cyd-ili9341-fast'):
 
 # Receive-side checks must precede NimBLE's allocations, not merely guard
 # our callback after the device object/payload has already been allocated.
-if env['PIOENV'] in ('cyd', 'cyd-fast', 'cyd-ili9341', 'cyd-ili9341-fast'):
+if env['PIOENV'] in ('cyd', 'cyd-fast'):
     def runtime_ble(env, node):
         source = Path(node.srcnode().get_abspath())
         properties = source.parent.parent / 'library.properties'

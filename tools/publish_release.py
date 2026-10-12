@@ -5,7 +5,7 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 def release_assets(version):
  archives=[];lines=[];boards=[]
- for board,target in [('ST7789','cyd-fast'),('ILI9341','cyd-ili9341-fast')]:
+ for board,target in [('ST7789','cyd-fast')]:
   folder=ROOT/('firmware/v'+version)/(board+'-80MHz')
   if not folder.exists():continue
   name='DNSquachWatch-v'+version+'-'+board+'-80MHz.zip'

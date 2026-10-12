@@ -1,8 +1,8 @@
-# Flashing and microSD content — firmware v1.5.2 / content v1.5
+# Flashing and microSD content
 
-Download and extract the firmware kit for your display. The four binaries are together at the top of the extracted folder. Firmware is flashed to the ESP32; esptool does not copy anything onto microSD.
+Download and extract the current ST7789-80MHz kit from [firmware downloads](../../firmware/README.md). Active receiver releases target the classic 2.8-inch ST7789 CYD. ILI9341 receiver support has been removed; see [hardware scope](HARDWARE.md). The four binaries are together at the top of the extracted folder. Firmware is flashed to the ESP32; esptool does not copy anything onto microSD.
 
-If DNSP Content/v1.5 is already on your card, keep it: v1.5.2 changes no content files. For a new installation, download and extract the existing v1.5 microSD-content ZIP. Copy its **DNSP Content** folder to the card root. The supported path is **/DNSP Content/v1.5/**; Use the v1.5 content so the walkthrough describes this release. Eject the card safely and insert it with the CYD powered off. Missing content does not prevent boot, scanning or essential recovery, but the full walkthrough and backup installation document need it.
+If DNSP Content/v1.5 is already on your card, keep it: the current v1.8.1 release changes no content files. For a new installation, download and extract the existing v1.5 microSD-content ZIP. Copy its **DNSP Content** folder to the card root. The supported path is **/DNSP Content/v1.5/**. Eject the card safely and insert it with the CYD powered off. Missing content does not prevent boot, scanning or essential recovery, but the full walkthrough and backup installation document need it.
 
 ## Manual flashing
 

@@ -7,7 +7,7 @@ def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--image',type=Path,required=True)
     p.add_argument('--key',type=Path,required=True)
-    p.add_argument('--target',choices=['cyd-fast','cyd-ili9341-fast'],required=True)
+    p.add_argument('--target',choices=['cyd-fast'],required=True)
     p.add_argument('--version',required=True)
     p.add_argument('--required-content',default='v1.5')
     p.add_argument('--output',type=Path,required=True)

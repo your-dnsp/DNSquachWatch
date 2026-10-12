@@ -72,7 +72,7 @@ def install_card(root, target, dry, replace):
 
 def flash(kit, port, dry, erase=False):
     manifest=json.loads((kit/'manifest.json').read_text())
-    if (manifest.get('display'),manifest.get('target')) not in [('ST7789','cyd-fast'),('ILI9341','cyd-ili9341-fast')]:
+    if (manifest.get('display'),manifest.get('target')) not in [('ST7789','cyd-fast')]:
         raise ValueError('This installer expects the ST7789 80 MHz release kit')
     # Use SHA256SUMS, which covers the complete kit, including firmware images.
     sums={}

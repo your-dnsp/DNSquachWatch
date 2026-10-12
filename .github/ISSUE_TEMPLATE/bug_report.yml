@@ -6,14 +6,13 @@ body:
     attributes:
       value: |
         Report DNSP custom-firmware bugs here, not to the original creator. Never paste PINs, passwords, PRIVATE research exports or raw identifying logs.
-        A solid white screen may indicate the other CYD display controller or an unstable 80 MHz display clock. Use the matching ST7789/ILI9341 kit; System can switch to 40 MHz once the screen works. See docs/user/INSTALLATION.md for recovery. Do not erase flash unless you intend to delete stored security state and settings.
+        A solid white screen may indicate the other CYD display controller or an unstable 80 MHz display clock. Current receiver support is ST7789 only; ILI9341 receiver support has been removed. System can switch to 40 MHz once the screen works. See docs/user/INSTALLATION.md for recovery. Do not erase flash unless you intend to delete stored security state and settings.
   - type: dropdown
     id: display
     attributes:
       label: Display kit
       options:
         - ST7789-80MHz
-        - ILI9341-80MHz
         - Unsure
     validations:
       required: true

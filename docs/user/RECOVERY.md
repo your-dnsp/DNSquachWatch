@@ -1,6 +1,6 @@
 # DNSquachWatch v1.1.2 recovery
 
-This release ships two targets: **ST7789 CYD at an initial 80 MHz display clock** and **ILI9341 CYD at an initial 80 MHz display clock**. Keep the entire matching release ZIP on a computer. Each contains the four files required to recover the board over USB. If the panel stays white, use the other 2.8-inch CYD display kit; do not mix files from the two kits.
+Current receiver releases target **ST7789 CYD at an initial 80 MHz display clock**. Keep the complete release ZIP on a computer; it contains the four files required for USB recovery. Confirm the display controller before flashing. ILI9341 receiver support has been removed; those boards are used for the separate simulation project.
 
 ## On-device Safe Mode
 

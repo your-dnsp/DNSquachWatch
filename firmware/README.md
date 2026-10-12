@@ -1,16 +1,16 @@
 # DNSP firmware downloads
 
-**Current: v1.8.1 (ST7789 upstream integration)**, based on SquachWatch v1.35.0.
+**Current: v1.8.1 (ST7789-80MHz)**, based on SquachWatch v1.35.0.
 
-- [ST7789 80MHz complete flashing kit](v1.8.1/ST7789-80MHz/DNSquachWatch-v1.8.1-ST7789-80MHz.zip)
-- [ILI9341 80MHz complete flashing kit](v1.7.4/ILI9341-80MHz/DNSquachWatch-v1.7.4-ILI9341-80MHz.zip)
+- [Current ST7789 80MHz complete flashing kit](v1.8.1/ST7789-80MHz/DNSquachWatch-v1.8.1-ST7789-80MHz.zip)
+- [Hardware scope and board selection](../docs/user/HARDWARE.md)
 
-v1.8.1 integrates upstream v1.31–v1.35 for ST7789 while retaining DNSP features and its signed GitHub updater. Hardware validation is pending. ILI9341 is not rebuilt in this update. Both receiver variants use the DD:DD:DD simulation marker.
+**ILI9341 receiver support has been removed.** DNSP has never gifted an ILI9341 version and now uses those boards for simulation testing. DNSP plans to gift only classic 2.8-inch ST7789 CYDs, specifically selecting boards with both microUSB and USB-C ports. The simulation transmitter is a separate project.
 
-Both kits contain all four flashing binaries, checksums, the optional installer and recovery instructions. If your classic CYD shows a solid white screen with one driver, try the other kit. Display starts at 80MHz; System can switch it to 40MHz. Flash bus remains 40MHz.
+v1.8.1 integrates applicable upstream changes through v1.35 while retaining DNSP features and its signed GitHub updater. Physical verification of the exact release remains pending.
+
+The current kit contains all four flashing binaries, checksums, the optional installer and recovery instructions. Display starts at 80MHz; System can switch it to 40MHz. Flash remains at 40MHz. Confirm the display controller before flashing.
 
 Keep existing **DNSP Content/v1.5**. New installations use [the existing content ZIP](v1.5/DNSquachWatch-v1.5-microSD-content.zip). Firmware flashing does not install card content. Card packages are only regenerated when their content changes.
-
-v1.7.0 merges the classic-CYD features of upstream v1.29 and v1.30 while preserving DNSP's detection, recovery, menus and card-content contract. Both builds need hardware confirmation.
 
 See [GitHub Releases](https://github.com/your-dnsp/DNSquachWatch/releases), [installation](../docs/user/INSTALLATION.md) and [changelog](../CHANGELOG.md).

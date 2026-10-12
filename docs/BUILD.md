@@ -1,6 +1,6 @@
 # Build and validate DNSquachWatch
 
-DNSP release targets are the classic 2.8-inch ESP32 CYD: `cyd-fast` (ST7789, initial 80 MHz) and `cyd-ili9341-fast` (ILI9341, initial 80 MHz). Other inherited environments are not validated DNSP release targets.
+The DNSP receiver release target is the classic 2.8-inch ESP32 CYD: `cyd-fast` (ST7789, initial 80 MHz). ILI9341 receiver support has been removed. Other inherited environments are not validated DNSP release targets.
 
 For prebuilt firmware, use [the release kits](../firmware/README.md) and [installation guide](user/INSTALLATION.md). Building from source is optional.
 
@@ -19,10 +19,9 @@ Run from the repository root:
 ```sh
 python3 -m pip install platformio==6.1.18
 pio run -e cyd-fast
-pio run -e cyd-ili9341-fast
 ```
 
-Binaries are generated under `.pio/build/<target>/`. Use the complete matching release kit for end-user flashing; never mix binaries from different kits. Both CYD environments use serial diagnostics at **115200 baud**.
+Binaries are generated under `.pio/build/<target>/`. Use the complete matching release kit for end-user flashing; never mix binaries from different kits. ST7789 CYD environments use serial diagnostics at **115200 baud**.
 
 `platformio.ini` selects the partition tables in `config/partitions/` and build adapters under `tools/`. The layout checker protects settings, crash storage, BlackBox history and the persistent duress journal. Image-size checks reject oversized builds. Generated size reports and local build output are not committed.
 

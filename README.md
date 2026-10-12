@@ -10,7 +10,7 @@ DNSquachWatch is **dnsprincess's friends-and-family edition of SquachWatch** for
 
 ## Hardware scope and WiGLE
 
-The original [SquachWatch project](https://github.com/skizzophrenic/SquachWatch-CYD) now supports a much broader range of hardware. **DNSquachWatch currently supports only the classic 2.8-inch ESP32 CYDs with ST7789 or ILI9341 displays.** Other upstream boards, including ESP32-S3 variants, are not DNSP targets. Focusing on these affordable 2.8-inch CYDs allows dnsprincess to prepare and gift devices at scale.
+The original [SquachWatch project](https://github.com/skizzophrenic/SquachWatch-CYD) now supports a much broader range of hardware. **DNSquachWatch receiver support is limited to the classic 2.8-inch ESP32 CYD with an ST7789 display.** **ILI9341 receiver support has been removed.** DNSP has never gifted an ILI9341 version and now uses those boards for simulation testing. DNSP plans to gift only classic 2.8-inch ST7789 CYDs, specifically selecting boards with both microUSB and USB-C ports. The simulation transmitter is a separate project. Other upstream boards, including ESP32-S3 variants, are not DNSP targets. Focusing on these affordable 2.8-inch CYDs allows dnsprincess to prepare and gift devices at scale.
 
 **dnsprincess loves WiGLE—and that is why WiGLE support is deferred.** This edition does not yet have a dependable, supported GPS setup, and DNSP does not want to contribute inaccurate location data. WiGLE uploads and GPS-backed wardriving exports are not included at this time. Manual location labels help organize your own findings; they are not GPS fixes and are never converted into coordinates for submission.
 
@@ -19,9 +19,8 @@ The original [SquachWatch project](https://github.com/skizzophrenic/SquachWatch-
 | Your display | Firmware |
 |---|---|
 | ST7789, newer CYD batches | [ST7789-80MHz kit](firmware/v1.8.1/ST7789-80MHz/DNSquachWatch-v1.8.1-ST7789-80MHz.zip) |
-| ILI9341, older CYD batches | [ILI9341-80MHz kit](firmware/v1.7.4/ILI9341-80MHz/DNSquachWatch-v1.7.4-ILI9341-80MHz.zip) |
 
-Both kits target the **classic 2.8-inch ESP32 CYD** and start with an **80 MHz display clock**. System settings can switch the display to 40 MHz; the flash clock stays at 40 MHz. If you are unsure which controller your CYD has, try ST7789 first. A solid white screen may mean it needs ILI9341: try the other kit. Keep each kit's four flashing binaries together.
+The current kit targets the **classic 2.8-inch ST7789 CYD** and starts with an **80 MHz display clock**. System settings can switch the display to 40 MHz; the flash clock stays at 40 MHz. Confirm your display controller before flashing: an ST7789 image is not suitable for an ILI9341 panel. Keep the kit's four flashing binaries together.
 
 Also obtain the [microSD content](firmware/v1.5/DNSquachWatch-v1.5-microSD-content.zip) and copy **DNSP Content/v1.5/** to the card root. **Existing v1.5 card content remains compatible with v1.8.1.** Flashing the ESP32 does not copy files to microSD. The full walkthrough, extended language content, and installation document use the supplied card files; backups require the checked installation document. Boot, scanning, essential recovery, and personal visual assets work without card content. No Wi-Fi content download is used.
 
@@ -31,7 +30,7 @@ Each firmware ZIP includes all four flashing binaries, image checksums, an optio
 
 **v1.8.1 updates the ST7789 build to upstream v1.35 while preserving DNSP's additions.** Pocket Mode keeps a BOOT-darkened screen off until BOOT is pressed again; later alerts can temporarily light it without cancelling that choice. Brightness changes use dedicated minus/plus buttons, and upstream pet-movement fixes replace abrupt repositioning with hops. The previous v1.8.0 pets, throws, STRIPES and squad heads-up features remain. Speaker, battery-lamp and additional-board features are not offered on these classic CYDs; GPS/WiGLE collection remains deferred.
 
-The existing `/DNSP Content/v1.5/` remains compatible. Both classic CYD display builds are supplied; physical testing of this release remains required. See the [changelog](CHANGELOG.md).
+The existing `/DNSP Content/v1.5/` remains compatible. ST7789 is the active receiver build; ILI9341 receiver support has been removed. Physical testing of this release remains required. See the [changelog](CHANGELOG.md).
 
 ## What DNSquachWatch adds
 
@@ -96,7 +95,7 @@ Radio matches are clues, not proof of a particular device or owner. Manufacturer
 
 **Masked Mode** hides identifiers on supported screens; it does not anonymize logs, backups, or Pocket Reader files. Treat those files as private data.
 
-The current v1.8.1 ST7789 build passes compilation, native receiver tests and desktop UI checks. ILI9341 has not been rebuilt for this update; its linked kit is an older version. Current BOOT/Pocket Mode, pet, display and storage behavior still needs hardware verification. Earlier ST7789 backup completion was confirmed on hardware in v1.5.1. Avata 2 field testing and human translation review remain pending. See [earlier validation](docs/validation/TEST-REPORT-v1.5.1.md). The supported build targets are `cyd-fast` and `cyd-ili9341-fast`.
+The current v1.8.1 ST7789 build passes compilation, native receiver tests and desktop UI checks. ILI9341 boards are used only for the separate simulation project. Current BOOT/Pocket Mode, pet, display and storage behavior still needs hardware verification. Earlier ST7789 backup completion was confirmed on hardware in v1.5.1. Avata 2 field testing and human translation review remain pending. See [earlier validation](docs/validation/TEST-REPORT-v1.5.1.md). The active receiver build target is `cyd-fast`.
 
 ## Credits and thanks
 
