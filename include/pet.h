@@ -21,10 +21,46 @@ namespace Pet {
     // Does nothing at all unless a pet is unlocked AND switched on, so the
     // call site does not need to check either.
     void tick(TFT_eSPI& t, uint32_t now, int screenW, int bandTop, int bandBottom);
+    // 2 on the large panels: the pets live in a half-size world that the
+    // caller doubles onto the screen (see pet.cpp's zoom). Positions in and
+    // out of this module stay in SCREEN pixels either way; tick()'s
+    // arguments are the exception, in the pets' own (layer) pixels.
+    void setZoom(int k);
+    int  zoom();
+    // Whether tick() can draw anything this frame (a pet earned and chosen,
+    // or the ball out). The caller skips the double-size layer when not.
+    bool anyOut(uint32_t now);
 
     // Cancels whatever he is doing and puts him off screen. Used when the
     // screen changes underneath him, so he does not reappear mid-jump on a
     // screen that has been away for a minute.
     void reset();
+
+    // C1iPPY. A catch he should have an opinion about (a DetectionType);
+    // whether a tap landed on him; a poke; and where he is, for the cursor on
+    // the boards with no touch panel. All harmless when he is not the pet.
+    void noteCatch(uint8_t type);
+    bool clippyHit(int x, int y);
+    void clippyPoke(uint32_t now);
+    bool clippyCenter(int& x, int& y);
+    // The pet as drawn this frame (C1iPPY, T0@$TY or the ball), top left, in
+    // the pet's own coordinates; false when none is on screen. For the
+    // emulator's motion checks.
+    bool drawnAt(int& x, int& y);
+    // The balloons a pet asked for while drawing into the 3.5in's doubled
+    // layer, drawn now at the screen's own size. Call after the layer is
+    // laid down; does nothing when none is waiting.
+    void drawHeldBalloons(TFT_eSPI& t);
+    // Picking him up. A touch that lands on him grabs him at once; every
+    // frame it is held drags him; letting go is a poke when the finger never
+    // went anywhere, a throw when it was still moving, and a drop otherwise.
+    void clippyGrab(int x, int y, uint32_t now);
+    void clippyDrag(int x, int y, uint32_t now);
+    void clippyRelease(uint32_t now);
+
+    // The cell block (pet_jail.inc): the arrest itself, sirens and all. Ten
+    // flings of a pet inside a minute call it; so do the console's JAIL and
+    // the emulator.
+    void arrest(uint32_t now);
 }
 

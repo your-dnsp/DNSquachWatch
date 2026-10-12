@@ -15,6 +15,7 @@ jobs:
           persist-credentials: false
       - run: make -C test -j2
       - run: python3 test/version_consistency_test.py
+      - run: python3 test/coex_size_test.py
       - run: python3 test/installer_test.py
       - run: python3 test/install_tools_test.py
       - run: python3 tools/check_language_content.py
@@ -25,7 +26,7 @@ jobs:
         with:
           persist-credentials: false
       - run: python3 -m pip install platformio==6.1.18
-      - run: pio run -e cyd-fast -e cyd-ili9341-fast
+      - run: pio run -e cyd-fast
   release:
     needs: [native, firmware]
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'

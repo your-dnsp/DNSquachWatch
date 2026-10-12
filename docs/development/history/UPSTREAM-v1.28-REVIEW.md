@@ -2,7 +2,7 @@
 
 Compared the published v1.27.0 and v1.28.0 tags. Shared character drawing, aquarium integer math, the Over 9000 outfit and its unlock, five-bit squad outfit encoding, compatible crypto wrappers and simulator support were integrated. DNSP remains targeted to classic ESP32 CYD displays; the new ESP32-C5 board target, its board files, build environment and web flasher were not added.
 
-Clock merge conflicts came from DNSP having removed unused pin/I2C bench commands; those remain removed, while the new AURA and OUTFIT commands were integrated. SD logging conflict was resolved in favor of DNSP session filenames, bounded retries, error handling and richer evidence logs. DNSP main.cpp received only the new console controls rather than wholesale replacement. DNSP security/duress, startup memory handling, menus, Remington, glitch setting, researched signatures, per-source DEAUTH and backup remain in place. Original upstream README, GIFs and CI/flasher workflows do not replace DNSP documents or release signing.
+Clock merge conflicts came from DNSP having removed unused pin/I2C bench commands; those remain removed, while the new AURA and OUTFIT commands were integrated. SD logging conflict was resolved in favor of DNSP session filenames, bounded retries, error handling and richer evidence logs. DNSP main.cpp received only the new console controls rather than wholesale replacement. DNSP security/duress, startup memory handling, menus, built-in artwork, glitch setting, researched signatures, per-source DEAUTH and backup remain in place. Original upstream README, GIFs and CI/flasher workflows do not replace DNSP documents or release signing.
 
 Source: https://github.com/skizzophrenic/SquachWatch-CYD/releases/tag/v1.28.0
 

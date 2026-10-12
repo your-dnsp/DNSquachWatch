@@ -22,7 +22,7 @@ static void chargeDraw(uint32_t now){
     if(frameBufferOk)pushFrame(0,0);
 #endif
 }
-static void exitChargeMode(){s_chargeMode=false;s_bootDark=false;engine.wakeRadios();applyCpuClock();lastTouch=millis();s_screenDimmed=false;applyBrightness();FramePush::invalidate();if(Security::locked())enterLocked();else enterClear();}
+static void exitChargeMode(){s_chargeMode=false;s_pocket.exit();engine.wakeRadios();applyCpuClock();lastTouch=millis();s_screenDimmed=false;applyBrightness();FramePush::invalidate();if(Security::locked())enterLocked();else enterClear();}
 static void requestChargeMode(uint32_t now){
     if(ReadableLogs::automatic())ReadableLogs::cancel(); // journal makes background refresh resumable
     // Never interrupt a storage operation, an update, or an authenticated
@@ -35,11 +35,18 @@ static void requestChargeMode(uint32_t now){
     StatusLight::off();setCpuFrequencyMhz(80);s_cpuMhzApplied=80;chargeBacklight(Settings::brightness()/2);chargeDraw(now);
 }
 static bool chargeTick(uint32_t now){
-    static bool bootWas=false,longDone=false;static uint32_t bootAt=0;
+    static bool bootWas=false,longDone=false,bootReleased=false;static uint32_t bootAt=0;
     const bool boot=digitalRead(0)==LOW;
+    if(!bootReleased){if(!boot)bootReleased=true;else return false;} // do not act on a button held through boot
     if(boot&&!bootWas){bootAt=now;longDone=false;}
     if(boot&&!longDone&&now-bootAt>=1200){longDone=true;if(s_chargeMode)exitChargeMode();else g_consoleCharge=true;}
-    if(!boot&&bootWas&&!longDone&&now-bootAt>=30){if(s_chargeMode)exitChargeMode();else{s_bootDark=!s_bootDark;chargeBacklight(s_bootDark?0:s_backlightDuty);lastTouch=now;}}
+    if(!boot&&bootWas&&!longDone&&now-bootAt>=30){if(s_chargeMode)exitChargeMode();else{
+        const bool note=!Settings::pocketNoteShown();
+        s_pocket.press(now,s_screenDimmed,note);
+        if(s_bootDark&&note){Settings::markPocketNoteShown();Theme::showToast("POCKET MODE","Press BOOT again to wake",Theme::CYAN,4000);}
+        s_screenDimmed=s_pocket.dark(now,false,0,0,false);
+        applyBrightness();lastTouch=now;
+    }}
     bootWas=boot;
     if(g_consoleCharge){g_consoleCharge=false;if(s_chargeMode)exitChargeMode();else requestChargeMode(now);}
     if(!s_chargeMode)return false;

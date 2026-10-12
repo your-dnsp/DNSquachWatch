@@ -30,6 +30,9 @@ void        uiSysPropsInit(TFT_eSPI& t);
 // same frame drawn again -- so anything that steps by the call rather
 // than by the clock must sit still for it. Other boards draw once.
 void        uiSysPropsTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool advance = true);
+// Where a cursor should stop on the window as it is drawn now: the buttons
+// first, then the tabs. For the boards with no touch panel.
+uint8_t uiSysPropsStops(TFT_eSPI& t, int16_t* xs, int16_t* ys, uint8_t cap);
 SysPropsHit uiSysPropsTouch(TFT_eSPI& t, int x, int y);
 
 

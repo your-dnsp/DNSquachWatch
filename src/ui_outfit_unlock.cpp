@@ -191,7 +191,7 @@ void uiOutfitUnlockTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
 
     // ---- the costume itself ----------------------------------------------
     // Footer holds the outfit name and the dismiss hint.
-    const int footerH   = 34;
+    const int footerH   = Theme::large() ? 42 : 34;   // the hint is the body font
     const int footerTop = panelY + panelH - footerH;
     const int stageH    = footerTop - headBottom;
 
@@ -206,8 +206,11 @@ void uiOutfitUnlockTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
         // Six clear of the footer: the lil guy at pet size is forty pixels
         // tall and was standing on the S of SETTINGS.
         const int baseY = footerTop - 7;
+        // The large panels let him grow with the stage: 1.7 was sized for
+        // the 2.8", and on the 3.5" it left him small in a big card.
+        const float cap = Theme::large() ? 2.6f : 1.7f;
         float scale = (float)stageH / 68.0f;
-        if (scale > 1.7f) scale = 1.7f;
+        if (scale > cap) scale = cap;
         if (scale < 0.6f) scale = 0.6f;
         Squachy::drawWaving(t, w / 2, baseY, now, scale, nullptr, false, 0);
         // The yeti on his right, the lil guy on his left, far enough out to
@@ -228,8 +231,11 @@ void uiOutfitUnlockTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
         // drawWaving() puts the feet on baseY and the head top at
         // baseY - 58*scale, so the scale that fills the stage is the
         // stage height over that same 58 plus a little breathing room.
-        float scale = (float)stageH / 78.0f;
-        if (scale > 1.7f) scale = 1.7f;
+        // Fill the stage on the 3.5", with room over his head for a hat:
+        // at the 2.8"'s 78 the unicorn's horn ran up into the headline.
+        const float cap = Theme::large() ? 4.0f : 1.7f;
+        float scale = (float)stageH / (Theme::large() ? 92.0f : 78.0f);
+        if (scale > cap) scale = cap;
         if (scale < 0.7f) scale = 0.7f;
 
         // The whole render path reads the override, so this shows the
@@ -257,11 +263,12 @@ void uiOutfitUnlockTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
     // Blinks, so it reads as a prompt rather than a label.
     if (((now / 500) % 2) == 0) {
         const char* hint = "TAP TO CONTINUE";
-        t.setTextSize(1);
+        Theme::bodyFontOn(t);
         t.setTextColor(Theme::CYAN);
         int hw = t.textWidth(hint);
         t.setCursor((w - hw) / 2, footerTop + 22);
         t.print(hint);
+        Theme::bodyFontOff(t);
     }
 
     Theme::drawGlitchStatic(t, 6, panelY + 2, w - 6, panelY + panelH - 2);

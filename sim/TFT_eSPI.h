@@ -427,6 +427,7 @@ public:
     // ---- sim-only access for the render harness ---------------------
     const std::vector<uint16_t>& pixelsRGB565() const { return _buf; }
 
+    uint8_t textfont = 1; // public in the pinned TFT_eSPI library
 protected:
     int _w, _h;
     uint8_t _rotation = 0;
@@ -436,7 +437,7 @@ protected:
     int32_t cursor_x = 0, cursor_y = 0;
     uint16_t textcolor = 0xFFFF, textbgcolor = 0x0000;
     uint8_t textsize = 1;
-    uint8_t textfont = 1;
+
     const GFXfont* gfxFont = nullptr;
     bool transparent = false;
 

@@ -1,6 +1,6 @@
 # Receiver simulation labeling
 
-This local v1.5.3 receiver revision recognizes the **DNSP test-address convention**: preserve the tested three-byte OUI and use exactly `00:00:00` for the final three decoded MAC bytes. The convention is neither globally reserved nor authenticated. Real hardware may use it, and a sender may spoof it. `SIMULATED` describes the address convention, not proof of a particular transmitter or trustworthy research.
+The v1.7.4 receiver revision recognizes the **DNSP test-address convention**: preserve the tested three-byte OUI and use exactly `DD:DD:DD` for the final three decoded MAC bytes. The convention is neither globally reserved nor authenticated. Real hardware may use it, and a sender may spoof it. `SIMULATED` describes the address convention, not proof of a particular transmitter or trustworthy research.
 
 ## Detection and provenance
 
@@ -16,7 +16,7 @@ Sketchy Environment endpoints retain their own addresses and provenance. Two mar
 
 ## Persistence and exports
 
-The BlackBox record retains its 64-byte layout. Simulation and address-role bits use previously unused flag bits. Old records remain readable; a zero suffix can be recognized from an old decoded MAC even without a stored flag. Existing legacy BLE record normalization is reused before evaluating that MAC; Wi-Fi byte order is unchanged.
+The BlackBox record retains its 64-byte layout. Simulation and address-role bits use previously unused flag bits. Old records remain readable; the current DD:DD:DD suffix can be recognized from an old decoded MAC even without a stored flag. Existing legacy BLE record normalization is reused before evaluating that MAC; Wi-Fi byte order is unchanged.
 
 Sketchy incidents use a new NVS key, `events-v153`, with fallback loading of the previous layout. Older endpoints receive generic matched-address provenance rather than an invented source role.
 
@@ -36,7 +36,7 @@ Final complete images: ST7789 1,965,936 bytes (144 bytes free); ILI9341 1,965,98
 
 ## Validation and hardware work remaining
 
-Focused host checks cover exact suffix and near misses, unrelated payload zeros, unchanged ordinary classification/confidence, unknown zero-suffix input not becoming a detection, subtag preservation/deduplication, merging and queued provenance, storage restoration, legacy records, readable migration and redaction. Deauth checks distinguish source from destination/BSSID and retain burst/cooldown behavior. Incident checks cover fully simulated and mixed evidence, persistence and endpoint exports. Maximum-size research and Remote ID captures are checked for bounded formatting.
+Focused host checks cover exact suffix and near misses, unrelated payload marker bytes, unchanged ordinary classification/confidence, unknown DD-suffix input not becoming a detection, subtag preservation/deduplication, merging and queued provenance, storage restoration, legacy records, readable migration and redaction. Deauth checks distinguish source from destination/BSSID and retain burst/cooldown behavior. Incident checks cover fully simulated and mixed evidence, persistence and endpoint exports. Maximum-size research and Remote ID captures are checked for bounded formatting.
 
 The full host suite and UI simulator are also run. Simulator screenshots review the simulation alert badge and mixed-incident explanation. Builds do not establish RF or hardware correctness. Still verify live BLE and Wi-Fi profiles from the separate tester, Remote ID observations, deauth bursts across channel hops, mixed incidents, reboot-restored history, and a real SD backup/export with redacted reports. The tester firmware itself is outside this change. PIN destructive/security tests remain deferred until a spare unit is available.
 
@@ -53,3 +53,5 @@ Final validation: the full `make -C test -j2` suite passed; `DNSP_UI_TEST=1` sim
 - Documentation: README, contribution guide, documentation index and this report.
 
 Existing unrelated local changes from the preceding gift-readiness work remain in the workspace. This report describes the receiver simulation addition; no commit or GitHub publication was made by this task.
+
+As of v1.7.4, matching uses `mac[3] == 0xDD && mac[4] == 0xDD && mac[5] == 0xDD` with any first three bytes, compatible with DNSP tester v0.1.2. The former zero suffix no longer supplies simulation evidence. Existing stored addresses are evaluated under the current convention; user subtags, practice examples and already-exported files are not rewritten. Storage and export layouts remain unchanged.

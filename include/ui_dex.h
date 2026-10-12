@@ -19,6 +19,8 @@ void uiDexOpenCard(uint8_t entry);
 void uiDexTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool advance = true);
 
 enum class DexTap : uint8_t { NONE, HANDLED, BACK };
+// Where a cursor should stop, for the boards with no touch panel.
+uint8_t uiDexStops(int screenW, int screenH, int16_t* xs, int16_t* ys, uint8_t cap);
 DexTap uiDexHitTest(TFT_eSPI& t, int x, int y, int screenW, int screenH);
 
 // For the Settings row: "11/17".

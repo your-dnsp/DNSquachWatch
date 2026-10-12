@@ -57,8 +57,11 @@ const uint8_t* outgoing(uint32_t now, size_t& len, uint32_t& gen);
 
 // ---- radio side ----
 void setOwnMac(const uint8_t mac[6]);
-// BLE host task. Copies and returns; see the note at the top.
-void onFrame(const uint8_t mac[6], const uint8_t* d, size_t len, const char* name);
+// BLE host task. Copies and returns; see the note at the top. `sealedAs` is
+// the six bytes the frame's nonce was built from when that is not the
+// address it came from: a phone's identity (squachmesh.h). Null for a board.
+void onFrame(const uint8_t mac[6], const uint8_t* d, size_t len, const char* name,
+             const uint8_t* sealedAs = nullptr);
 
 struct Message {
     bool     have;
@@ -122,6 +125,27 @@ struct UpdatedIn {
     uint8_t mac[6];
 };
 bool takeUpdated(UpdatedIn& out);
+
+// ---- the squad heads-up ---------------------------------------------------
+// See meshmsg.h. A board that catches something serious tells the squad
+// once; the boards that hear it show a banner, not an alert card -- it is
+// somebody else's catch. Trackers are left out: a squad member's own keys
+// would set it off all day.
+struct HeadsUpIn {
+    uint8_t  type;          // DetectionType
+    int8_t   rssi;          // as the sender heard it
+    uint8_t  tail[3];       // the device's last three address bytes
+    char     from[13];
+    uint8_t  mac[6];
+    uint32_t at;
+};
+// Which types travel.
+bool headsUpType(uint8_t type);
+// This board just announced a catch. Queued, not sent: it goes out on the
+// next tick with the air free, at most one a minute, never the same device
+// twice in ten, and not at all with HEADS-UP or TRANSMIT off.
+void noteCatch(uint8_t type, int8_t rssi, const uint8_t mac[6], uint32_t now);
+bool takeHeadsUp(HeadsUpIn& out);
 
 // Whether that board has shown, within the last few minutes, that it holds
 // our phrase: a HELLO, a message, an emote, or any other sealed frame this

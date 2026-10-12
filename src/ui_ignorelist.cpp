@@ -14,12 +14,13 @@ static int g_scroll = 0;
 // Same fixed-height-at-size-2 approach Settings and the detection filter
 // use -- shared by drawing and hit-testing so the two cannot drift apart.
 static void computeGeom(TFT_eSPI& t, int screenH, int& top, int& bodyBottom, int& rowH) {
-    top = TOP_MARGIN + Theme::LIST_HEADING_H;
+    top = TOP_MARGIN + Theme::listHeadingH();
     bodyBottom = screenH - Theme::pinnedBackH(t.width()) - 2;
     // Two lines per row now -- type above, MAC below -- so this is a fixed
     // height rather than one derived from a single line of text.
+    // 48 on the large panels: a size-3 type over a body-font MAC.
     (void)t;
-    rowH = 32;
+    rowH = Theme::large() ? 48 : 32;
 }
 
 void uiIgnoreListInit(TFT_eSPI& t) {
@@ -51,10 +52,12 @@ static void drawRow(TFT_eSPI& t, int w, int y, int hgt, uint8_t idx) {
 
     char buf[20];
     Privacy::mac(buf, sizeof buf, mac);
-    t.setTextSize(1);
+    const int macY = y + 5 + t.fontHeight();   // under the type, whatever its size
+    Theme::bodyFontOn(t);
     t.setTextColor(Theme::WHITE, Theme::BG);
-    t.setCursor(6, y + 21);
+    t.setCursor(6, macY);
     t.print(buf);
+    Theme::bodyFontOff(t);
 
     // REMOVE, drawn as a real button so it reads as the one thing on the
     // row you can press. Its rect matches uiIgnoreListHitRemove() exactly.
@@ -85,14 +88,15 @@ void uiIgnoreListTick(TFT_eSPI& t, uint32_t now) {
         const char* m1 = "NOTHING MUTED";
         t.setCursor((w - t.textWidth(m1)) / 2, h / 2 - 26);
         t.print(m1);
-        t.setTextSize(1);
+        Theme::bodyFontOn(t);
         t.setTextColor(Theme::CYAN, Theme::BG);
         const char* m2 = "Tap IGNORE on an alert to mute";
         const char* m3 = "a device you own.";
         t.setCursor((w - t.textWidth(m2)) / 2, h / 2 + 2);
         t.print(m2);
-        t.setCursor((w - t.textWidth(m3)) / 2, h / 2 + 14);
+        t.setCursor((w - t.textWidth(m3)) / 2, h / 2 + 6 + t.fontHeight());
         t.print(m3);
+        Theme::bodyFontOff(t);
         return;
     }
 
@@ -107,10 +111,11 @@ void uiIgnoreListTick(TFT_eSPI& t, uint32_t now) {
     // longer than the screen without having to scroll to find out.
     char cnt[24];
     snprintf(cnt, sizeof(cnt), "%u / %u", (unsigned)n, (unsigned)IgnoreList::MAX);
-    t.setTextSize(1);
+    Theme::bodyFontOn(t);
     t.setTextColor(Theme::VAPOR_PURPLE, Theme::BG);
-    t.setCursor(w - t.textWidth(cnt) - 8, Theme::LIST_TOP + (Theme::LIST_HEADING_H - t.fontHeight()) / 2);
+    t.setCursor(w - t.textWidth(cnt) - 8, Theme::listHeadingY(t));
     t.print(cnt);
+    Theme::bodyFontOff(t);
 
     if ((int)n > (bodyBottom - top) / rowH) {
         Theme::drawScrollbar(t, w - 3, top, bodyBottom - top,

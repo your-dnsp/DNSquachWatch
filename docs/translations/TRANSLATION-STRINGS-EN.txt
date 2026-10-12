@@ -211,7 +211,6 @@ REMEMBER FOR VERIFIED WI-FI
 WI-FI NOT AUTHENTICATED THIS BOOT
 no-label-set
 location-unavailable
-Remington
 Double-tap to return
 
 # v1.2.1 additions

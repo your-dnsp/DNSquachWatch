@@ -260,17 +260,22 @@ void drawAll(TFT_eSPI& t, uint32_t now) {
     t.setTextWrap(false);
     // Header: BACK, then which network this is for.
     Theme::drawWin95Button(t, BACK_X, BACK_Y, BACK_W, BACK_H, "BACK", false);
-    t.setTextSize(1);
+    // On the large panels the two lines become one, in the body font: the
+    // 16-row face has no room to stack in the 25 rows above the field.
+    const bool big = Theme::large();
+    Theme::bodyFontOn(t);
     t.setTextColor(Theme::VAPOR_PINK, Theme::BG);
     t.setCursor(BACK_X + BACK_W + 8, BACK_Y + 1);
     t.print(s_textMode?"LOCATION LABEL":"PASSWORD FOR");
     t.setTextColor(Theme::CYAN, Theme::BG);
-    t.setCursor(BACK_X + BACK_W + 8, BACK_Y + 11);
+    const int sx = BACK_X + BACK_W + 8 + (big ? t.textWidth("PASSWORD FOR ") : 0);
+    t.setCursor(sx, big ? BACK_Y + 1 : BACK_Y + 11);
     char ssid[40];
-    const int maxChars = (w - (BACK_X + BACK_W + 8) - MARGIN) / t.textWidth("M");
+    const int maxChars = (w - sx - MARGIN) / t.textWidth("M");
     char pv[40];
     snprintf(ssid, sizeof ssid, "%.*s", maxChars > 32 ? 32 : maxChars, Privacy::name(s_ssid, pv, sizeof pv));
     t.print(ssid);
+    Theme::bodyFontOff(t);
     drawField(t, w, now);
     drawShow(t, w);
     drawKeys(t);

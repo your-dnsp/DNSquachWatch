@@ -160,8 +160,9 @@ static void rowLayout(TFT_eSPI& t, int w, int h, int& bodyTop, int& bodyBottom, 
     // correctly reads back whatever font+size is currently active.
     t.setTextSize(2);
     int nameH = t.fontHeight();
-    t.setTextSize(1);
+    Theme::bodyFontOn(t);           // the detail line's face
     int detailH = t.fontHeight();
+    Theme::bodyFontOff(t);
     rowH = 1 /* topPad */ + nameH + detailH + 2;
 }
 
@@ -241,7 +242,7 @@ void uiRawScanTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool i
     // Only the BACKGROUND moves. Everything else on this screen still
     // begins where it did, so no content shifts.
     const int bgTop = 0;
-switch (Settings::background()) {
+if (!Theme::stillBackdrop(t)) switch (Settings::background()) {
         case Settings::Background::STARFIELD: Theme::drawStarfield(t, now, bgTop, bodyBottom); break;
         case Settings::Background::TOASTERS:   Theme::drawFlyingToasters(t, now, bgTop, bodyBottom); break;
         case Settings::Background::AQUARIUM:   Theme::drawAquarium(t, now, bgTop, bodyBottom); break;
@@ -279,11 +280,12 @@ switch (Settings::background()) {
         if (isBle) {
             char sub[24];
             snprintf(sub, sizeof(sub), "%u found so far", (unsigned)eng.rawBleCount());
-            t.setTextSize(1);
+            Theme::bodyFontOn(t);
             t.setTextColor(Theme::CYAN, Theme::BG);
             int sw = t.textWidth(sub);
             t.setCursor((w - sw) / 2, bodyTop + bodyH / 3 + 35);
             t.print(sub);
+            Theme::bodyFontOff(t);
         }
 
         drawBottomBar(t, w, h, isBle);
@@ -337,7 +339,7 @@ switch (Settings::background()) {
             t.setCursor(4, y + topPad);
             char pv[40]; t.print(Privacy::name(heading, pv, sizeof pv));
 
-            t.setTextSize(1);
+            Theme::bodyFontOn(t);
             t.setTextColor(Theme::WHITE, Theme::BG);
             char mac[24];
             Privacy::mac(mac, sizeof mac, r->mac);
@@ -371,9 +373,15 @@ switch (Settings::background()) {
             t.setCursor(4, y + topPad);
             char pv[40]; t.print(Privacy::name(heading, pv, sizeof pv));
 
-            t.setTextSize(1);
+            Theme::bodyFontOn(t);
             t.setTextColor(Theme::WHITE, Theme::BG);
             char line[24];
+#if SQW_WIFI_5G
+            if (eng.rawWifiChannel(idx) > 14)
+                snprintf(line, sizeof(line), "5G CH%u  %s", (unsigned)eng.rawWifiChannel(idx),
+                         eng.rawWifiOpen(idx) ? "OPEN" : "LOCKED");
+            else
+#endif
             snprintf(line, sizeof(line), "CH%u  %s", (unsigned)eng.rawWifiChannel(idx),
                      eng.rawWifiOpen(idx) ? "OPEN" : "LOCKED");
             t.setCursor(4, y + detailY);
@@ -389,6 +397,7 @@ switch (Settings::background()) {
 
         y += rowH;
     }
+    Theme::bodyFontOff(t);
 
     Theme::drawScrollbar(t, w - 4, bodyTop, bodyH, count, max, g_scroll);
 

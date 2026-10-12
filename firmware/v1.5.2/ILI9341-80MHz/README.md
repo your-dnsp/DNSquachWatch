@@ -1,6 +1,6 @@
 # DNSquachWatch v1.5.2 — ILI9341, 80MHz
 
-Local build based on SquachWatch v1.28.0. This package includes all four flashing binaries. Existing DNSP menus, detection intelligence, Remington, security and the hardware-tested v1.5.1 backup fixes remain included.
+Local build based on SquachWatch v1.28.0. This package includes all four flashing binaries. Existing DNSP menus, detection intelligence, built-in artwork, security and the hardware-tested v1.5.1 backup fixes remain included.
 
 ## What changed
 

@@ -18,7 +18,7 @@ int8_t  s_openCell = -1;      // the square whose paragraph is up, or -1
 // landscape wide and short, and the icon is sized from whichever is smaller.
 void geom(TFT_eSPI& t, int w, int h, int& gx, int& gy, int& cw, int& ch) {
     const Theme::ButtonBarGeom bar = Theme::computeButtonBar(w, h);
-    const int top    = TOP + 14;
+    const int top    = TOP + Theme::listHeadingH() + (Theme::large() ? 3 : 0);
     const int bottom = bar.y - 6;
     const int pad    = 6, gap = 4;
     cw = (w - 2 * pad - 3 * gap) / 4;
@@ -71,7 +71,7 @@ void drawCard(TFT_eSPI& t, int w, int h) {
              (unsigned)Bingo::markedCount(), (unsigned)lines, lines == 1 ? "" : "S");
     Theme::drawListHeading(t, head, Bingo::markedCount() == Bingo::CELLS ? Theme::AMBER : Theme::CYAN);
 
-    t.setTextSize(1);
+    Theme::bodyFontOn(t);
     for (uint8_t i = 0; i < Bingo::CELLS; i++) {
         const int x = gx + (i % 4) * (cw + 4);
         const int y = gy + (i / 4) * (ch + 4);
@@ -87,9 +87,11 @@ void drawCard(TFT_eSPI& t, int w, int h) {
         // uncaught square wears it faded rather than empty: the card is a
         // list of things to go and find, so it has to show what they look
         // like before you have found one.
-        const int s = (cw < ch ? cw : ch) / 2 - 5;
+        // A little smaller and higher on the large panels, clear of the
+        // body-font name under it.
+        const int s = (cw < ch ? cw : ch) / 2 - (Theme::large() ? 9 : 5);
         if (s >= 4) {
-            const int icy = y + ch / 2 - 4;
+            const int icy = y + ch / 2 - (Theme::large() ? 8 : 4);
             Theme::drawTypeIcon(t, type, x + cw / 2, icy, s);
             // Not yet caught: the icon behind a scanline veil. The icons draw
             // from their own palette, so dimming the theme's does nothing to
@@ -115,13 +117,14 @@ void drawCard(TFT_eSPI& t, int w, int h) {
             t.print(d);
         }
     }
+    Theme::bodyFontOff(t);
 }
 
 void drawStats(TFT_eSPI& t, int w, int h) {
     Theme::drawListHeading(t, "BINGO STATS", Theme::VAPOR_PINK);
     const Theme::ButtonBarGeom bar = Theme::computeButtonBar(w, h);
-    t.setTextSize(1);
-    int y = TOP + 18;
+    Theme::bodyFontOn(t);
+    int y = TOP + Theme::listHeadingH() + 4;
     const int lineH = t.fontHeight() + 6;
 
     struct Row { const char* k; char v[24]; } rows[6];
@@ -146,6 +149,7 @@ void drawStats(TFT_eSPI& t, int w, int h) {
     t.setTextColor(Theme::W95_LIGHT, Theme::BG);
     t.setCursor(10, y + 4);
     t.print(Bingo::weekNumber() ? "A fresh card every week." : "No clock yet: this card stands.");
+    Theme::bodyFontOff(t);
 }
 
 // The "are you sure" panel behind NEW. A week's marks are the whole game, and

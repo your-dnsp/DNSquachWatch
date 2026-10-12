@@ -7,19 +7,22 @@
 #include <stdio.h>
 
 namespace {
-constexpr int CARD_W = 232, CARD_H = 96;
-constexpr int BTN_H  = 20;
+// A size up on the large panels: a size-2 question, a size-3 zone, the body
+// font for the time, and taller buttons.
+int cardW() { return Theme::large() ? 320 : 232; }
+int cardH() { return Theme::large() ? 136 : 96; }
+int btnH()  { return Theme::large() ? 30 : 20; }
 
 void cardRect(int screenW, int screenH, int& x, int& y) {
-    x = (screenW - CARD_W) / 2;
+    x = (screenW - cardW()) / 2;
     // A little above centre, clear of the button bar on a landscape screen.
-    y = (screenH - CARD_H) / 2 - 8;
+    y = (screenH - cardH()) / 2 - 8;
 }
 
 void buttonRects(int cx0, int cy0, int& px, int& okx, int& okw, int& nx, int& by) {
-    by  = cy0 + CARD_H - BTN_H - 6;
+    by  = cy0 + cardH() - btnH() - 6;
     px  = cx0 + 6;
-    nx  = cx0 + CARD_W - 6 - 34;
+    nx  = cx0 + cardW() - 6 - 34;
     okx = px + 34 + 6;
     okw = nx - 6 - okx;
 }
@@ -31,42 +34,45 @@ void uiZoneCardDraw(TFT_eSPI& t, uint32_t now) {
     (void)now;
     int x, y;
     cardRect(t.width(), t.height(), x, y);
-    t.fillRoundRect(x, y, CARD_W, CARD_H, 6, Theme::BG);
-    t.drawRoundRect(x, y, CARD_W, CARD_H, 6, Theme::VAPOR_PURPLE);
-    t.drawRoundRect(x + 1, y + 1, CARD_W - 2, CARD_H - 2, 5, Theme::VAPOR_PURPLE);
-    t.setTextSize(1);
+    t.fillRoundRect(x, y, cardW(), cardH(), 6, Theme::BG);
+    t.drawRoundRect(x, y, cardW(), cardH(), 6, Theme::VAPOR_PURPLE);
+    t.drawRoundRect(x + 1, y + 1, cardW() - 2, cardH() - 2, 5, Theme::VAPOR_PURPLE);
+    t.setTextSize(Theme::uiTextSize(t, 1));
     t.setTextWrap(false);
     const char* head = "WHICH TIME ZONE?";
     t.setTextColor(Theme::CYAN, Theme::BG);
-    t.setCursor(x + (CARD_W - t.textWidth(head)) / 2, y + 7);
+    t.setCursor(x + (cardW() - t.textWidth(head)) / 2, y + 7);
     t.print(head);
+    int ly = y + 7 + t.fontHeight() + 7;          // 22 in the system font
     // The zone, large, and the time it makes of right now: the second line
     // is how you know the first is right without knowing the names.
-    t.setTextSize(2);
+    t.setTextSize(Theme::upSize(2));
     const char* zn = Settings::timeZoneName();
     t.setTextColor(Theme::VAPOR_PINK, Theme::BG);
-    t.setCursor(x + (CARD_W - t.textWidth(zn)) / 2, y + 22);
+    t.setCursor(x + (cardW() - t.textWidth(zn)) / 2, ly);
     t.print(zn);
-    t.setTextSize(1);
+    ly += t.fontHeight() + 6;                       // 44 in the system font
+    Theme::bodyFontOn(t);
     char tm[8], date[20], line[32];
     bool pm = false;
     Clock::formatTime(tm, sizeof tm, true, &pm);
     Clock::formatDate(date, sizeof date);
     snprintf(line, sizeof line, "%s %s  %s", tm, pm ? "PM" : "AM", date);
     t.setTextColor(Theme::VAPOR_YELLOW, Theme::BG);
-    t.setCursor(x + (CARD_W - t.textWidth(line)) / 2, y + 44);
+    t.setCursor(x + (cardW() - t.textWidth(line)) / 2, ly);
     t.print(line);
+    Theme::bodyFontOff(t);
     int px, okx, okw, nx, by;
     buttonRects(x, y, px, okx, okw, nx, by);
-    Theme::drawButton(t, px,  by, 34,  BTN_H, "<", false);
-    Theme::drawButton(t, okx, by, okw, BTN_H, "THIS IS RIGHT", false);
-    Theme::drawButton(t, nx,  by, 34,  BTN_H, ">", false);
+    Theme::drawButton(t, px,  by, 34,  btnH(), "<", false);
+    Theme::drawButton(t, okx, by, okw, btnH(), "THIS IS RIGHT", false);
+    Theme::drawButton(t, nx,  by, 34,  btnH(), ">", false);
 }
 
 ZoneHit uiZoneCardHit(int tx, int ty, int screenW, int screenH) {
     int x, y;
     cardRect(screenW, screenH, x, y);
-    if (tx < x || tx >= x + CARD_W || ty < y || ty >= y + CARD_H) return ZoneHit::NONE;
+    if (tx < x || tx >= x + cardW() || ty < y || ty >= y + cardH()) return ZoneHit::NONE;
     int px, okx, okw, nx, by;
     buttonRects(x, y, px, okx, okw, nx, by);
     if (ty < by - 4) return ZoneHit::CARD;

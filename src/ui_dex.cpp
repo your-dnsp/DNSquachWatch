@@ -29,7 +29,7 @@ void panel(TFT_eSPI& t, int x, int y, int w, int h, uint16_t edge) {
 void grid(int w, int h, int& cols, int& rows, int& gx, int& gy, int& cw, int& ch) {
     cols = w > h ? 6 : 4;
     rows = (Dex::ENTRIES + cols - 1) / cols;
-    const int top = TOP + Theme::LIST_HEADING_H + 2;
+    const int top = TOP + Theme::listHeadingH() + (Theme::large() ? 4 : 2);
     const int bottom = h - Theme::pinnedBackH(w) - 4;
     const int pad = 4, gap = 3;
     cw = (w - 2 * pad - (cols - 1) * gap) / cols;
@@ -53,7 +53,7 @@ void drawIndex(TFT_eSPI& t, int w, int h, const DetectionEngine& eng) {
     snprintf(head, sizeof head, "%u OF %u CAUGHT", (unsigned)got, (unsigned)Dex::ENTRIES);
     Theme::drawListHeading(t, head, got == Dex::ENTRIES ? Theme::AMBER : Theme::CYAN);
 
-    t.setTextSize(1);
+    Theme::bodyFontOn(t);
     for (uint8_t i = 0; i < Dex::ENTRIES; i++) {
         const int x = gx + (i % cols) * (cw + 3);
         const int y = gy + (i / cols) * (ch + 3);
@@ -78,9 +78,11 @@ void drawIndex(TFT_eSPI& t, int w, int h, const DetectionEngine& eng) {
 
         // The icon, the same one the alert and the LOG draw; a silhouette
         // behind BINGO's scanline veil until it has been caught.
-        const int s = (cw < ch ? cw : ch) / 2 - 6;
+        // A little smaller and higher on the large panels, clear of the
+        // body-font name under it.
+        const int s = (cw < ch ? cw : ch) / 2 - (Theme::large() ? 10 : 6);
         if (s >= 4) {
-            Theme::drawTypeIcon(t, type, x + cw / 2, y + ch / 2 - 2, s);
+            Theme::drawTypeIcon(t, type, x + cw / 2, y + ch / 2 - (Theme::large() ? 6 : 2), s);
             if (!have)
                 for (int ly = y + 1; ly < y + ch - 1; ly += 2)
                     t.drawFastHLine(x + 1, ly, cw - 2, panelFill());
@@ -93,6 +95,7 @@ void drawIndex(TFT_eSPI& t, int w, int h, const DetectionEngine& eng) {
         t.setCursor(x + (cw - tw) / 2, y + ch - t.fontHeight() - 2);
         t.print(name);
     }
+    Theme::bodyFontOff(t);
 }
 
 // ---- a card --------------------------------------------------------------
@@ -127,17 +130,21 @@ void drawCard(TFT_eSPI& t, int w, int h, const DetectionEngine& eng) {
              have ? Dex::shortName(type) : "?????", st, Dex::rarityName(Dex::rarity(type)));
     Theme::drawListHeading(t, head, have ? col : Theme::W95_LIGHT);
 
-    t.setTextSize(1);
+    Theme::bodyFontOn(t);
     const int lh = t.fontHeight() + 2;
     const bool wide = w > h;
-    const int top = TOP + Theme::LIST_HEADING_H + 4;
+    const int top = TOP + Theme::listHeadingH() + 4;
     const int bottom = bar.y - 4;
 
     // Left (or top): the icon in a box, and the record under it.
     // A third of the width and a bit under a third of the height: 104x74 on
     // the 2.8", 160x99 on the 3.5", so the icon grows with the panel.
     const int boxW = wide ? w / 3 : w - 12;
-    const int boxH = wide ? (h * 31) / 100 : 60;
+    // A compact screen (240x135) has 71 rows between the heading and the
+    // buttons: a shorter icon box, three of the five records, and the lore
+    // cut to what fits beside them.
+    const bool tiny = Theme::compact();
+    const int boxH = tiny ? 26 : wide ? (h * 31) / 100 : 60;
     const int bx = 6, by = top;
     panel(t, bx, by, boxW, boxH, col);
     const int s = (boxW < boxH ? boxW : boxH) / 2 - 8;
@@ -161,7 +168,7 @@ void drawCard(TFT_eSPI& t, int w, int h, const DetectionEngine& eng) {
 
     // The record, in a panel of its own under the icon; and the text column
     // in one beside it (or below, in portrait), sized from what it holds.
-    const int recH = 5 * lh + 6;
+    const int recH = (tiny ? 3 : 5) * lh + 6;
     panel(t, bx, by + boxH + 3, boxW, recH, Theme::PURPLE);
     int ry = by + boxH + 3 + 4;
     const int rx = bx + 3, rw = boxW - 6;
@@ -169,13 +176,13 @@ void drawCard(TFT_eSPI& t, int w, int h, const DetectionEngine& eng) {
     snprintf(v, sizeof v, "%lu", (unsigned long)eng.lifetimeTypeCount(type));
     drawRow(t, rx, ry, rw, "CAUGHT", have ? v : "0", col, text); ry += lh;
     when(rec.firstEpoch, v, sizeof v);
-    drawRow(t, rx, ry, rw, "FIRST", have ? v : "--", col, text); ry += lh;
+    if (!tiny) { drawRow(t, rx, ry, rw, "FIRST", have ? v : "--", col, text); ry += lh; }
     when(rec.lastEpoch, v, sizeof v);
     drawRow(t, rx, ry, rw, "LAST", have ? v : "--", col, text); ry += lh;
-    if (rec.bestRssi > -128) snprintf(v, sizeof v, "%d dBm", (int)rec.bestRssi); else snprintf(v, sizeof v, "--");
+    if (rec.bestRssi > -128) snprintf(v, sizeof v, tiny ? "%d" : "%d dBm", (int)rec.bestRssi); else snprintf(v, sizeof v, "--");
     drawRow(t, rx, ry, rw, "CLOSEST", have ? v : "--", col, text); ry += lh;
     snprintf(v, sizeof v, "%u", (unsigned)rec.night);
-    drawRow(t, rx, ry, rw, "AT NIGHT", have ? v : "--", col, text); ry += lh;
+    if (!tiny) { drawRow(t, rx, ry, rw, "AT NIGHT", have ? v : "--", col, text); ry += lh; }
 
     // Right (or below): two panels. The lore (or, uncaught, its blanked
     // shape) in one sized to its lines; where it lives and what Squachy says
@@ -191,6 +198,7 @@ void drawCard(TFT_eSPI& t, int w, int h, const DetectionEngine& eng) {
     int ty = py + 3;
     if (have) {
         n = Theme::wrapText(t, Dex::lore(type), tw, lines, wide ? 8 : 4);
+        if (tiny && n > (bottom - py - 6) / lh) n = (uint8_t)((bottom - py - 6) / lh);
         panel(t, px, py, pw, n * lh + 6, Theme::PURPLE);
         t.setTextColor(Theme::WHITE, panelFill());
         for (uint8_t i = 0; i < n && ty + lh <= bottom; i++) { t.setCursor(tx, ty); t.print(lines[i]); ty += lh; }
@@ -233,6 +241,7 @@ void drawCard(TFT_eSPI& t, int w, int h, const DetectionEngine& eng) {
         }
     }
 
+    Theme::bodyFontOff(t);
     Theme::drawButton(t, bar.x[0], bar.y, bar.w[0], bar.h, "[ < ]", false);
     Theme::drawButton(t, bar.x[1], bar.y, bar.w[1], bar.h, "[ DEX ]", false);
     Theme::drawButton(t, bar.x[2], bar.y, bar.w[2], bar.h, "[ > ]", false);
@@ -266,6 +275,24 @@ void uiDexTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool advan
     } else {
         drawCard(t, w, h, eng);
     }
+}
+
+uint8_t uiDexStops(int screenW, int screenH, int16_t* xs, int16_t* ys, uint8_t cap) {
+    uint8_t n = 0;
+    auto add = [&](int x, int y) { if (n < cap) { xs[n] = (int16_t)x; ys[n] = (int16_t)y; n++; } };
+    if (s_card < 0) {
+        int cols, rows, gx, gy, cw, ch;
+        grid(screenW, screenH, cols, rows, gx, gy, cw, ch);
+        for (int i = 0; i < Dex::ENTRIES && i < cols * rows; i++)
+            add(gx + (i % cols) * (cw + 3) + cw / 2, gy + (i / cols) * (ch + 3) + ch / 2);
+        add(screenW / 2, screenH - Theme::pinnedBackH(screenW) / 2);
+        return n;
+    }
+    const Theme::ButtonBarGeom bar = Theme::computeButtonBar(screenW, screenH);
+    add(bar.x[2] + bar.w[2] / 2, bar.y + bar.h / 2);   // next
+    add(bar.x[0] + bar.w[0] / 2, bar.y + bar.h / 2);   // previous
+    add(bar.x[1] + bar.w[1] / 2, bar.y + bar.h / 2);   // back to the index
+    return n;
 }
 
 DexTap uiDexHitTest(TFT_eSPI& t, int x, int y, int screenW, int screenH) {

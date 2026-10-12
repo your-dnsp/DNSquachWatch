@@ -63,11 +63,12 @@ void uiOutfitTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool ad
     char buf[24];
     snprintf(buf, sizeof(buf), "%u / %u unlocked",
              (unsigned)Squachy::unlockedOutfitCount(), (unsigned)Squachy::outfitCount());
-    t.setTextSize(1);
+    Theme::bodyFontOn(t);
     t.setTextColor(Theme::CYAN, Theme::BG);
     int bw = t.textWidth(buf);
     t.setCursor((w - bw) / 2, footerTop + 22);
     t.print(buf);
+    Theme::bodyFontOff(t);
 
     int ay = footerTop + 12;
     t.fillTriangle(24, ay, 10, ay + 10, 24, ay + 20, Theme::VAPOR_PINK);

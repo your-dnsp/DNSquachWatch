@@ -34,10 +34,13 @@ uint8_t  s_unreadAtOpen = 0;   // how many to mark as new, counted before readin
 Rect     s_prev = { 0, 0, 0, 0 }, s_next = { 0, 0, 0, 0 };
 Rect     s_invite = { 0, 0, 0, 0 }, s_add = { 0, 0, 0, 0 }, s_back = { 0, 0, 0, 0 };
 Rect     s_forget = { 0, 0, 0, 0 }, s_hunt = { 0, 0, 0, 0 };
+Rect     s_send = { 0, 0, 0, 0 };
 Rect     s_rows[ROWS_MAX];
 uint8_t  s_rowN = 0;
 
-const int BW = 68, BH = 26;
+// The corner buttons, a size up on the large panels so their labels can be.
+int16_t btnW() { return Theme::large() ? 96 : 68; }
+int16_t btnH() { return Theme::large() ? 34 : 26; }
 const float SCALE = 1.5f;
 
 const char* memberName(const SquachMesh::Peer& p) {
@@ -140,10 +143,11 @@ void uiSquadTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool adv
     } else {
         snprintf(cnt, sizeof cnt, "%u IN RANGE", (unsigned)s_n);
     }
-    t.setTextSize(1);
+    Theme::bodyFontOn(t);
     t.setTextColor(Theme::CYAN, Theme::BG);
-    t.setCursor(80, 12);
+    t.setCursor(80, Theme::large() ? 6 : 12);   // level with SQUAD
     t.print(cnt);
+    Theme::bodyFontOff(t);
 
     // ---- the carousel ---------------------------------------------------
     const int colW  = port ? w : 176;
@@ -158,14 +162,17 @@ void uiSquadTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool adv
         const Mesh::SquadMember& m = s_members[s_sel];
         Squachy::setOutfitPreview((int8_t)m.peer.outfit);
         Squachy::setShadesPreview((int8_t)m.peer.shade);
+        Squachy::setAuraPreview(m.peer.aura ? 1 : 0);
         Squachy::drawWaving(t, cx, baseY, now, SCALE, nullptr, false, 0, true);
+        Squachy::setAuraPreview(-1);
         Squachy::setShadesPreview(-1);
         Squachy::setOutfitPreview(-1);
 
         t.setTextSize(2);
         t.setTextColor(Theme::WHITE, Theme::BG);
         centred(t, memberName(m.peer), cx, baseY + 4);
-        t.setTextSize(1);
+        Theme::bodyFontOn(t);
+        const int subH = t.fontHeight();
         t.setTextColor(Theme::CYAN, Theme::BG);
         char sub[40];
         if (s_roster)
@@ -175,6 +182,7 @@ void uiSquadTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool adv
             snprintf(sub, sizeof sub, "%s  %u/%u", Squachy::outfitNameAt(m.peer.outfit),
                      (unsigned)(s_sel + 1), (unsigned)s_n);
         centred(t, sub, cx, baseY + 22);
+        Theme::bodyFontOff(t);
 
         if (s_n > 1) {
             s_prev = { 0, 60, 34, 70 };
@@ -190,7 +198,7 @@ void uiSquadTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool adv
         const bool vis  = visiting(m.mac);
         const bool here = !s_roster || s_here[s_sel];
         const bool hunt = eng.isHunted(m.mac, true);
-        const int  by   = baseY + 34;
+        const int  by   = baseY + 26 + subH;   // under the line above: 34 in the system font
         s_invite = { (int16_t)(cx - 88), (int16_t)by, 56, 22 };
         s_hunt   = { (int16_t)(cx - 28), (int16_t)by, 56, 22 };
         s_add    = { (int16_t)(cx + 32), (int16_t)by, 56, 22 };
@@ -219,26 +227,31 @@ void uiSquadTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool adv
     const int ix = port ? 4 : colW + 2;
     const int iy = port ? baseY + 62 : 28;
     const int iw = port ? w - 8 : w - colW - 6;
-    const int ih = (h - BH - 12) - iy;
+    const int ih = (h - btnH() - 12) - iy;
     t.fillRect(ix, iy, iw, ih, Theme::BG);
     t.drawRect(ix, iy, iw, ih, Theme::PURPLE);
+    // The inbox in the body font: 16-row lines on the large panels, the
+    // system font's 8 everywhere else, and every step below follows fh.
+    Theme::bodyFontOn(t);
+    const int fh = t.fontHeight();
     t.setTextColor(Theme::VAPOR_PINK, Theme::BG);
     t.setCursor(ix + 4, iy + 3);
     t.print("INBOX");
 
     const uint8_t have = MeshTalk::inboxCount();
-    const int rowH = 32;
-    uint8_t rows = (uint8_t)((ih - 14) / rowH);
+    const int head = fh + 6;                      // 14 in the system font
+    const int rowH = 3 * (fh + 1) + 5;            // 32 in the system font
+    uint8_t rows = (uint8_t)((ih - head) / rowH);
     if (rows > ROWS_MAX) rows = ROWS_MAX;
     s_rowN = 0;
     if (!have) {
         t.setTextColor(Theme::W95_SHADOW, Theme::BG);
-        t.setCursor(ix + 4, iy + 18);
+        t.setCursor(ix + 4, iy + fh + 10);
         t.print("No messages yet.");
     }
     for (uint8_t i = 0; i < have && i < rows; i++) {
         const MeshTalk::Message& msg = MeshTalk::inboxAt(i);
-        const int y = iy + 14 + i * rowH;
+        const int y = iy + head + i * rowH;
         s_rows[s_rowN++] = { (int16_t)ix, (int16_t)y, (int16_t)iw, (int16_t)(rowH - 2) };
         if (i) t.drawFastHLine(ix + 3, y - 2, iw - 6, Theme::W95_SHADOW);
         // Who, and how long ago -- red, as every real message is drawn.
@@ -258,17 +271,27 @@ void uiSquadTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool adv
         const uint8_t n = Theme::wrapText(t, MeshTalk::lineText(msg), maxW, lines, 2);
         t.setTextColor(Theme::WHITE, Theme::BG);
         for (uint8_t k = 0; k < n; k++) {
-            t.setCursor(ix + 4, y + 10 + k * 9);
+            t.setCursor(ix + 4, y + fh + 2 + k * (fh + 1));
             t.print(lines[k]);
         }
     }
+    Theme::bodyFontOff(t);
 
-    s_back = { 4, (int16_t)(h - BH - 6), BW, BH };
+    s_back = { 4, (int16_t)(h - btnH() - 6), btnW(), btnH() };
     Theme::drawButton(t, s_back.x, s_back.y, s_back.w, s_back.h, "[ BACK ]", false);
+    // SEND, bottom right under the inbox: write to the squad from here,
+    // rather than only by tapping a message to reply to it. The in-range
+    // page only; the roster is for managing members, not talking to them.
+    s_send = { 0, 0, 0, 0 };
+    if (!s_roster) {
+        s_send = { (int16_t)(w - btnW() - 4), (int16_t)(h - btnH() - 6), btnW(), btnH() };
+        Theme::drawButton(t, s_send.x, s_send.y, s_send.w, s_send.h, "[ SEND ]", false);
+    }
 }
 
 SquadHit uiSquadTouch(int x, int y, uint32_t now) {
     if (in(s_back, x, y)) return SquadHit::BACK;
+    if (s_send.w && in(s_send, x, y)) return SquadHit::SEND;
     if (s_n > 1 && in(s_prev, x, y)) { select((uint8_t)((s_sel + s_n - 1) % s_n)); return SquadHit::NONE; }
     if (s_n > 1 && in(s_next, x, y)) { select((uint8_t)((s_sel + 1) % s_n)); return SquadHit::NONE; }
     if (s_n && s_invite.w && in(s_invite, x, y) && !visiting(s_members[s_sel].mac)) {

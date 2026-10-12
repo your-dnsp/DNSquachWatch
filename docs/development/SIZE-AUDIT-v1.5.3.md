@@ -11,7 +11,7 @@ The net saving is **6,240 bytes per display**. Both final images pass the comple
 
 ## Retained change
 
-The developer-only `PRIM` drawing benchmark, primitive timing helpers and library-reference rendering self-check are now compiled only with the existing `BENCH_TOOLS` build flag. The source remains available for diagnostic builds. Normal rendering, backgrounds, Remington photo/star, menus, radio detection, backup/recovery, security, simulation metadata and normal serial health diagnostics are retained. The shipping console no longer accepts PRIM; it is not a user menu feature. Diagnostic builds must independently pass the image-size guard before flashing.
+The developer-only `PRIM` drawing benchmark, primitive timing helpers and library-reference rendering self-check are now compiled only with the existing `BENCH_TOOLS` build flag. The source remains available for diagnostic builds. Normal rendering, backgrounds, built-in artwork photo/star, menus, radio detection, backup/recovery, security, simulation metadata and normal serial health diagnostics are retained. The shipping console no longer accepts PRIM; it is not a user menu feature. Diagnostic builds must independently pass the image-size guard before flashing.
 
 The audit also fixed ordinary research reports incorrectly including the SIMULATED convention explanation. That explanation is now conditional on the decoded MAC suffix, with a regression assertion. This correctness change adds 32 bytes on ST7789 and 16 bytes on ILI9341 before benchmark removal. Removing the benchmark then saves 6,272 and 6,256 bytes respectively; the final net saving is the same on both boards.
 
@@ -23,7 +23,7 @@ Confidence describes the matching evidence. SIMULATED describes an unauthenticat
 
 ## Largest contributors and unsuccessful quick experiments
 
-The baseline mapped symbol audit found Squachy's drawBody at 50,229 bytes, loop at 49,055 bytes (including inlined helpers), snowfall at 15,135 bytes, starfield at 10,197 bytes and the built-in Remington compressed photo at 9,608 bytes. Individual formatted-I/O routines occupy roughly 8–12 KiB each, with integer and floating variants retained by application and SDK dependencies. These symbol sizes are not independently recoverable savings and exclude much unnamed literal data.
+The baseline mapped symbol audit found Squachy's drawBody at 50,229 bytes, loop at 49,055 bytes (including inlined helpers), snowfall at 15,135 bytes, starfield at 10,197 bytes and the built-in built-in artwork compressed photo at 9,608 bytes. Individual formatted-I/O routines occupy roughly 8–12 KiB each, with integer and floating variants retained by application and SDK dependencies. These symbol sizes are not independently recoverable savings and exclude much unnamed literal data.
 
 Link-time optimization and removal of the unused TLS-server handshake remain enabled. A link-time small-helper inlining restriction produced no saving. Forcing the existing wide-line helper out of line produced no saving. Forcing shared color blending increased size by 48 bytes relative to the report-corrected baseline. Forcing shared Squachy scaling increased it by 304 bytes and exceeded the slot. All these experiments were reverted; normal rendering implementation and compiler settings are unchanged.
 
@@ -31,6 +31,6 @@ Do not blindly substitute integer-only formatting/scanning for the SDK's generic
 
 ## Recommended next pass
 
-If more space is needed, first audit diagnostic code and duplicated formatting helpers individually. Larger savings may require externalizing additional static help/explanation content with bounded reads, versioned checks and clear missing-card behavior. That would require a new microSD content package. None was moved in this audit. Remington remains built into firmware as requested.
+If more space is needed, first audit diagnostic code and duplicated formatting helpers individually. Larger savings may require externalizing additional static help/explanation content with bounded reads, versioned checks and clear missing-card behavior. That would require a new microSD content package. None was moved in this audit. built-in artwork remains built into firmware as requested.
 
 Final validation: both 80 MHz CYD firmware builds and complete-image guards pass; the report redaction/formatting regression passes; UI simulator checks pass. Symbol inspection confirms the production image no longer contains runPrimBench, primTime or g_benchPrimNow. The complete host suite passed before this narrow audit; it was not redundantly rerun. No hardware validation or GitHub push was performed.

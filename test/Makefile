@@ -126,6 +126,8 @@ sd_recovery_test_FLAGS := -DSD_LOG_TEST -DCYD=1 -Isd_shim
 TESTS += sd_recovery_test readable_storage_test backup_progress_test ble_advert_fields_test ambient_light_test crash_reports_test spam_test
 crash_reports_test_SRCS := $(SRC)/crash_reports.cpp
 
+TESTS += pocket_screen_test
+
 .PHONY: all clean
 all: $(addprefix run-,$(TESTS))
 

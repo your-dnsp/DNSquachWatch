@@ -51,8 +51,29 @@ extern TFT_eSPI tft;
 // measured at 18 KB on the RL Phantom). This log has one file open at a time,
 // plus a directory handle while it prunes old days.
 static const uint8_t SD_MAX_FILES = 2;
+#if defined(DNSP_SD_COMPAT)
+extern "C" FATFS* dnsp_sd_volume(uint8_t);
+#endif
+static FATFS* mountedVolume(uint8_t drive) {
+#if defined(DNSP_SD_COMPAT) || defined(SD_LOG_TEST)
+    return dnsp_sd_volume(drive);
+#else
+    FATFS* fs=nullptr; DWORD count=0; char path[]={char('0'+drive),':',0};
+    return drive<10 && f_getfree(path,&count,&fs)==FR_OK ? fs : nullptr;
+#endif
+}
+
+
+void SdLog::scheduleBoot(uint32_t now) {
+    _bootStart = now; _bootPending = true;
+    snprintf(_recovery,sizeof _recovery,"microSD waiting for startup: 10 seconds. No card access yet.");
+    Serial.println("[sd] startup wait: 10000 ms; no card access until the delay expires");
+}
 
 bool SdLog::begin() {
+    // Manual recovery must not bypass the startup experiment either.
+    if (_bootPending && uint32_t(millis()-_bootStart) < 10000u) return false;
+    _bootPending = false;
     if (_ready) return true;
     _memoryLimited = false;
 #if defined(TWATCH_S3)
@@ -128,9 +149,11 @@ bool SdLog::begin() {
 #else
     // The 2.8-inch CYD card has its own pins, although the hardware VSPI
     // controller is also used by the display. Preserve the established
-    // Arduino SPI initialization and established card clock here.
+    // Arduino SPI initialization here. This compatibility build uses a
+    // conservative 1 MHz data clock; the adapter initializes at 100 kHz.
     SPI.begin(18, 19, 23, SD_CS_PIN);  // SCK, MISO, MOSI, CS
-    if (!SD.begin(SD_CS_PIN, SPI, 4000000, "/sd", SD_MAX_FILES)) {
+    pinMode(19, INPUT_PULLUP); // Keep DO defined when the card releases it.
+    if (!SD.begin(SD_CS_PIN, SPI, 1000000, "/sd", SD_MAX_FILES)) {
 #endif
         // Said out loud either way: a board with no card, or a card on the
         // wrong pins, ran exactly like one that was logging, and the only
@@ -150,9 +173,8 @@ bool SdLog::begin() {
         Serial.println("[sd] insufficient working RAM; unmounting card to keep scanning safe");
         SD.end(); _ready=false; _memoryLimited=true; return false;
     }
-    FATFS* volume = nullptr; DWORD freeClusters = 0;
-    char drive[] = {char('0' + _drive), ':', 0};
-    const FRESULT result = f_getfree(drive, &freeClusters, &volume);
+    FATFS* volume = mountedVolume(_drive);
+    const FRESULT result = volume ? FR_OK : FR_INVALID_DRIVE;
     File root = result == FR_OK ? SD.open("/") : File();
     const bool usable = result == FR_OK && volume && volume->n_fatent >= 2 && root && root.isDirectory();
     root.close();
@@ -162,6 +184,7 @@ bool SdLog::begin() {
         snprintf(_recovery,sizeof _recovery,"Mount failed: filesystem validation (error %u). No format attempted.",unsigned(result));
         return false;
     }
+    Serial.println("[sd] FAT metadata and root validated without a free-space scan; SD ready");
     snprintf(_recovery,sizeof _recovery,"Card mounted; FAT volume and root directory verified.");
     _ready = true;
     Research::setSink(Research::storageSink);
@@ -195,31 +218,41 @@ void SdLog::logPressure(uint32_t alerts, uint32_t ble) {
 }
 
 void SdLog::describe(char* out, size_t cap) {
+    if (_bootPending) {
+        const uint32_t elapsed = uint32_t(millis()-_bootStart);
+        const unsigned left = elapsed < 10000u ? (10000u-elapsed+999u)/1000u : 0;
+        snprintf(out,cap,"microSD waiting for startup: %u seconds. Card content and SD logging become available after a successful mount.",left);
+        return;
+    }
     if (!_ready && _memoryLimited) {
         snprintf(out, cap, "microSD unmounted: insufficient working RAM after mounting. Scanning continues; SD logging and backups are unavailable. Restart and capture the startup serial log if this repeats.");
         return;
     }
     if (!_ready) {
-        snprintf(out, cap, "No mounted microSD card. Insert a FAT-formatted card with power off, then restart. Logging is unavailable.");
+        snprintf(out, cap, "No mounted microSD card. %s Automatic retries are disabled; use Find & Remount. SD logging is unavailable.",_recovery);
         return;
     }
-    FATFS* fs = nullptr;
-    DWORD freeClusters = 0;
-    char drive[] = {char('0' + _drive), ':', 0};
-    FRESULT result = _drive > 9 ? FR_INVALID_DRIVE : f_getfree(drive, &freeClusters, &fs);
+    FATFS* fs = mountedVolume(_drive);
+    File root = fs ? SD.open("/") : File();
+    FRESULT result = fs && root && root.isDirectory() ? FR_OK : FR_INVALID_DRIVE;
+    root.close();
     if (result != FR_OK || !fs || fs->n_fatent < 2) {
         snprintf(out, cap, "Card mount lost filesystem access (FAT error %u). Use MicroSD Recovery > Find & Remount. Power off before reseating.",unsigned(result));
         return;
     }
     const char* format = fs->fs_type == FS_FAT12 ? "FAT12" : fs->fs_type == FS_FAT16 ? "FAT16"
                        : fs->fs_type == FS_FAT32 ? "FAT32" : "unknown";
-    const uint64_t total = SD.totalBytes(), used = SD.usedBytes();
+    const uint64_t total = uint64_t(fs->csize)*(fs->n_fatent-2)*512;
+    const bool known = fs->free_clst<=fs->n_fatent-2;
+    const uint64_t used = known ? uint64_t(fs->csize)*(fs->n_fatent-2-fs->free_clst)*512 : 0;
+    char usage[64];
+    if(known)snprintf(usage,sizeof usage,"%llu MiB (%u%%), cached",(unsigned long long)(used>>20),total?unsigned(used*100/total):0);
+    else snprintf(usage,sizeof usage,"unavailable; full scan deferred");
     snprintf(out, cap,
-        "microSD: %s. Format: %s. Card: %llu MiB. Volume: %llu MiB. Used: %llu MiB (%u%%). Write errors: %lu. Volume name: unavailable in this driver.",
+        "microSD: %s. Format: %s. Card: %llu MiB. Volume: %llu MiB. Used: %s. Write errors: %lu. Volume name: unavailable in this driver.",
         SD.cardType() == CARD_SDHC ? "SDHC/SDXC" : "SD", format,
         (unsigned long long)(SD.cardSize() >> 20), (unsigned long long)(total >> 20),
-        (unsigned long long)(used >> 20), total ? unsigned(used * 100 / total) : 0,
-        (unsigned long)_writeErrors);
+        usage, (unsigned long)_writeErrors);
 }
 
 void SdLog::openDaily() {
@@ -309,6 +342,11 @@ void SdLog::wipe() {
 }
 
 void SdLog::tick() {
+    if (_bootPending && uint32_t(millis()-_bootStart) >= 10000u) {
+        _bootPending = false; // One attempt only, including a failed attempt.
+        Serial.println("[sd] startup wait complete; attempting mount and read validation");
+        begin();
+    }
     if (!_ready) return;
     uint32_t now = millis();
     if (now - _lastFlush > 5000) {
@@ -324,6 +362,7 @@ void SdLog::tick() {
 
 
 bool SdLog::safeEnd() {
+    _bootPending = false; // Shutdown cannot be followed by a delayed mount.
     if (!_ready) return true;
     const bool ok = _drive < 10 && disk_ioctl(_drive, CTRL_SYNC, nullptr) == RES_OK && _writeErrors == 0;
     SD.end();
@@ -332,6 +371,7 @@ bool SdLog::safeEnd() {
 }
 
 bool SdLog::recoveryRemount() {
+    if (_bootPending && uint32_t(millis()-_bootStart) < 10000u) return false;
     if (_ready) safeEnd();
     else SD.end();
     _filename[0] = 0;
@@ -369,9 +409,9 @@ bool SdLog::recoveryFormat() {
         return false;
     }
     if (_drive > 9) { snprintf(_recovery,sizeof _recovery,"Format stopped: filesystem drive could not be identified."); return false; }
-    FATFS* fs = nullptr; DWORD freeClusters = 0;
+    FATFS* fs = mountedVolume(_drive);
     char drive[] = {char('0' + _drive), ':', 0};
-    if (f_getfree(drive,&freeClusters,&fs)!=FR_OK || !fs) {
+    if (!fs) {
         snprintf(_recovery,sizeof _recovery,"Format stopped: filesystem could not be opened safely.");
         return false;
     }

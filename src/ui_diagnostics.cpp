@@ -24,7 +24,17 @@ bool uiDiagnosticsHitBack(int x, int y, int screenW, int screenH) {
     return x >= bx && x <= bx + bw && y >= by && y <= by + bh;
 }
 
+// A compact screen (240x135) shows the report a page at a time: lines are
+// laid out as usual, shifted up by the page, and the ones outside the body
+// are not drawn. A tap on the body turns the page.
+static int s_page = 0, s_pages = 1, s_clipTop = 0, s_clipBottom = 32767, s_off = 0;
+void uiDiagnosticsNextPage() { s_page = (s_page + 1) % (s_pages > 0 ? s_pages : 1); }
+
 static int drawLine(TFT_eSPI& t, int y, uint16_t labelColor, const char* label, const char* fmt, ...) {
+    const int fh = t.fontHeight();
+    const int sy = y - s_off;
+    if (sy < s_clipTop || sy + fh > s_clipBottom) return y + fh + 2;
+    y = sy;
     t.setTextColor(labelColor, Theme::BG);
     t.setCursor(6, y);
     t.print(label);
@@ -38,7 +48,7 @@ static int drawLine(TFT_eSPI& t, int y, uint16_t labelColor, const char* label, 
     t.setTextColor(Theme::WHITE, Theme::BG);
     t.setCursor(6 + t.textWidth(label) + 6, y);
     t.print(buf);
-    return y + t.fontHeight() + 2;
+    return y + s_off + t.fontHeight() + 2;
 }
 
 void uiDiagnosticsTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, const DiagnosticsInfo& info) {
@@ -54,6 +64,11 @@ void uiDiagnosticsTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, co
     t.setTextSize(1);
     t.setTextWrap(false);
     int y = bodyTop + 2;
+    const bool paged = Theme::compact();
+    const int pageH = (bodyBottom - bodyTop - 2) / (t.fontHeight() + 2) * (t.fontHeight() + 2);
+    s_clipTop = paged ? bodyTop : 0;
+    s_clipBottom = paged ? bodyBottom : 32767;
+    s_off = paged ? s_page * pageH : 0;
 
     y = drawLine(t, y, Theme::CYAN, "BOARD:", "%s (%s)", info.boardName,
                  info.usingCapTouch ? "capacitive" : "resistive");
@@ -209,6 +224,17 @@ void uiDiagnosticsTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, co
     }
 #endif
 
+    if (paged) {
+        s_pages = (y - bodyTop - 2 + pageH - 1) / pageH;
+        if (s_pages < 1) s_pages = 1;
+        if (s_page >= s_pages) s_page = 0;
+        char pg[12];
+        snprintf(pg, sizeof pg, "%d/%d", s_page + 1, s_pages);
+        t.setTextColor(Theme::W95_SHADOW, Theme::BG);
+        t.setCursor(6, bar.y + (bar.h - t.fontHeight()) / 2);
+        t.print(pg);
+    }
+    s_clipTop = 0; s_clipBottom = 32767; s_off = 0;
     int bx, by, bw, bh;
     backButtonRect(w, h, bx, by, bw, bh);
     Theme::drawButton(t, bx, by, bw, bh, "[ BACK ]", false);

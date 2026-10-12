@@ -106,8 +106,47 @@ int main() {
         ck("an unknown version is refused", !decode(buf, n, p));
 
         n = good(false);
-        buf[7] = 0x01;
-        ck("a non-zero reserved flags byte is refused", !decode(buf, n, p));
+        buf[7] = 0x02;
+        ck("a reserved flags bit is refused", !decode(buf, n, p));
+        n = good(false);
+        buf[7] = FLAG_PHONE;
+        ck("the phone flag without its identity bytes is refused", !decode(buf, n, p));
+    }
+
+    suite("A phone carries an identity after everything else");
+    {
+        Peer me{};
+        me.nick = 3; me.outfit = 13; me.shade = 1;
+        me.phone = true;
+        me.id[0] = 0xDE; me.id[1] = 0xAD; me.id[2] = 0xBE; me.id[3] = 0xEF;
+        size_t n = encode(me, buf);
+        ck("an indexed phone payload is 12 bytes", n == LEN_INDEXED_PHONE);
+        ck("its flags byte says phone", buf[7] == FLAG_PHONE);
+        ck("it decodes", decode(buf, n, p));
+        ck("as a phone", p.phone);
+        ck("with the identity", memcmp(p.id, me.id, PHONE_ID_LEN) == 0);
+        ck("and the look", p.nick == 3 && p.outfit == 13 && p.shade == 1 && !p.custom);
+        ck("one byte short is refused", !decode(buf, n - 1, p));
+        ck("one byte long is refused", !decode(buf, n + 1, p));
+
+        me.custom = true;
+        strcpy(me.name, "NIGHTWALKER");
+        n = encode(me, buf);
+        ck("a named phone payload is 24 bytes", n == LEN_NAMED_PHONE);
+        ck("it decodes", decode(buf, n, p));
+        ck("with the name", strcmp(p.name, "NIGHTWALKER") == 0 && p.custom && p.phone);
+        ck("and the identity after the name", memcmp(p.id, me.id, PHONE_ID_LEN) == 0);
+
+        uint8_t pm[6];
+        phoneMac(me.id, pm);
+        ck("the sealing address is a local prefix and the identity",
+           pm[0] == 0x02 && pm[1] == 'P' && memcmp(pm + 2, me.id, 4) == 0);
+
+        Peer board{};
+        board.nick = 1;
+        n = encode(board, buf);
+        ck("a board's payload has no phone bytes", n == LEN_INDEXED && buf[7] == 0);
+        ck("and decodes as not a phone", decode(buf, n, p) && !p.phone);
     }
 
     suite("Only two lengths are legal");
@@ -186,7 +225,7 @@ int main() {
 
     suite("Unknown indices clamp rather than refuse");
     {
-        // Five bits hold 0..31 and this build has 17 outfits, so a peer on
+        // Five bits hold 0..31 and this build has 19 outfits, so a peer on
         // newer firmware can send one we do not have: a wrong hat, not an
         // attack.
         size_t n = encode(mk(15, 31, 3, nullptr), buf);
@@ -198,7 +237,7 @@ int main() {
 
     suite("The seventeenth outfit, and boards from before it");
     {
-        ck("seventeen outfits", OUTFIT_N == 17);
+        ck("twenty outfits", OUTFIT_N == 20);
         size_t n = encode(mk(3, 16, 1, nullptr), buf);
         ck("outfit 16 survives the trip", decode(buf, n, p) && p.outfit == 16);
         ck("its fifth bit is a spare bit, not a new byte", n == LEN_INDEXED);
@@ -208,6 +247,48 @@ int main() {
         ck("and the rest of the word is unchanged", ((w >> 12) & 0x0F) == 3 && ((w >> 6) & 0x03) == 1);
         n = encode(mk(3, 15, 1, nullptr), buf);
         ck("outfit 15 sets no fifth bit", decode(buf, n, p) && p.outfit == 15 && !(buf[5] & 0x10));
+    }
+
+    suite("The eighteenth outfit, and boards from before it");
+    {
+        size_t n = encode(mk(3, 17, 1, nullptr), buf);
+        ck("outfit 17 survives the trip", decode(buf, n, p) && p.outfit == 17);
+        const uint16_t w = (uint16_t)(buf[5] | ((uint16_t)buf[6] << 8));
+        // A board with seventeen outfits sees 16|1 = 17 and clamps 17 % 17 to
+        // 0: plain Squachy, the wrong hat, as the format chose.
+        ck("its low four bits are 1 and the fifth is set", ((w >> 8) & 0x0F) == 1 && (w & 0x10));
+    }
+
+    suite("The nineteenth outfit, and boards from before it");
+    {
+        size_t n = encode(mk(3, 18, 1, nullptr), buf);
+        ck("outfit 18 survives the trip", decode(buf, n, p) && p.outfit == 18);
+        const uint16_t w = (uint16_t)(buf[5] | ((uint16_t)buf[6] << 8));
+        // A board with eighteen outfits sees 16|2 = 18 and clamps 18 % 18 to
+        // 0: plain Squachy again.
+        ck("its low four bits are 2 and the fifth is set", ((w >> 8) & 0x0F) == 2 && (w & 0x10));
+    }
+
+    suite("The aura goes visiting, and boards from before it");
+    {
+        Peer a = mk(3, 16, 1, nullptr);
+        a.aura = true;
+        size_t n = encode(a, buf);
+        ck("a lit aura survives the trip", decode(buf, n, p) && p.aura);
+        ck("it is a spare bit, not a new byte", n == LEN_INDEXED);
+        ck("and the flags byte is still zero, which older boards insist on", buf[7] == 0);
+        // What a board from before reads: every field it knows, unchanged.
+        const uint16_t w = (uint16_t)(buf[5] | ((uint16_t)buf[6] << 8));
+        ck("an older board reads the same nickname, outfit and shades",
+           ((w >> 12) & 0x0F) == 3 && ((w >> 8) & 0x0F) == 0 && (w & 0x10) && ((w >> 6) & 0x03) == 1);
+        ck("and no custom name", !(w & 0x20));
+        n = encode(mk(3, 16, 1, nullptr), buf);
+        ck("no aura sets no bit", decode(buf, n, p) && !p.aura && !(buf[5] & 0x08));
+        Peer c = mk(5, 7, 2, "ZERO COOL");
+        c.aura = true;
+        n = encode(c, buf);
+        ck("it rides with a typed name too",
+           decode(buf, n, p) && p.aura && p.custom && strcmp(p.name, "ZERO COOL") == 0);
     }
 
     suite("A rejected payload leaves the output alone");

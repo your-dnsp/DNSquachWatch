@@ -13,6 +13,7 @@
 #include "settings.h"
 #include "security.h"
 
+
 namespace Theme {
 
 // Usable bottom of the background band, published by whichever screen
@@ -368,12 +369,31 @@ int  bubbleTextH()  { bubbleMeasure(); return s_bubAb + s_bubBb; }
 int  bubbleAscent() { bubbleMeasure(); return s_bubAb; }
 #endif
 
-void drawListHeading(TFT_eSPI& t, const char* text, uint16_t color) {
-    t.setTextSize(1);
-    t.setTextColor(color, BG);
-    t.setCursor(8, LIST_TOP + (LIST_HEADING_H - t.fontHeight()) / 2);
-    t.print(text);
+// On the large panels the size-2 heading sits low in a taller band, clear of
+// the corner icons above it (TITLE_ICON_BAND_H), which a centred one touched.
+int listHeadingH() { return large() ? 20 : 14; }
+
+int listHeadingY(TFT_eSPI& t) {
+    return large() ? TITLE_ICON_BAND_H + (16 - t.fontHeight()) / 2
+                   : LIST_TOP + (listHeadingH() - t.fontHeight()) / 2;
 }
+
+void drawListHeading(TFT_eSPI& t, const char* text, uint16_t color) {
+    t.setTextSize(large() ? 2 : 1);
+    t.setTextColor(color, BG);
+    t.setCursor(8, listHeadingY(t));
+    t.print(text);
+    t.setTextSize(1);
+}
+
+void bodyFontOn(TFT_eSPI& t) {
+    t.setTextFont(large() ? 2 : 1);
+    t.setTextSize(1);
+}
+void bodyFontOff(TFT_eSPI& t) { t.setTextFont(1); }
+int bodyY(int px)              { return large() ? px * 19 / 12 : px; }
+int dialogBtnH(int base)       { return large() ? base + 8 : base; }
+uint8_t upSize(uint8_t base)   { return large() ? base + 1 : base; }
 
 void drawListRowPanel(TFT_eSPI& t, int w, int y, int hgt) {
     // Four rows of backdrop between tiles, not two, so they read as tiles
@@ -385,7 +405,15 @@ void drawListRowPanel(TFT_eSPI& t, int w, int y, int hgt) {
     t.drawRect(x0, y + 1, ww, hh, PURPLE);
 }
 
-int pinnedBackH(int panelW) { return panelW >= 400 || Field::config.large ? 36 : PINNED_BACK_H; }
+static bool s_compact = false;
+void setCompact(bool on) { s_compact = on; }
+bool compact()           { return s_compact; }
+static bool s_large = false;
+void setLarge(bool on)   { s_large = on; }
+bool large()             { return s_large; }
+int  listRowPad()        { return s_compact ? 5 : 10; }
+int pinnedBackH(int panelW) { return s_compact ? 18 : (panelW >= 400 || Field::config.large ? 36 : PINNED_BACK_H); }
+
 
 void drawPinnedBack(TFT_eSPI& t, const char* label) {
     const int w = t.width(), h = pinnedBackH(w), y = t.height() - h;
@@ -398,7 +426,7 @@ void drawPinnedBack(TFT_eSPI& t, const char* label) {
     // second band it lands outside the buffer and draws nothing at all. A
     // strip with no label on it. Shared helpers say what they want.
     t.setTextFont(1);
-    t.setTextSize(uiMenuTextSize(t));
+    t.setTextSize(s_compact ? 1 : uiMenuTextSize(t));
     t.setTextColor(CYAN, BG);
     t.setCursor((w - t.textWidth(label)) / 2, y + (h - t.fontHeight()) / 2);
     t.print(label);
@@ -440,10 +468,12 @@ void drawTitleBar(TFT_eSPI& t, const char* title) {
 }
 
 uint8_t uiTextSize(TFT_eSPI& t, uint8_t base) {
-    return (base == 1 && t.width() >= 400) ? 2 : base;
+    // The large panels in portrait too: 320 wide, but on 3.5" glass.
+    return (base == 1 && (t.width() >= 400 || large())) ? 2 : base;
 }
 
 uint8_t uiMenuTextSize(TFT_eSPI& t) {
+    if (t.height() < 200) s_compact = true;
     return t.width() >= 400 ? 3 : 2;
 }
 
@@ -464,7 +494,15 @@ void drawButton(TFT_eSPI& t, int x, int y, int w, int h,
     uint8_t ts = uiTextSize(t, textSize);
     if (ts != textSize) {
         t.setTextSize(ts);
-        if (t.textWidth(label) > w - 6) ts = textSize;
+        if (t.textWidth(label) > w - 6 || t.fontHeight() > h - 2) ts = textSize;
+    }
+    // A large panel's label that cannot take size 2 gets the body font
+    // rather than the 8-row system font: about as wide, half again as tall.
+    bool body = false;
+    if (ts == 1 && textSize == 1 && large() && h >= 20) {
+        bodyFontOn(t);
+        body = t.textWidth(label) <= w - 6;
+        if (!body) bodyFontOff(t);
     }
     t.setTextSize(ts);
     t.setTextColor(fg, fill);
@@ -472,10 +510,11 @@ void drawButton(TFT_eSPI& t, int x, int y, int w, int h,
     int th = t.fontHeight();
     t.setCursor(x + (w - tw) / 2, y + (h - th) / 2);
     t.print(label);
+    if (body) bodyFontOff(t);
 }
 
 void drawWin95Button(TFT_eSPI& t, int x, int y, int w, int h,
-                     const char* label, bool sunken) {
+                     const char* label, bool sunken, bool bold) {
     // Face first, inset by the two bevel rings so the edges below draw over
     // nothing they need to keep.
     t.fillRect(x + 2, y + 2, w - 4, h - 4, W95_FACE);
@@ -506,15 +545,60 @@ void drawWin95Button(TFT_eSPI& t, int x, int y, int w, int h,
     // the tell that it is a costume. Centred on the FACE rather than on the
     // whole rect, so the bevel does not pull the text off-centre, then the
     // one-pixel press offset on top.
+    // On the large panels the label is font 2, which is also nearer the
+    // proportional face Win95 itself used -- where the button is tall and
+    // wide enough for it; a squeezed one keeps the system font.
+    const uint8_t callerFont = t.textfont;
     t.setTextSize(1);
     t.setTextWrap(false);
     t.setTextColor(BLACK, W95_FACE);
-    const int tw = t.textWidth(label);
+    const bool swapped = large() && h >= 20;
+    if (swapped) {
+        t.setTextFont(2);
+        if (t.textWidth(label) > w - 8) t.setTextFont(1);
+    }
+    const int tw = t.textWidth(label) + (bold ? 1 : 0);
     const int th = t.fontHeight();
     const int ox = sunken ? 1 : 0;
-    t.setCursor(x + 2 + (w - 4 - tw) / 2 + ox,
-                y + 2 + (h - 4 - th) / 2 + ox);
+    const int lx = x + 2 + (w - 4 - tw) / 2 + ox, ly = y + 2 + (h - 4 - th) / 2 + ox;
+    // Bold is the same label twice, a pixel apart. Drawn with no background
+    // (the face is already filled) so the second pass does not wipe the
+    // first one's left edge.
+    if (bold) t.setTextColor(BLACK);
+    t.setCursor(lx, ly);
     t.print(label);
+    if (bold) { t.setCursor(lx + 1, ly); t.print(label); }
+    if (swapped) t.setTextFont(callerFont);   // only ever touched here
+}
+
+int drawWin95Window(TFT_eSPI& t, int x, int y, int w, int h, const char* title) {
+    const uint16_t NAVY = 0x0010;          // System Properties' title bar
+    const int TB = 22;
+    t.fillRect(x + 2, y + 2, w - 4, h - 4, W95_FACE);
+    t.drawFastHLine(x, y, w, W95_HILITE);
+    t.drawFastVLine(x, y, h, W95_HILITE);
+    t.drawFastHLine(x, y + h - 1, w, W95_DKSHADOW);
+    t.drawFastVLine(x + w - 1, y, h, W95_DKSHADOW);
+    t.drawFastHLine(x + 1, y + 1, w - 2, W95_LIGHT);
+    t.drawFastVLine(x + 1, y + 1, h - 2, W95_LIGHT);
+    t.drawFastHLine(x + 1, y + h - 2, w - 2, W95_SHADOW);
+    t.drawFastVLine(x + w - 2, y + 1, h - 2, W95_SHADOW);
+    t.fillRect(x + 3, y + 3, w - 6, TB, NAVY);
+    const uint8_t callerFont = t.textfont;
+    t.setTextFont(2);
+    t.setTextSize(1);
+    t.setTextWrap(false);
+    t.setTextColor(WHITE, NAVY);
+    t.setCursor(x + 8, y + 3 + (TB - 16) / 2);
+    t.print(title);
+    t.setTextFont(callerFont);
+    const int cx = x + w - 6 - 18, cy = y + 6;
+    drawWin95Button(t, cx, cy, 18, TB - 6, "", false);
+    t.drawLine(cx + 5, cy + 4, cx + 11, cy + 10, W95_DKSHADOW);
+    t.drawLine(cx + 11, cy + 4, cx + 5, cy + 10, W95_DKSHADOW);
+    t.drawLine(cx + 6, cy + 4, cx + 12, cy + 10, W95_DKSHADOW);
+    t.drawLine(cx + 12, cy + 4, cx + 6, cy + 10, W95_DKSHADOW);
+    return y + 3 + TB + 6;
 }
 
 ButtonBarGeom computeButtonBar(int screenW, int screenH) {
@@ -597,15 +681,15 @@ static bool s_icoPalReady = false;
 
 static void icoPalette(TFT_eSPI& t) {
     if (s_icoPalReady) return;
-    SHELL       = t.color565(104,110,132); SHELL_HI    = t.color565(158,166,192);
-    SHELL_LO    = t.color565(58,62,80);    ICO_INK     = t.color565(26,26,38);
-    ICO_GLASS   = t.color565(36,104,132); ICO_LENS    = t.color565(0,210,220);
-    ICO_METAL   = t.color565(150,150,160); ICO_METAL2  = t.color565(214,214,224);
-    ICO_WARN    = t.color565(255,60,40);   ICO_LED     = t.color565(255,220,60);
-    ICO_APPLE   = t.color565(226,44,40);   ICO_APPLE_HI= t.color565(255,124,98);
-    ICO_APPLE_LO= t.color565(148,20,24);   ICO_STEM    = t.color565(126,84,42);
-    ICO_LEAF    = t.color565(60,192,80);   ICO_SHEEN   = 0xFFFF;
-    ICO_PLASTIC = t.color565(232,228,214);
+    SHELL       = (uint16_t)0x6B70; SHELL_HI    = (uint16_t)0x9D38;
+    SHELL_LO    = (uint16_t)0x39EA;    ICO_INK     = (uint16_t)0x18C4;
+    ICO_GLASS   = (uint16_t)0x2350; ICO_LENS    = (uint16_t)0x069B;
+    ICO_METAL   = (uint16_t)0x94B4; ICO_METAL2  = (uint16_t)0xD6BC;
+    ICO_WARN    = (uint16_t)0xF9E5;   ICO_LED     = (uint16_t)0xFEE7;
+    ICO_APPLE   = (uint16_t)0xE165;   ICO_APPLE_HI= (uint16_t)0xFBEC;
+    ICO_APPLE_LO= (uint16_t)0x90A3;   ICO_STEM    = (uint16_t)0x7AA5;
+    ICO_LEAF    = (uint16_t)0x3E0A;   ICO_SHEEN   = 0xFFFF;
+    ICO_PLASTIC = (uint16_t)0xEF3A;
     s_icoPalReady = true;
 }
 
@@ -841,6 +925,23 @@ static void releaseRain() {
     if (s_rainBuf) { free(s_rainBuf); s_rainBuf = nullptr; s_rainInited = false; }
 }
 
+// TH3 0N3's door. Every half a minute to a minute, one glyph in one slow
+// column falls red -- drawn big, so it is a target and not a speck -- and a
+// tap on it earns the coat. Where it was the last frame it was drawn, and
+// when; backgroundTap() believes only the last quarter second, the same
+// freshness rule as the owl and the eye.
+//
+// The main screen says every frame whether to send it (off once the coat
+// is earned). The rain falls behind LOG, SETTINGS and the rest too, where
+// a tap goes to the screen and not the rain -- so it only falls red while
+// that word is fresh, which is to say on the main screen.
+static bool     s_redGlyphOn = false;
+static uint32_t s_redGlyphSaid = 0;
+static int      s_redX = 0, s_redY = 0;
+static uint32_t s_redAt = 0;
+static bool     s_redPending = false;
+void setRedGlyph(bool on) { s_redGlyphOn = on; s_redGlyphSaid = millis(); }
+
 void drawDigitalRain(TFT_eSPI& t, uint32_t now, int yStart, int yEnd, bool advance) {
     // Dense columns with long, smoothly-decaying trails. Glyphs are plain
     // ASCII (the default GLCD font can't render UTF-8 katakana correctly)
@@ -1004,6 +1105,35 @@ void drawDigitalRain(TFT_eSPI& t, uint32_t now, int yStart, int yEnd, bool advan
     int sqCx = 0, sqHalf = 0, sqTop = 0, sqBot = 0;
     const bool sqHere = Squachy::lastFootprint(sqCx, sqHalf, sqTop, sqBot);
 
+    // The red glyph: which column carries it, when it started, when the next.
+    // Picked from the columns whose heads have just come in at the top, the
+    // slowest of them, and never one falling behind him.
+    static int      redCol = -1;
+    static uint32_t redFrom = 0, redNext = 0;
+    const bool redHere = s_redGlyphOn && s_redGlyphSaid && (uint32_t)(millis() - s_redGlyphSaid) < 500u;
+    if (!redHere) redCol = -1;
+    if (advance && redHere) {
+        if (redCol >= 0 && (redCol >= cols ||
+                            yPos[redCol] - 16 >= yEnd || now - redFrom > 12000u)) redCol = -1;
+        if (redCol < 0) {
+            if (!redNext) redNext = now + 20000u + (uint32_t)random(0, 20000);
+            else if (now >= redNext) {
+                int best = -1;
+                for (int i = 0; i < cols; i++) {
+                    if (yPos[i] < yStart + 16 || yPos[i] > yStart + 70) continue;
+                    const int d = 3 + i * SPACING - sqCx;
+                    if (sqHere && (d < 0 ? -d : d) < sqHalf + 18) continue;
+                    if (best < 0 || ySpeed[i] > ySpeed[best]) best = i;
+                }
+                if (best >= 0) {
+                    redCol = best; redFrom = now;
+                    redNext = now + 30000u + (uint32_t)random(0, 30000);
+                }
+            }
+        }
+    }
+    int redX = -1, redY = 0;
+
     // Full-band clear every frame, same as every other background style.
     // Without it a column that just wrapped skips its narrow vertical strip
     // for several frames, and nothing else ever repaints that strip -- so
@@ -1155,7 +1285,20 @@ void drawDigitalRain(TFT_eSPI& t, uint32_t now, int yStart, int yEnd, bool advan
             t.setTextColor(fg, bg);
             t.setCursor(x, ry);
             t.print(buf);
+            if (i == redCol && j == 2) { redX = x; redY = ry; }
         }
+    }
+    // Over the column, twice the size, in red with a dark red glow. The
+    // glyph itself is whatever that cell is showing.
+    if (redX >= 0) {
+        const char rb[2] = { GLYPHS[charBuf[redCol][2]], 0 };
+        const int gx = redX - 3, gy = redY - 4;
+        t.setTextSize(2);
+        t.setTextColor((uint16_t)0xF945, (uint16_t)0x5800);
+        t.setCursor(gx, gy);
+        t.print(rb);
+        t.setTextSize(1);
+        s_redX = gx + 6; s_redY = gy + 8; s_redAt = now ? now : 1;
     }
 
     // Grow-and-fade glyphs. Size steps 1 -> 2 -> 3 over the life while the
@@ -1274,25 +1417,25 @@ static void drawJunk(TFT_eSPI& t, uint8_t kind, int x, int y, int s, uint32_t no
     switch (kind) {
         case 0: {   // eyeball
             const uint16_t sclera = WHITE;
-            const uint16_t shade  = t.color565(236, 226, 234);
+            const uint16_t shade  = (uint16_t)0xEF1D;
             t.fillCircle(x, y, s + 1, BLACK);
             t.fillCircle(x, y, s, sclera);
             t.fillCircle(x - P(0.06f), y + P(0.10f), P(0.94f), shade);
             t.fillCircle(x, y - P(0.06f), P(0.90f), sclera);
-            t.fillCircle(x + P(0.16f), y, P(0.58f), t.color565(10, 48, 120));
-            t.fillCircle(x + P(0.16f), y, P(0.50f), t.color565(26, 112, 224));
+            t.fillCircle(x + P(0.16f), y, P(0.58f), (uint16_t)0x098F);
+            t.fillCircle(x + P(0.16f), y, P(0.50f), (uint16_t)0x1B9C);
             for (uint8_t k = 0; k < 12; k++) {          // iris spokes
                 const float a = (float)k * 0.5236f;
                 t.drawLine(x + P(0.16f) + (int)(cosf(a) * P(0.20f)),
                            y            + (int)(sinf(a) * P(0.20f)),
                            x + P(0.16f) + (int)(cosf(a) * P(0.48f)),
                            y            + (int)(sinf(a) * P(0.48f)),
-                           t.color565(13, 74, 168));
+                           (uint16_t)0x0A55);
             }
             t.fillCircle(x + P(0.16f), y, P(0.24f), BLACK);
             t.fillCircle(x - P(0.08f), y - P(0.36f), P(0.17f), sclera);
             t.fillCircle(x + P(0.40f), y + P(0.30f), P(0.07f) + 1, sclera);
-            const uint16_t vein = t.color565(208, 32, 32);
+            const uint16_t vein = (uint16_t)0xD104;
             t.drawLine(x - P(0.96f), y - P(0.34f), x - P(0.34f), y - P(0.16f), vein);
             t.drawLine(x - P(0.90f), y + P(0.44f), x - P(0.28f), y + P(0.24f), vein);
             t.drawLine(x - P(0.62f), y - P(0.62f), x - P(0.30f), y - P(0.40f), vein);
@@ -1300,40 +1443,40 @@ static void drawJunk(TFT_eSPI& t, uint8_t kind, int x, int y, int s, uint32_t no
         }
         case 1: {   // a face, mid-scream
             t.fillCircle(x, y, s + 1, BLACK);
-            t.fillCircle(x, y, s, t.color565(255, 233, 92));
-            t.fillCircle(x, y + P(0.10f), P(0.94f), t.color565(245, 197, 24));
-            t.fillCircle(x, y - P(0.08f), P(0.86f), t.color565(255, 233, 92));
-            t.fillCircle(x - P(0.60f), y + P(0.28f), P(0.20f), t.color565(240, 168, 0));
-            t.fillCircle(x + P(0.60f), y + P(0.28f), P(0.20f), t.color565(240, 168, 0));
+            t.fillCircle(x, y, s, (uint16_t)0xFF4B);
+            t.fillCircle(x, y + P(0.10f), P(0.94f), (uint16_t)0xF623);
+            t.fillCircle(x, y - P(0.08f), P(0.86f), (uint16_t)0xFF4B);
+            t.fillCircle(x - P(0.60f), y + P(0.28f), P(0.20f), (uint16_t)0xF540);
+            t.fillCircle(x + P(0.60f), y + P(0.28f), P(0.20f), (uint16_t)0xF540);
             t.fillEllipse(x - P(0.40f), y - P(0.24f), P(0.22f) + 1, P(0.30f) + 1, BLACK);
             t.fillEllipse(x + P(0.40f), y - P(0.24f), P(0.22f) + 1, P(0.30f) + 1, BLACK);
             t.fillCircle(x - P(0.34f), y - P(0.34f), P(0.08f), WHITE);
             t.fillCircle(x + P(0.46f), y - P(0.34f), P(0.08f), WHITE);
-            const uint16_t brow = t.color565(122, 82, 0);
+            const uint16_t brow = (uint16_t)0x7A80;
             t.drawWideLine(x - P(0.66f), y - P(0.62f), x - P(0.18f), y - P(0.48f), P(0.13f) + 1, brow);
             t.drawWideLine(x + P(0.18f), y - P(0.48f), x + P(0.66f), y - P(0.62f), P(0.13f) + 1, brow);
             t.fillEllipse(x, y + P(0.46f), P(0.42f), P(0.34f), BLACK);
-            t.fillEllipse(x, y + P(0.60f), P(0.24f), P(0.16f), t.color565(208, 48, 74));
+            t.fillEllipse(x, y + P(0.60f), P(0.24f), P(0.16f), (uint16_t)0xD189);
             t.fillRect(x - P(0.26f), y + P(0.16f), P(0.16f) + 1, P(0.13f) + 1, WHITE);
             t.fillRect(x + P(0.10f), y + P(0.16f), P(0.16f) + 1, P(0.13f) + 1, WHITE);
-            t.fillCircle(x + P(0.92f), y - P(0.62f), P(0.13f), t.color565(127, 212, 255));
+            t.fillCircle(x + P(0.92f), y - P(0.62f), P(0.13f), (uint16_t)0x7EBF);
             break;
         }
         case 2: {   // saucer, with an occupant
-            const uint16_t beam = blend(BG, t.color565(120, 240, 180), 80);
+            const uint16_t beam = blend(BG, (uint16_t)0x7F96, 80);
             t.fillTriangle(x - P(0.28f), y + P(0.24f), x + P(0.62f), y + P(1.05f),
                            x - P(0.62f), y + P(1.05f), beam);
             t.fillTriangle(x - P(0.28f), y + P(0.24f), x + P(0.28f), y + P(0.24f),
                            x + P(0.62f), y + P(1.05f), beam);
             t.fillEllipse(x, y + P(0.06f), s + 1, P(0.34f) + 2, BLACK);
-            t.fillEllipse(x, y + P(0.34f), P(0.80f), P(0.26f), t.color565(58, 42, 96));
-            t.fillEllipse(x, y + P(0.06f), s, P(0.34f), t.color565(125, 136, 168));
-            t.fillEllipse(x, y - P(0.02f), P(0.96f), P(0.26f), t.color565(170, 182, 212));
-            t.fillEllipse(x, y - P(0.08f), P(0.90f), P(0.16f), t.color565(214, 224, 244));
+            t.fillEllipse(x, y + P(0.34f), P(0.80f), P(0.26f), (uint16_t)0x394C);
+            t.fillEllipse(x, y + P(0.06f), s, P(0.34f), (uint16_t)0x7C55);
+            t.fillEllipse(x, y - P(0.02f), P(0.96f), P(0.26f), (uint16_t)0xADBA);
+            t.fillEllipse(x, y - P(0.08f), P(0.90f), P(0.16f), (uint16_t)0xD71E);
             t.fillCircle(x, y - P(0.34f), P(0.44f) + 1, BLACK);
-            t.fillCircle(x, y - P(0.34f), P(0.44f), t.color565(42, 208, 255));
-            t.fillCircle(x, y - P(0.32f), P(0.36f), t.color565(156, 240, 255));
-            t.fillCircle(x, y - P(0.30f), P(0.17f), t.color565(26, 106, 80));
+            t.fillCircle(x, y - P(0.34f), P(0.44f), (uint16_t)0x2E9F);
+            t.fillCircle(x, y - P(0.32f), P(0.36f), (uint16_t)0x9F9F);
+            t.fillCircle(x, y - P(0.30f), P(0.17f), (uint16_t)0x1B4A);
             t.fillCircle(x - P(0.07f), y - P(0.36f), P(0.05f) + 1, BLACK);
             t.fillCircle(x + P(0.07f), y - P(0.36f), P(0.05f) + 1, BLACK);
             t.fillCircle(x - P(0.16f), y - P(0.48f), P(0.10f), WHITE);
@@ -1342,13 +1485,13 @@ static void drawJunk(TFT_eSPI& t, uint8_t kind, int x, int y, int s, uint32_t no
                              (k & 1) ? AMBER : PINK);
             }
             t.drawWideLine(x - P(0.30f), y + P(0.30f), x - P(0.42f), y + P(0.62f),
-                           P(0.09f) + 1, t.color565(92, 102, 132));
+                           P(0.09f) + 1, (uint16_t)0x5B30);
             break;
         }
         case 3: {   // CRT television
-            const uint16_t chassis = t.color565(138, 138, 160);
-            const uint16_t hi      = t.color565(198, 198, 222);
-            const uint16_t lo      = t.color565(92, 96, 112);
+            const uint16_t chassis = (uint16_t)0x8C54;
+            const uint16_t hi      = (uint16_t)0xC63B;
+            const uint16_t lo      = (uint16_t)0x5B0E;
             t.drawWideLine(x - P(0.26f), y - P(0.62f), x - P(0.86f), y - P(1.30f), 2, hi);
             t.drawWideLine(x + P(0.26f), y - P(0.62f), x + P(0.86f), y - P(1.30f), 2, hi);
             t.fillCircle(x - P(0.86f), y - P(1.30f), P(0.09f) + 1, WHITE);
@@ -1359,7 +1502,7 @@ static void drawJunk(TFT_eSPI& t, uint8_t kind, int x, int y, int s, uint32_t no
             t.fillRect(x - s, y - P(0.66f), 2 * s, P(1.40f), chassis);
             t.fillRect(x - s, y - P(0.66f), 2 * s, P(0.14f) + 1, hi);
             t.fillRect(x - s, y + P(0.62f), 2 * s, P(0.12f) + 1, lo);
-            t.fillRect(x - P(0.86f), y - P(0.52f), P(1.42f), P(1.08f), t.color565(16, 16, 32));
+            t.fillRect(x - P(0.86f), y - P(0.52f), P(1.42f), P(1.08f), (uint16_t)0x1084);
             static const uint16_t BAR[5] = { 0, 0, 0, 0, 0 };
             (void)BAR;
             const uint16_t bars[5] = { PINK, AMBER, VAPOR_YELLOW, CYAN, GREEN };
@@ -1369,9 +1512,9 @@ static void drawJunk(TFT_eSPI& t, uint8_t kind, int x, int y, int s, uint32_t no
             }
             t.fillRect(x - P(0.82f), y - P(0.20f), P(1.35f), P(0.10f) + 1, WHITE);
             t.fillRect(x + P(0.56f), y - P(0.52f), P(0.30f), P(1.08f), chassis);
-            t.fillCircle(x + P(0.76f), y - P(0.24f), P(0.13f) + 1, t.color565(58, 58, 74));
+            t.fillCircle(x + P(0.76f), y - P(0.24f), P(0.13f) + 1, (uint16_t)0x39C9);
             t.fillCircle(x + P(0.76f), y - P(0.24f), P(0.07f), hi);
-            t.fillCircle(x + P(0.76f), y + P(0.10f), P(0.13f) + 1, t.color565(58, 58, 74));
+            t.fillCircle(x + P(0.76f), y + P(0.10f), P(0.13f) + 1, (uint16_t)0x39C9);
             t.fillCircle(x + P(0.76f), y + P(0.10f), P(0.07f), hi);
             for (uint8_t k = 0; k < 3; k++) {
                 t.fillRect(x + P(0.66f), y + P(0.34f) + k * (P(0.09f) + 1),
@@ -1380,8 +1523,8 @@ static void drawJunk(TFT_eSPI& t, uint8_t kind, int x, int y, int s, uint32_t no
             break;
         }
         case 4: {   // burger
-            const uint16_t bunTop = t.color565(240, 180, 92);
-            const uint16_t bunLo  = t.color565(217, 144, 56);
+            const uint16_t bunTop = (uint16_t)0xF5AB;
+            const uint16_t bunLo  = (uint16_t)0xDC87;
             t.fillEllipse(x, y - P(0.20f), s + 1, P(0.68f) + 1, BLACK);
             t.fillEllipse(x, y - P(0.20f), s, P(0.66f), bunTop);
             t.fillRect(x - s, y - P(0.20f), 2 * s, P(0.24f), bunLo);
@@ -1390,63 +1533,63 @@ static void drawJunk(TFT_eSPI& t, uint8_t kind, int x, int y, int s, uint32_t no
             const float sy[5] = { -0.62f, -0.72f, -0.68f, -0.56f, -0.50f };
             for (uint8_t k = 0; k < 5; k++) {
                 t.fillEllipse(x + P(sx[k]), y + P(sy[k]), P(0.11f) + 1, P(0.07f) + 1,
-                              t.color565(255, 242, 204));
+                              (uint16_t)0xFF99);
             }
-            const uint16_t lettuce = t.color565(63, 191, 95);
+            const uint16_t lettuce = (uint16_t)0x3DEB;
             t.fillRect(x - P(1.02f), y - P(0.16f), P(2.04f), P(0.16f) + 1, lettuce);
             for (int k = -3; k <= 3; k++) t.fillCircle(x + k * P(0.30f), y - P(0.04f), P(0.15f), lettuce);
-            t.fillEllipse(x, y + P(0.06f), P(0.94f), P(0.14f) + 1, t.color565(216, 56, 40));
-            t.fillEllipse(x, y + P(0.04f), P(0.72f), P(0.08f) + 1, t.color565(240, 96, 80));
-            t.fillRect(x - P(0.90f), y + P(0.14f), P(1.80f), P(0.16f) + 1, t.color565(255, 192, 32));
-            t.fillRect(x - P(0.58f), y + P(0.28f), P(0.20f), P(0.18f), t.color565(255, 192, 32));
-            t.fillRect(x + P(0.34f), y + P(0.28f), P(0.20f), P(0.16f), t.color565(255, 192, 32));
-            t.fillRect(x - P(0.94f), y + P(0.28f), P(1.88f), P(0.32f), t.color565(122, 61, 22));
-            t.fillRect(x - P(0.94f), y + P(0.28f), P(1.88f), P(0.08f) + 1, t.color565(152, 81, 31));
-            t.fillEllipse(x + P(0.74f), y + P(0.22f), P(0.22f), P(0.09f) + 1, t.color565(87, 176, 74));
+            t.fillEllipse(x, y + P(0.06f), P(0.94f), P(0.14f) + 1, (uint16_t)0xD9C5);
+            t.fillEllipse(x, y + P(0.04f), P(0.72f), P(0.08f) + 1, (uint16_t)0xF30A);
+            t.fillRect(x - P(0.90f), y + P(0.14f), P(1.80f), P(0.16f) + 1, (uint16_t)0xFE04);
+            t.fillRect(x - P(0.58f), y + P(0.28f), P(0.20f), P(0.18f), (uint16_t)0xFE04);
+            t.fillRect(x + P(0.34f), y + P(0.28f), P(0.20f), P(0.16f), (uint16_t)0xFE04);
+            t.fillRect(x - P(0.94f), y + P(0.28f), P(1.88f), P(0.32f), (uint16_t)0x79E2);
+            t.fillRect(x - P(0.94f), y + P(0.28f), P(1.88f), P(0.08f) + 1, (uint16_t)0x9A83);
+            t.fillEllipse(x + P(0.74f), y + P(0.22f), P(0.22f), P(0.09f) + 1, (uint16_t)0x5589);
             t.fillEllipse(x, y + P(0.56f), P(0.94f) + 1, P(0.32f) + 1, BLACK);
-            t.fillEllipse(x, y + P(0.54f), P(0.94f), P(0.30f), t.color565(224, 162, 78));
-            t.fillRect(x - P(0.94f), y + P(0.36f), P(1.88f), P(0.18f), t.color565(224, 162, 78));
+            t.fillEllipse(x, y + P(0.54f), P(0.94f), P(0.30f), (uint16_t)0xE509);
+            t.fillRect(x - P(0.94f), y + P(0.36f), P(1.88f), P(0.18f), (uint16_t)0xE509);
             break;
         }
         case 5: {   // pizza
             t.fillTriangle(x, y - s - 1, x - P(0.92f), y + P(0.84f),
                            x + P(0.92f), y + P(0.84f), BLACK);
             t.fillTriangle(x, y - P(1.02f), x - P(0.90f), y + P(0.82f),
-                           x + P(0.90f), y + P(0.82f), t.color565(232, 176, 64));
+                           x + P(0.90f), y + P(0.82f), (uint16_t)0xED88);
             t.fillTriangle(x, y - P(0.82f), x - P(0.72f), y + P(0.64f),
-                           x + P(0.72f), y + P(0.64f), t.color565(192, 72, 40));
+                           x + P(0.72f), y + P(0.64f), (uint16_t)0xC245);
             t.fillTriangle(x, y - P(0.66f), x - P(0.60f), y + P(0.52f),
-                           x + P(0.60f), y + P(0.52f), t.color565(248, 208, 96));
+                           x + P(0.60f), y + P(0.52f), (uint16_t)0xFE8C);
             t.fillTriangle(x, y - P(0.60f), x - P(0.34f), y + P(0.10f),
-                           x + P(0.34f), y + P(0.10f), t.color565(255, 230, 148));
-            t.fillEllipse(x, y + P(0.80f), P(0.94f), P(0.26f), t.color565(216, 152, 64));
-            t.fillRect(x - P(0.92f), y + P(0.66f), P(1.84f), P(0.16f) + 1, t.color565(216, 152, 64));
+                           x + P(0.34f), y + P(0.10f), (uint16_t)0xFF32);
+            t.fillEllipse(x, y + P(0.80f), P(0.94f), P(0.26f), (uint16_t)0xDCC8);
+            t.fillRect(x - P(0.92f), y + P(0.66f), P(1.84f), P(0.16f) + 1, (uint16_t)0xDCC8);
             const float bx[3] = { -0.55f, 0.0f, 0.55f };
             for (uint8_t k = 0; k < 3; k++) {
-                t.fillCircle(x + P(bx[k]), y + P(0.80f), P(0.09f) + 1, t.color565(168, 106, 32));
+                t.fillCircle(x + P(bx[k]), y + P(0.80f), P(0.09f) + 1, (uint16_t)0xAB44);
             }
             const float px[3] = {  0.00f, -0.28f,  0.30f };
             const float py[3] = { -0.20f,  0.26f,  0.22f };
             const float pr[3] = {  0.19f,  0.16f,  0.16f };
             for (uint8_t k = 0; k < 3; k++) {
                 const int r = P(pr[k]) + 1;
-                t.fillCircle(x + P(px[k]), y + P(py[k]), r, t.color565(142, 28, 28));
-                t.fillCircle(x + P(px[k]), y + P(py[k]), (r * 72) / 100, t.color565(212, 58, 42));
+                t.fillCircle(x + P(px[k]), y + P(py[k]), r, (uint16_t)0x88E3);
+                t.fillCircle(x + P(px[k]), y + P(py[k]), (r * 72) / 100, (uint16_t)0xD1C5);
                 t.fillCircle(x + P(px[k]) - (r * 28) / 100, y + P(py[k]) - (r * 28) / 100,
-                             (r * 24) / 100, t.color565(240, 106, 82));
+                             (r * 24) / 100, (uint16_t)0xF34A);
             }
             const float hx[3] = { -0.14f, 0.20f, -0.34f };
             const float hy[3] = {  0.50f, -0.44f, -0.10f };
             for (uint8_t k = 0; k < 3; k++) {
                 t.fillEllipse(x + P(hx[k]), y + P(hy[k]), P(0.09f) + 1, P(0.05f) + 1,
-                              t.color565(47, 143, 58));
+                              (uint16_t)0x2C67);
             }
             break;
         }
         case 6: {   // toilet, lid down
-            const uint16_t porc = t.color565(228, 233, 242);
+            const uint16_t porc = (uint16_t)0xE75E;
             const uint16_t lit  = WHITE;
-            const uint16_t shad = t.color565(185, 194, 212);
+            const uint16_t shad = (uint16_t)0xBE1A;
             t.fillRect(x - P(0.78f), y - P(1.08f), P(1.56f), P(0.22f) + 2, BLACK);
             t.fillRect(x - P(0.76f), y - P(1.06f), P(1.52f), P(0.18f) + 1, porc);
             t.fillRect(x - P(0.76f), y - P(1.06f), P(1.52f), P(0.07f) + 1, lit);
@@ -1454,29 +1597,29 @@ static void drawJunk(TFT_eSPI& t, uint8_t kind, int x, int y, int s, uint32_t no
             t.fillRect(x - P(0.68f), y - P(0.90f), P(1.36f), P(0.72f), BLACK);
             t.fillRect(x - P(0.66f), y - P(0.88f), P(1.32f), P(0.68f), porc);
             t.fillRect(x - P(0.66f), y - P(0.26f), P(1.32f), P(0.10f) + 1, shad);
-            t.fillRect(x + P(0.50f), y - P(0.66f), P(0.26f), P(0.14f) + 1, t.color565(200, 160, 32));
+            t.fillRect(x + P(0.50f), y - P(0.66f), P(0.26f), P(0.14f) + 1, (uint16_t)0xCD04);
             t.fillCircle(x - P(0.86f), y - P(0.60f), P(0.18f) + 1, lit);
             t.fillCircle(x - P(0.86f), y - P(0.60f), P(0.07f), shad);
             t.fillEllipse(x, y + P(0.14f), P(0.88f) + 1, P(0.48f) + 1, BLACK);
             t.fillEllipse(x, y + P(0.14f), P(0.88f), P(0.48f), porc);
             t.fillEllipse(x, y + P(0.06f), P(0.80f), P(0.40f), lit);
-            t.fillEllipse(x, y + P(0.10f), P(0.62f), P(0.30f), t.color565(147, 163, 192));
-            t.fillEllipse(x, y + P(0.12f), P(0.50f), P(0.23f), t.color565(47, 159, 216));
-            t.fillEllipse(x - P(0.14f), y + P(0.06f), P(0.22f), P(0.09f) + 1, t.color565(143, 224, 255));
+            t.fillEllipse(x, y + P(0.10f), P(0.62f), P(0.30f), (uint16_t)0x9518);
+            t.fillEllipse(x, y + P(0.12f), P(0.50f), P(0.23f), (uint16_t)0x2CFB);
+            t.fillEllipse(x - P(0.14f), y + P(0.06f), P(0.22f), P(0.09f) + 1, (uint16_t)0x8F1F);
             t.fillRect(x - P(0.32f), y + P(0.50f), P(0.64f), P(0.42f), BLACK);
-            t.fillRect(x - P(0.30f), y + P(0.52f), P(0.60f), P(0.40f), t.color565(223, 228, 238));
+            t.fillRect(x - P(0.30f), y + P(0.52f), P(0.60f), P(0.40f), (uint16_t)0xDF3D);
             t.fillRect(x - P(0.30f), y + P(0.52f), P(0.12f) + 1, P(0.40f), lit);
             t.fillEllipse(x, y + P(0.92f), P(0.56f), P(0.16f) + 1, porc);
             break;
         }
         default: {  // rubber duck
-            const uint16_t body = t.color565(255, 200, 32);
-            const uint16_t lit  = t.color565(255, 224, 96);
-            const uint16_t shad = t.color565(240, 170, 0);
+            const uint16_t body = (uint16_t)0xFE44;
+            const uint16_t lit  = (uint16_t)0xFF0C;
+            const uint16_t shad = (uint16_t)0xF540;
             t.fillEllipse(x - P(0.05f), y + P(0.66f), P(1.05f), P(0.22f) + 1,
-                          blend(BG, t.color565(120, 200, 255), 90));
+                          blend(BG, (uint16_t)0x7E5F, 90));
             t.fillTriangle(x - P(0.78f), y + P(0.10f), x - P(1.24f), y - P(0.28f),
-                           x - P(0.66f), y - P(0.16f), t.color565(255, 180, 0));
+                           x - P(0.66f), y - P(0.16f), (uint16_t)0xFDA0);
             t.fillEllipse(x - P(0.08f), y + P(0.30f), P(0.94f) + 1, P(0.54f) + 1, BLACK);
             t.fillEllipse(x - P(0.08f), y + P(0.30f), P(0.94f), P(0.54f), body);
             t.fillEllipse(x - P(0.08f), y + P(0.16f), P(0.86f), P(0.36f), lit);
@@ -1484,18 +1627,18 @@ static void drawJunk(TFT_eSPI& t, uint8_t kind, int x, int y, int s, uint32_t no
             for (int k = -2; k <= 2; k++) {
                 t.fillCircle(x - P(0.18f) + k * P(0.17f), y + P(0.50f), P(0.10f) + 1, shad);
             }
-            t.fillEllipse(x - P(0.22f), y + P(0.22f), P(0.34f), P(0.16f) + 1, t.color565(255, 210, 60));
+            t.fillEllipse(x - P(0.22f), y + P(0.22f), P(0.34f), P(0.16f) + 1, (uint16_t)0xFE87);
             t.fillCircle(x + P(0.50f), y - P(0.42f), P(0.46f) + 1, BLACK);
             t.fillCircle(x + P(0.50f), y - P(0.42f), P(0.46f), body);
             t.fillCircle(x + P(0.44f), y - P(0.52f), P(0.34f), lit);
-            t.fillRect(x + P(0.84f), y - P(0.38f), P(0.46f), P(0.22f) + 1, t.color565(255, 140, 16));
-            t.fillRect(x + P(0.84f), y - P(0.24f), P(0.36f), P(0.11f) + 1, t.color565(216, 96, 0));
-            t.fillCircle(x + P(1.02f), y - P(0.34f), P(0.04f) + 1, t.color565(160, 70, 0));
+            t.fillRect(x + P(0.84f), y - P(0.38f), P(0.46f), P(0.22f) + 1, (uint16_t)0xFC62);
+            t.fillRect(x + P(0.84f), y - P(0.24f), P(0.36f), P(0.11f) + 1, (uint16_t)0xDB00);
+            t.fillCircle(x + P(1.02f), y - P(0.34f), P(0.04f) + 1, (uint16_t)0xA220);
             t.fillCircle(x + P(0.56f), y - P(0.56f), P(0.13f) + 1, BLACK);
             t.fillCircle(x + P(0.60f), y - P(0.60f), P(0.05f) + 1, WHITE);
             t.drawWideLine(x + P(0.44f), y - P(0.74f), x + P(0.68f), y - P(0.72f),
-                           P(0.07f) + 1, t.color565(201, 138, 0));
-            t.fillCircle(x + P(0.26f), y - P(0.26f), P(0.11f) + 1, t.color565(255, 157, 176));
+                           P(0.07f) + 1, (uint16_t)0xCC40);
+            t.fillCircle(x + P(0.26f), y - P(0.26f), P(0.11f) + 1, (uint16_t)0xFCF6);
             break;
         }
     }
@@ -1545,7 +1688,12 @@ void drawStarfield(TFT_eSPI& t, uint32_t now, int yStart, int yEnd) {
     const float wob = (float)now / 2860.0f;
     const int   cx  = w / 2              + (int)(sinf(wob) * 14.0f);
     const int   cy  = yStart + bandH / 2 + (int)(cosf(wob * 1.29f) * 9.0f);
-    const float aspect = (float)bandH / (float)w * 1.25f;
+    // The rings take the band's shape: a little squashed on a landscape board,
+    // a little tall on a portrait one. Past 8:5 tall -- the phone app, upright;
+    // no board is that shape -- that stretched them into long thin ovals, so
+    // there they stay round and run off the sides instead, like looking down
+    // the same tube through a narrower window.
+    const float aspect = (bandH * 5 > w * 8) ? 1.0f : (float)bandH / (float)w * 1.25f;
     const float maxR   = sqrtf((float)(w * w + bandH * bandH)) * 0.62f;
 
     // Flat clear. The old nebula gradient was ~190 dithered drawFastHLine
@@ -1972,7 +2120,7 @@ static void drawToasterAt(TFT_eSPI& t, int x, int y, uint32_t now, uint16_t body
     auto S = [scale](float v) { return v * scale; };
     const int bw = (int)S(44.0f), bh = (int)S(30.0f);
 
-    const uint16_t chHi  = t.color565(250, 250, 250);
+    const uint16_t chHi  = (uint16_t)0xFFDF;
     // Shade toward a dark BLUE, not toward BG. RGB332 has no neutral
     // mid-grey: anything around 100-130 brightness has its blue snap down
     // to 85 while red and green hold at 109, giving (109,109,85) -- olive,
@@ -1981,18 +2129,18 @@ static void drawToasterAt(TFT_eSPI& t, int x, int y, uint32_t now, uint16_t body
     // the three shade tones were olive. Carrying blue through the blend
     // keeps them on (146,146,170) and (109,109,170), and a slightly cool
     // chrome is right where a warm one is simply wrong.
-    const uint16_t shadeTo = t.color565(48, 48, 168);
+    const uint16_t shadeTo = (uint16_t)0x3195;
     const uint16_t chMid = blend(bodyCol, shadeTo, 70);
     const uint16_t chLo  = blend(bodyCol, shadeTo, 130);
     const uint16_t chDk  = blend(bodyCol, shadeTo, 200);
     // (52,52,60) quantises to (36,36,0) -- a dark olive keyline round a
     // chrome body. Blue needs to clear 64 to land on 85 at all.
-    const uint16_t edge  = t.color565(52, 52, 96);
-    const uint16_t slot  = t.color565(18, 18, 24);
-    const uint16_t glow  = t.color565(150, 88, 30);
-    const uint16_t glow2 = t.color565(110, 50, 20);
-    const uint16_t wh    = t.color565(252, 252, 252);
-    const uint16_t wh3   = t.color565(170, 174, 190);
+    const uint16_t edge  = (uint16_t)0x31AC;
+    const uint16_t slot  = (uint16_t)0x1083;
+    const uint16_t glow  = (uint16_t)0x92C3;
+    const uint16_t glow2 = (uint16_t)0x6982;
+    const uint16_t wh    = (uint16_t)0xFFFF;
+    const uint16_t wh3   = (uint16_t)0xAD77;
 
     // 500 ms beat, offset per sprite so a flock does not pulse in unison.
     const float flap = sinf((float)((now + (uint32_t)x * 37u) % 500u) / 500.0f * 6.2831853f);
@@ -2068,10 +2216,10 @@ static void drawToastAt(TFT_eSPI& t, int x, int y, uint32_t now, bool hasFace,
     // lands on (109,73,0) and (80,50,15) on (73,36,0), both real browns,
     // where an obvious-looking charcoal would collapse to flat black and
     // lose the slab's faces entirely.
-    const uint16_t top   = burnt ? t.color565(120,  90, 20) : t.color565(233, 190, 120);
-    const uint16_t crumb = burnt ? t.color565(150, 115, 30) : t.color565(246, 213, 158);
-    const uint16_t crust = burnt ? t.color565( 80,  50, 15) : t.color565(198, 132, 56);
-    const uint16_t edge  = burnt ? t.color565( 40,  14, 10) : t.color565(150,  90, 34);
+    const uint16_t top   = burnt ? (uint16_t)0x7AC2 : (uint16_t)0xEDEF;
+    const uint16_t crumb = burnt ? (uint16_t)0x9383 : (uint16_t)0xF6B3;
+    const uint16_t crust = burnt ? (uint16_t)0x5181 : (uint16_t)0xC427;
+    const uint16_t edge  = burnt ? (uint16_t)0x2861 : (uint16_t)0x92C4;
 
     int16_t px[4], py[4];
     // Front-left crust wall, then front-right: the two faces you can see.
@@ -2121,7 +2269,7 @@ static void drawToastAt(TFT_eSPI& t, int x, int y, uint32_t now, bool hasFace,
     // The fan-favourite face, kept for the minority of slices that already
     // got one, now sitting on the crumb panel.
     if (hasFace) {
-        const uint16_t ink = t.color565(60, 36, 12);
+        const uint16_t ink = (uint16_t)0x3921;
         t.fillRect((int)(cx - S(7)), (int)(cy - S(3)), (int)S(3), (int)S(3), ink);
         t.fillRect((int)(cx + S(4)), (int)(cy - S(3)), (int)S(3), (int)S(3), ink);
         if (sinf((float)now / 500.0f + (float)x) > 0.0f) {
@@ -2144,10 +2292,10 @@ static void drawToastAt(TFT_eSPI& t, int x, int y, uint32_t now, bool hasFace,
 // beyond eyes and a nose just turns him into a smudge.
 static void drawBorisAt(TFT_eSPI& t, int x, int y, uint32_t now, float scale, bool swipe) {
     auto S = [scale](float v) { return (int)(v * scale + 0.5f); };
-    const uint16_t furD = t.color565(96, 96, 118);
-    const uint16_t furL = t.color565(150, 150, 172);
-    const uint16_t eye  = t.color565(210, 230, 90);
-    const uint16_t pink = t.color565(230, 140, 160);
+    const uint16_t furD = (uint16_t)0x630E;
+    const uint16_t furL = (uint16_t)0x94B5;
+    const uint16_t eye  = (uint16_t)0xD72B;
+    const uint16_t pink = (uint16_t)0xE474;
 
     // Tail: a swishing arc behind him, three segments so it curls.
     const float sw = sinf((float)now / 300.0f) * 0.55f;
@@ -2199,9 +2347,9 @@ static void drawBorisAt(TFT_eSPI& t, int x, int y, uint32_t now, float scale, bo
 void drawLilGuy(TFT_eSPI& t, int x, int baseY, uint32_t now, uint8_t scale, bool flip) {
     static const uint16_t PAL[4] = { 0, 0, 0, 0 };
     (void)PAL;
-    const uint16_t hair = t.color565(0, 255, 245);
-    const uint16_t skin = t.color565(255, 208, 240);
-    const uint16_t body = t.color565(185, 103, 255);
+    const uint16_t hair = (uint16_t)0x07FE;
+    const uint16_t skin = (uint16_t)0xFE9E;
+    const uint16_t body = (uint16_t)0xBB3F;
     const uint8_t  f    = (uint8_t)((now / 80u) % LILGUY_FRAMES);
     const int      s    = scale ? scale : 2;
     const int      top  = baseY - LILGUY_H * s;
@@ -2224,11 +2372,11 @@ void drawLilGuy(TFT_eSPI& t, int x, int baseY, uint32_t now, uint8_t scale, bool
 // him, which is the same joke without needing something to destroy.
 static void drawMowinManAt(TFT_eSPI& t, int x, int baseY, uint32_t now, float scale) {
     auto S = [scale](float v) { return (int)(v * scale + 0.5f); };
-    const uint16_t skin  = t.color565(232, 186, 140);
-    const uint16_t shirt = t.color565(70, 120, 200);
-    const uint16_t trous = t.color565(60, 60, 90);
-    const uint16_t mower = t.color565(200, 60, 50);
-    const uint16_t metal = t.color565(150, 150, 172);
+    const uint16_t skin  = (uint16_t)0xEDD1;
+    const uint16_t shirt = (uint16_t)0x43D9;
+    const uint16_t trous = (uint16_t)0x39EB;
+    const uint16_t mower = (uint16_t)0xC9E6;
+    const uint16_t metal = (uint16_t)0x94B5;
 
     // Legs alternate on a walk cycle; the body bobs with it.
     const bool step = ((now / 180u) & 1u) != 0;
@@ -2239,7 +2387,7 @@ static void drawMowinManAt(TFT_eSPI& t, int x, int baseY, uint32_t now, float sc
     t.fillRoundRect(x + S(4), baseY - S(19) + bob, S(10), S(11), S(3), shirt);
     t.fillRect(x + S(13), baseY - S(17) + bob, S(7), S(3), skin);        // arms out to the handle
     t.fillCircle(x + S(9), baseY - S(22) + bob, S(4), skin);
-    t.fillRect(x + S(5), baseY - S(26) + bob, S(9), S(3), t.color565(40, 40, 60));
+    t.fillRect(x + S(5), baseY - S(26) + bob, S(9), S(3), (uint16_t)0x2947);
 
     // Mower: handle up to his hands, deck on the ground, wheels.
     t.drawLine(x + S(19), baseY - S(16) + bob, x + S(27), baseY - S(4), metal);
@@ -2251,6 +2399,8 @@ static void drawMowinManAt(TFT_eSPI& t, int x, int baseY, uint32_t now, float sc
 
 // Defined further down, next to backgroundTap() which consumes it.
 static void publishGoldToaster(int cx, int cy, int hw, int hh, uint32_t now);
+static void publishFlockToaster(uint8_t i, int cx, int cy, int hw, int hh, uint32_t now);
+static int8_t s_flockTaken = -1;     // a toaster tapped three times, to be dropped from the flock
 
 void drawFlyingToasters(TFT_eSPI& t, uint32_t now, int yStart, int yEnd) {
     static const uint8_t N = 5;
@@ -2321,7 +2471,7 @@ void drawFlyingToasters(TFT_eSPI& t, uint32_t now, int yStart, int yEnd) {
     // starfield block below, which draws before the flock so everything
     // passes in front of it.
     // (190,190,150) quantises to (182,182,170) -- see drawToasterAt().
-    uint16_t chromeCol = t.color565(190, 190, 150);
+    uint16_t chromeCol = (uint16_t)0xBDF2;
 
     if (!inited) {
         for (uint8_t i = 0; i < N; i++) {
@@ -2458,7 +2608,7 @@ void drawFlyingToasters(TFT_eSPI& t, uint32_t now, int yStart, int yEnd) {
         cmHx[0] = cmX; cmHy[0] = cmY;
         if (cmHn < CMTRAIL) cmHn++;
 
-        const uint16_t ICE = t.color565(190, 226, 255);
+        const uint16_t ICE = (uint16_t)0xBF1F;
         // Walk the history from the far end forward, so brighter, wider
         // trail nearer the head simply paints over the dimmer tail behind
         // it -- no need to sort or blend anything.
@@ -2506,10 +2656,13 @@ void drawFlyingToasters(TFT_eSPI& t, uint32_t now, int yStart, int yEnd) {
     // corner, re-entering from the lower-left. Every so often a
     // respawning toaster comes back gold-plated instead of chrome — a
     // rare shiny to spot, with a little sparkle trail while it lasts.
-    uint16_t goldCol = t.color565(255, 215, 60);
+    uint16_t goldCol = (uint16_t)0xFEA7;
     for (uint8_t i = 0; i < N; i++) {
         tx[i] += (0.6f + (float)(i % 3) * 0.25f) * tscale[i];
         ty[i] -= (0.15f + (float)(i % 2) * 0.1f) * tscale[i];
+        // One tapped three times leaves the flock (see backgroundTap): it
+        // is respawned at once, and the pet it became takes over from here.
+        if (s_flockTaken == (int8_t)i) { s_flockTaken = -1; tx[i] = (float)w + 50.0f; }
         if (tx[i] > w + 40 || ty[i] < (float)yStart - 44) {
             tx[i]     = (float)(-random(0, 40) - 70);
             ty[i]     = (float)random(yStart + 12, yEnd - 12);
@@ -2523,6 +2676,9 @@ void drawFlyingToasters(TFT_eSPI& t, uint32_t now, int yStart, int yEnd) {
         // every toaster on every frame costs a couple of compares.
         Squachy::toasterNear((int)tx[i], (int)ty[i]);
         drawToasterAt(t, (int)tx[i], (int)ty[i], now, tcol[i], tscale[i]);
+        if (tcol[i] != goldCol && tx[i] >= 0.0f && tx[i] + 44.0f * tscale[i] <= (float)w)
+            publishFlockToaster(i, (int)tx[i] + (int)(22.0f * tscale[i]), (int)ty[i] + (int)(15.0f * tscale[i]),
+                                (int)(22.0f * tscale[i]), (int)(15.0f * tscale[i]), now);
         if (tcol[i] == goldCol) {
             // Publish the body's centre so a tap can find it. Radius covers
             // the body, not the wings -- the wings sweep and a hit box that
@@ -2603,8 +2759,8 @@ void drawFlyingToasters(TFT_eSPI& t, uint32_t now, int yStart, int yEnd) {
         const int gBase = (s_bgFloor > yStart && s_bgFloor <= yEnd)
                           ? s_bgFloor - 1 : yEnd - 1;
         const int colW  = (w + GRASSW - 1) / GRASSW;
-        const uint16_t g1 = t.color565(60, 150, 70);
-        const uint16_t g2 = t.color565(40, 110, 50);
+        const uint16_t g1 = (uint16_t)0x3CA8;
+        const uint16_t g2 = (uint16_t)0x2B66;
         for (uint8_t i = 0; i < GRASSW; i++) {
             const int gx = (int)i * colW;
             if (gx > w) break;
@@ -2819,7 +2975,7 @@ static void drawFishAt(TFT_eSPI& t, int cx, int cy, int8_t swim, int s,
     // Counter-shading derived from the fish's own colour, so each keeps
     // its identity while gaining a lit top and a pale belly.
     const uint16_t back  = col;
-    const uint16_t belly = blend(col, t.color565(255, 255, 255), 110);
+    const uint16_t belly = blend(col, (uint16_t)0xFFFF, 110);
     const int snoutX = cx + fore * (int)(L * 0.5f);
 
     auto waveAt = [&](float u) { return sinf(ph - u * 4.2f) * (0.25f + u * u * (float)s * 0.40f); };
@@ -2893,7 +3049,7 @@ static void drawFishAt(TFT_eSPI& t, int cx, int cy, int8_t swim, int s,
         const float u  = 0.17f;
         const int   px = (int)xAt(u);
         const int   py = (int)yAt(u) - (int)(fishProfile(species, u) * s * 0.34f);
-        t.drawPixel(px, py, t.color565(240, 240, 245));
+        t.drawPixel(px, py, (uint16_t)0xF79E);
         t.drawPixel(px + fore, py, BLACK);
     }
 }
@@ -2967,9 +3123,9 @@ static void drawShark(TFT_eSPI& t, int snoutX, int cy, int8_t swim, int ss, uint
     const int   NSL   = (int)L + 1;
     const float phase = (float)now / 190.0f;
 
-    const uint16_t back  = t.color565(58, 72, 88);         // dorsal
-    const uint16_t belly = t.color565(196, 202, 206);      // ventral
-    const uint16_t edge  = t.color565(34, 42, 54);
+    const uint16_t back  = (uint16_t)0x3A4B;         // dorsal
+    const uint16_t belly = (uint16_t)0xC659;      // ventral
+    const uint16_t edge  = (uint16_t)0x2146;
 
     // Centreline and half-height for any u, shared by the body slices
     // and every fin so the fins stay attached while the body flexes.
@@ -3047,7 +3203,7 @@ static void drawShark(TFT_eSPI& t, int snoutX, int cy, int8_t swim, int ss, uint
     {
         const float u = 0.13f;
         const int px = (int)xAt(u), py = (int)yAt(u) - (int)(sharkProfile(u) * ss * 0.17f);
-        t.fillCircle(px, py, 1, t.color565(240, 240, 245));
+        t.fillCircle(px, py, 1, (uint16_t)0xF79E);
         t.drawPixel(px + fore, py, RED);      // the glint, kept
     }
     // Mouth: a short underslung line running aft from the snout.
@@ -3105,11 +3261,11 @@ void drawAquarium(TFT_eSPI& t, uint32_t now, int yStart, int yEnd) {
         // tank's water, sand and light are all fixed too, so pulling the
         // fish from the palette would make them the one element that
         // jumps hue when the theme changes.
-        uint16_t cols[5] = { t.color565(126, 196, 194),   // pale aqua
-                             t.color565( 92, 148, 178),   // steel blue
-                             t.color565(142, 198, 168),   // seafoam
-                             t.color565( 78, 132, 146),   // dim teal
-                             t.color565(176, 168, 132) }; // muted sand, one warm note
+        uint16_t cols[5] = { (uint16_t)0x7E38,   // pale aqua
+                             (uint16_t)0x5CB6,   // steel blue
+                             (uint16_t)0x8E35,   // seafoam
+                             (uint16_t)0x4C32,   // dim teal
+                             (uint16_t)0xB550 }; // muted sand, one warm note
         for (uint8_t i = 0; i < N; i++) {
             fish[i].x       = (float)random(0, w);
             fish[i].y       = (float)(yStart + random(10, bandH > 20 ? bandH - 10 : bandH));
@@ -3243,7 +3399,7 @@ void drawAquarium(TFT_eSPI& t, uint32_t now, int yStart, int yEnd) {
     // dark teal is the highest-contrast thing on the screen, which made
     // the lighting read as an effect laid over the scene instead of
     // light inside it.
-    const uint16_t rayCol = t.color565(112, 190, 202);
+    const uint16_t rayCol = (uint16_t)0x75F9;
 
     // Waterline. The surface itself rises and falls across the tank
     // rather than being ruled flat: two travelling waves at different
@@ -3258,7 +3414,7 @@ void drawAquarium(TFT_eSPI& t, uint32_t now, int yStart, int yEnd) {
         const uint16_t t1500 = turnOf(now, 1500.0f);
         const uint16_t t260  = turnOf(now, 260.0f);
         const uint16_t t350  = turnOf(now, 350.0f);
-        const uint16_t waterDark = t.color565(10, 70, 110);
+        const uint16_t waterDark = (uint16_t)0x0A2D;
         for (int x = 0; x < w; x += 2) {
             // 0.055 and 0.019 rad per pixel are 574 and 198 turn-units.
             const int surf = (isin256((uint16_t)(x * 574 + t900)) * 410           // x 1.6
@@ -3324,7 +3480,7 @@ void drawAquarium(TFT_eSPI& t, uint32_t now, int yStart, int yEnd) {
         const float sv = (float)now / 260.0f;
         // Caustics brighten and dim together as the surface above moves.
         const float breathe = 0.72f + 0.28f * sinf((float)now / 1700.0f);
-        const uint16_t causticCol = t.color565(138, 202, 206);
+        const uint16_t causticCol = (uint16_t)0x8E59;
         const int suI = (int)su;
         for (int y = DrawBand::top(floorTop); y < DrawBand::bot(yEnd); y++) {
             const float near = (float)(y - floorTop) / (float)(yEnd - floorTop); // 0 back, 1 front
@@ -3337,7 +3493,7 @@ void drawAquarium(TFT_eSPI& t, uint32_t now, int yStart, int yEnd) {
             // was the single biggest hue clash in the tank -- two
             // opposed temperatures meeting at a hard line across the
             // bottom of the screen.
-            const uint16_t sand = blend(waterC, t.color565(104, 118, 110),
+            const uint16_t sand = blend(waterC, (uint16_t)0x6BAD,
                                         (uint8_t)(22 + near * 88));
             t.drawFastHLine(0, y, w, sand);
 
@@ -3358,8 +3514,8 @@ void drawAquarium(TFT_eSPI& t, uint32_t now, int yStart, int yEnd) {
             }
         }
         // Where the floor meets the water, a soft lip rather than a cut.
-        t.drawFastHLine(0, floorTop, w, blend(t.color565(12, 40, 60),
-                                              t.color565(76, 92, 88), 55));
+        t.drawFastHLine(0, floorTop, w, blend((uint16_t)0x0947,
+                                              (uint16_t)0x4AEB, 55));
     }
 
     // Kelp: jointed multi-segment strands, sway amplitude growing
@@ -3374,8 +3530,8 @@ void drawAquarium(TFT_eSPI& t, uint32_t now, int yStart, int yEnd) {
         // Muted into the same family as everything else. Full-strength
         // GREEN was reading as a separate foreground object rather than
         // planting in the same water.
-        uint16_t weedCol = (i % 2 == 0) ? t.color565(72, 128, 104)
-                                        : t.color565(88, 142, 128);
+        uint16_t weedCol = (i % 2 == 0) ? (uint16_t)0x4C0D
+                                        : (uint16_t)0x5C70;
         float ampGrow = 0.0f;
         int px = baseX, py = weedBaseY;
         for (int s = 0; s < segs; s++) {
@@ -3558,8 +3714,8 @@ void drawAquarium(TFT_eSPI& t, uint32_t now, int yStart, int yEnd) {
             const int fx = (int)shX[i], fy = (int)shY[i];
             if (fx < -6 || fx > w + 6 || fy < yStart || fy >= yEnd) continue;
             const uint16_t waterC = aquaWaterAt(t, fy, yStart, bandH);
-            const uint16_t c    = blend(waterC, t.color565(205, 232, 214), 205);
-            const uint16_t cDim = blend(waterC, t.color565(205, 232, 214), 140);
+            const uint16_t c    = blend(waterC, (uint16_t)0xCF5A, 205);
+            const uint16_t cDim = blend(waterC, (uint16_t)0xCF5A, 140);
             const int8_t fore = (shVX[i] >= 0.0f) ? 1 : -1;
             const int8_t aft  = (int8_t)-fore;
 
@@ -3627,7 +3783,7 @@ void drawAquarium(TFT_eSPI& t, uint32_t now, int yStart, int yEnd) {
             const int   shH   = 2 + (int)(ss * 0.16f * (1.0f - tight));
             const uint8_t a   = (uint8_t)(28 + tight * 62);
             t.fillEllipse(sx, floorTop + shH + 1, shW, shH,
-                          blend(t.color565(70, 66, 52), t.color565(4, 10, 18), a));
+                          blend((uint16_t)0x4206, (uint16_t)0x0042, a));
         }
         // Snout LEADS the centre point: the body is laid out aft of
         // whatever x is passed here, so passing sx - dir*ss put the nose
@@ -3993,9 +4149,9 @@ static void ffStep(Fly& f, int w, int y0, int y1, float ds, float wind, uint32_t
     if (f.hy > (float)y1 - 4.0f) f.hy = (float)y1 - 4.0f;
 }
 static inline uint16_t ffTone(TFT_eSPI& t, uint8_t k) {
-    return (k == 0) ? t.color565(219, 255, 73)
-         : (k == 1) ? t.color565(255, 219, 36)
-                    : t.color565(146, 255, 109);
+    return (k == 0) ? (uint16_t)0xDFE9
+         : (k == 1) ? (uint16_t)0xFEC4
+                    : (uint16_t)0x97ED;
 }
 static inline float ffPulse(const Fly& f, uint32_t now, float per) {
     // per is the depth's base period; pk spreads it per fly so no two
@@ -4089,8 +4245,8 @@ void drawFireflies(TFT_eSPI& t, uint32_t now, int yStart, int yEnd) {
     // Blue kept over 42 at both ends so it lands on 85 rather than 0 --
     // the same trap the SNOWFALL sky fell into first. The horizon swings
     // from a warm dusk purple to a cooler night blue with `dusk`.
-    const uint16_t skyTop = t.color565(8, 10, 96);
-    const uint16_t skyHor = blend(t.color565(40, 48, 140), t.color565(128, 44, 96),
+    const uint16_t skyTop = (uint16_t)0x084C;
+    const uint16_t skyHor = blend((uint16_t)0x2991, (uint16_t)0x816C,
                                   (uint16_t)(dusk * 255.0f));
     static const int8_t SKY_DITH[4] = { -9, 4, 9, -4 };
     const int skyH = horizon - yStart;
@@ -4135,12 +4291,12 @@ void drawFireflies(TFT_eSPI& t, uint32_t now, int yStart, int yEnd) {
             int a = (int)(fr * fr * 70.0f) + SKY_DITH[yy & 3];
             if (a <= 2) continue;
             const uint16_t sk = skyAt(yy);
-            const uint16_t warm = blend(sk, t.color565(255, 240, 200), (uint16_t)a);
+            const uint16_t warm = blend(sk, (uint16_t)0xFF99, (uint16_t)a);
             t.drawFastHLine(mx - half, yy, half * 2 + 1, warm);
         }
-        t.fillCircle(mx, my, 5, t.color565(236, 236, 210));
-        t.fillCircle(mx - 2, my - 1, 2, t.color565(200, 200, 176));
-        t.drawCircle(mx, my, 5, t.color565(219, 219, 182));
+        t.fillCircle(mx, my, 5, (uint16_t)0xEF7A);
+        t.fillCircle(mx - 2, my - 1, 2, (uint16_t)0xCE56);
+        t.drawCircle(mx, my, 5, (uint16_t)0xDED6);
     }
 
     // ---- treeline -----------------------------------------------------
@@ -4148,7 +4304,7 @@ void drawFireflies(TFT_eSPI& t, uint32_t now, int yStart, int yEnd) {
     // above every other one. Pure silhouette -- no detail survives this
     // dark anyway, and the uneven top edge is all that reads.
     {
-        const uint16_t tree = t.color565(3, 8, 10);
+        const uint16_t tree = (uint16_t)0x0041;
         for (int x = 0; x < w; x += 8) {
             uint32_t h = (uint32_t)(x / 8 + 40) * 2654435761u; h ^= h >> 13;
             const int hh = 6 + (int)(h % 14u);
@@ -4163,18 +4319,18 @@ void drawFireflies(TFT_eSPI& t, uint32_t now, int yStart, int yEnd) {
         const uint32_t ea = now - s_ffEyesStart;
         if (ea > 3200u) { s_ffEyesStart = 0; s_ffEyesAt = now + (uint32_t)random(16000, 30000); }
         else if (!(ea > 1700u && ea < 1850u)) {
-            const uint16_t eye = t.color565(146, 255, 109);
+            const uint16_t eye = (uint16_t)0x97ED;
             t.fillRect(s_ffEyesX - 4, horizon - 9, 2, 2, eye);
             t.fillRect(s_ffEyesX + 2, horizon - 9, 2, 2, eye);
         }
     }
 
     // ---- the far field, and the mist on it ----------------------------
-    const uint16_t field = t.color565(8, 40, 12);
+    const uint16_t field = (uint16_t)0x0941;
     t.fillRect(0, horizon, w, grassTop - horizon, field);
     // Two fog bands drifting at different speeds, thicker low down. A
     // firefly inside one stops being a point and becomes a halo.
-    const uint16_t fog = t.color565(100, 104, 120);
+    const uint16_t fog = (uint16_t)0x634F;
     auto fogAt = [&](int y) -> float {
         float f = 0.0f;
         for (uint8_t b = 0; b < 2; b++) {
@@ -4208,8 +4364,8 @@ void drawFireflies(TFT_eSPI& t, uint32_t now, int yStart, int yEnd) {
     }
 
     // ---- the near grass ------------------------------------------------
-    const uint16_t soil  = t.color565(6, 30, 10);
-    const uint16_t blade = t.color565(12, 64, 20);
+    const uint16_t soil  = (uint16_t)0x00E1;
+    const uint16_t blade = (uint16_t)0x0A02;
     t.fillRect(0, grassTop, w, yBot - grassTop, soil);
 
     // Where the near light is, for the grass to read. The lantern counts
@@ -4310,7 +4466,7 @@ void drawFireflies(TFT_eSPI& t, uint32_t now, int yStart, int yEnd) {
     // Below the scene's own floor, the soil carries on to the bottom of the
     // band: the counters sit on dark plates of their own, and a black shelf
     // under the grass read as the scene running out.
-    if (yEnd > yBot) t.fillRect(0, yBot, w, yEnd - yBot, t.color565(6, 30, 10));
+    if (yEnd > yBot) t.fillRect(0, yBot, w, yEnd - yBot, (uint16_t)0x00E1);
 }
 
 // ---- tappable background bits -----------------------------------------
@@ -4408,12 +4564,13 @@ void drawToast(TFT_eSPI& t, uint32_t now) {
     t.setTextSize(2);
     int bw = t.textWidth(s_toastHead) + 30;
     if (s_toastSub[0]) {
-        t.setTextSize(1);
+        bodyFontOn(t);
         const int sw = t.textWidth(s_toastSub) + 30;
         if (sw > bw) bw = sw;
+        bodyFontOff(t);
     }
     if (bw > w - 20) bw = w - 20;
-    const int bh = s_toastSub[0] ? 48 : 34;
+    const int bh = s_toastSub[0] ? (s_large ? 56 : 48) : 34;
     const int bx = (w - bw) / 2, by = (h - bh) / 2;
 
     t.fillRect(bx, by, bw, bh, BG);
@@ -4425,10 +4582,11 @@ void drawToast(TFT_eSPI& t, uint32_t now) {
     t.setCursor(bx + (bw - t.textWidth(s_toastHead)) / 2, by + 8);
     t.print(s_toastHead);
     if (s_toastSub[0]) {
-        t.setTextSize(1);
+        bodyFontOn(t);
         t.setTextColor(WHITE, BG);
         t.setCursor(bx + (bw - t.textWidth(s_toastSub)) / 2, by + 31);
         t.print(s_toastSub);
+        bodyFontOff(t);
     }
 }
 
@@ -4460,6 +4618,33 @@ static uint8_t* s_fireHeat   = nullptr;
 static bool     s_fireInited = false;
 static void releaseFire() {
     if (s_fireHeat) { free(s_fireHeat); s_fireHeat = nullptr; s_fireInited = false; }
+}
+
+static bool s_stillBackdrop = false;
+void setStillBackdrop(bool on) { s_stillBackdrop = on; }
+// A sun going down behind a grid, in the theme's own colours, and nothing
+// in it that depends on the clock.
+static void drawStillBackdrop(TFT_eSPI& t) {
+    const int w = t.width(), h = t.height(), horizon = h * 3 / 5;
+    t.fillRect(0, 0, w, h, BG);
+    const int cx = w / 2, r = h / 3;
+    for (int dy = -r; dy <= 0; dy++) {
+        // Bands cut out of the lower half of the sun, wider toward the horizon.
+        const int row = dy + r;
+        if (row > r / 2 && (row % 6) < (row - r / 2) / 6 + 1) continue;
+        int half = 0;
+        while ((half + 1) * (half + 1) + dy * dy <= r * r) half++;
+        t.drawFastHLine(cx - half, horizon + dy, 2 * half + 1, row < r / 2 ? AMBER : VAPOR_PINK);
+    }
+    t.drawFastHLine(0, horizon, w, VAPOR_PINK);
+    for (int y = horizon + 4, step = 4; y < h; y += step, step += 3) t.drawFastHLine(0, y, w, PURPLE);
+    for (int x = cx % 24; x < w; x += 24) t.drawFastVLine(x, horizon, h - horizon, PURPLE);
+}
+
+bool stillBackdrop(TFT_eSPI& t) {
+    if (!s_stillBackdrop || t.height() >= 200) return false;
+    drawStillBackdrop(t);
+    return true;
 }
 
 void drawActiveBackground(TFT_eSPI& t, uint32_t now, int yStart, int yEnd,
@@ -4531,6 +4716,28 @@ static void publishGoldToaster(int cx, int cy, int hw, int hh, uint32_t now) {
 bool consumeToasterCatch() {
     if (!s_goldCaught) return false;
     s_goldCaught = false;
+    return true;
+}
+
+// The ordinary chrome toasters, the same way: where each was last drawn, so
+// a tap can tell WHICH one it hit. Three taps on the same one inside a
+// short window and it drops out of the flock as the pet. Three rather than
+// one because the gold toaster's one-tap catch is what a stray tap is
+// allowed to land; this needs to be meant.
+static const uint8_t FLOCK_N = 5;
+static int16_t  s_flockX[FLOCK_N], s_flockY[FLOCK_N], s_flockHW[FLOCK_N], s_flockHH[FLOCK_N];
+static uint32_t s_flockAt[FLOCK_N] = {};
+static int8_t   s_flockTapIdx = -1;
+static uint8_t  s_flockTaps = 0;
+static uint32_t s_flockTapAt = 0;
+static bool     s_flockPetCaught = false;
+static void publishFlockToaster(uint8_t i, int cx, int cy, int hw, int hh, uint32_t now) {
+    if (i >= FLOCK_N) return;
+    s_flockX[i] = cx; s_flockY[i] = cy; s_flockHW[i] = hw; s_flockHH[i] = hh; s_flockAt[i] = now;
+}
+bool consumeToasterPetCatch() {
+    if (!s_flockPetCaught) return false;
+    s_flockPetCaught = false;
     return true;
 }
 
@@ -4624,6 +4831,17 @@ static uint32_t s_lodgeAt = 0;
 static uint8_t  s_lodgeKnocks = 0;
 static uint32_t s_lodgeKnockAt = 0;
 static bool     s_lodgePending = false;
+// The FIRE owl while he asks WHAT REEKS?!: where he and his bubble were the
+// last frame he asked it, and when. backgroundTap() only believes a frame
+// from the last quarter second, the same freshness rule as the eye.
+static int      s_owlX = 0, s_owlY = 0, s_owlBubX = 0, s_owlBubY = 0, s_owlBubW = 0, s_owlBubH = 0;
+static uint32_t s_owlReekAt = 0;
+static bool     s_owlReekPending = false;
+// Whether he still asks at all. main.cpp turns it off once the SHAMBLER is
+// his: the question has been answered, and a bird saying one line forever
+// is a bird nobody looks at.
+static bool     s_owlAsks = true;
+void setOwlAsks(bool on) { s_owlAsks = on; }
 
 // Where the toasters cameo is RIGHT NOW, so a tap can find him. Same shape
 // as the lodge and the starfield eye: the drawing code publishes a box each
@@ -4651,6 +4869,18 @@ static void publishLodge(int cx, int ridgeY, uint32_t now) {
 // cycle. snowLodge() reads this so each knock lights another one: the tell
 // the Starfield eye taught us a multi-step trigger cannot do without.
 uint8_t lodgeKnocks() { return s_lodgeKnocks; }
+
+bool consumeRedGlyph() {
+    if (!s_redPending) return false;
+    s_redPending = false;
+    return true;
+}
+
+bool consumeOwlReek() {
+    if (!s_owlReekPending) return false;
+    s_owlReekPending = false;
+    return true;
+}
 
 bool consumeLodgeKnock() {
     if (!s_lodgePending) return false;
@@ -4696,6 +4926,32 @@ bool backgroundTap(int x, int y, uint32_t now) {
             } else {
                 setEyeStreak(run);
             }
+            return true;
+        }
+    }
+
+    // The FIRE owl, while he is asking WHAT REEKS?!. On him -- a generous box,
+    // he is about twenty pixels of bird -- or on his bubble, which is where a
+    // finger goes when the question is the thing that caught the eye.
+    if (s_owlReekAt && (now - s_owlReekAt) <= 250) {
+        const int odx = x - s_owlX, ody = y - s_owlY;
+        const bool onOwl = odx >= -14 && odx <= 14 && ody >= -14 && ody <= 18;
+        const bool onBub = x >= s_owlBubX - 2 && x <= s_owlBubX + s_owlBubW + 2 &&
+                           y >= s_owlBubY - 2 && y <= s_owlBubY + s_owlBubH + 4;
+        if (onOwl || onBub) {
+            s_owlReekAt = 0;                      // one answer a question
+            s_owlReekPending = true;
+            return true;
+        }
+    }
+
+    // The red glyph, while it falls. Generous: it is twelve pixels of a
+    // moving letter.
+    if (s_redAt && (now - s_redAt) <= 250) {
+        const int rdx = x - s_redX, rdy = y - s_redY;
+        if (rdx >= -16 && rdx <= 16 && rdy >= -18 && rdy <= 18) {
+            s_redAt = 0;
+            s_redPending = true;
             return true;
         }
     }
@@ -4763,6 +5019,24 @@ bool backgroundTap(int x, int y, uint32_t now) {
             s_goldX = -1;               // caught: stop accepting taps on it
             return true;
         }
+    }
+
+    // An ordinary toaster: three taps on the same one, each within two and
+    // a half seconds of the last, and it is yours.
+    for (uint8_t i = 0; i < FLOCK_N; i++) {
+        if (!s_flockAt[i] || (now - s_flockAt[i]) > 250) continue;
+        const int fdx = x - s_flockX[i], fdy = y - s_flockY[i];
+        if (fdx > s_flockHW[i] || fdx < -s_flockHW[i] || fdy > s_flockHH[i] || fdy < -s_flockHH[i]) continue;
+        if (s_flockTapIdx != (int8_t)i || (now - s_flockTapAt) > 2500) s_flockTaps = 0;
+        s_flockTapIdx = (int8_t)i;
+        s_flockTapAt  = now;
+        if (++s_flockTaps >= 3) {
+            s_flockTaps = 0;
+            s_flockTaken = (int8_t)i;
+            s_flockAt[i] = 0;
+            s_flockPetCaught = true;
+        }
+        return true;
     }
 
     // Not drawn recently means not on screen.
@@ -5094,7 +5368,7 @@ void drawFire(TFT_eSPI& t, uint32_t now, int yStart, int yEnd) {
         } else if (s_moonTaps) {
             bite = 5 + (int)(s_moonTaps * 35 / MOON_TAPS_NEEDED);
         }
-        t.fillCircle(mx, my, mr, t.color565(210, 235, 200));
+        t.fillCircle(mx, my, mr, (uint16_t)0xD759);
         if (bite < 2 * mr + 4) t.fillCircle(mx + bite, my - 3, mr - 1, BG);
     }
 
@@ -5134,7 +5408,7 @@ void drawFire(TFT_eSPI& t, uint32_t now, int yStart, int yEnd) {
             // what made the trunk obvious enough to look like a bar in
             // the first place. A silhouette behind the fire wants to sit
             // still and stay dark.
-            const uint16_t bark = t.color565(68, 47, 30);
+            const uint16_t bark = (uint16_t)0x4163;
 
             // Trunk. leanAt is reused by the limbs and the owl so they
             // all attach to the same curve.
@@ -5196,8 +5470,8 @@ void drawFire(TFT_eSPI& t, uint32_t now, int yStart, int yEnd) {
                 const int  oy = by - (int)(L * 0.34f) - O(9);
                 owlX = ox; owlY = oy;
 
-                const uint16_t owlBody = t.color565(158, 140, 116);
-                const uint16_t owlDark = t.color565(12, 10, 8);
+                const uint16_t owlBody = (uint16_t)0x9C6E;
+                const uint16_t owlDark = (uint16_t)0x0841;
 
                 t.fillRect(ox - O(4), oy,        O(9),  O(9), owlBody);   // body
                 t.fillRect(ox - O(3), oy + O(9), O(7),  2,     owlBody);  // tail
@@ -5215,7 +5489,7 @@ void drawFire(TFT_eSPI& t, uint32_t now, int yStart, int yEnd) {
                     t.fillRect(ox - O(4), oy - O(1), O(3), 2, owlDark);
                     t.fillRect(ox + O(2), oy - O(1), O(3), 2, owlDark);
                 } else {
-                    const uint16_t eye = t.color565(255, 196, 44);
+                    const uint16_t eye = (uint16_t)0xFE25;
                     t.fillRect(ox - O(4), oy - O(2), O(3), O(3), eye);
                     t.fillRect(ox + O(2), oy - O(2), O(3), O(3), eye);
                     t.fillRect(ox - O(3), oy - O(1), 2, 2, owlDark);
@@ -5282,14 +5556,14 @@ void drawFire(TFT_eSPI& t, uint32_t now, int yStart, int yEnd) {
             // The body maroon is deliberately r=109 rather than 73: at 73
             // it collides with the tree bark and the two silhouettes
             // merge into one shape when they overlap.
-            const uint16_t body  = blend(BG, t.color565(109,  36,   0), (uint16_t)(255.0f * bodyF));
-            const uint16_t pelt  = blend(BG, t.color565( 73,  73,  85), (uint16_t)(255.0f * bodyF));
-            const uint16_t lit   = blend(BG, t.color565(146, 146, 128), (uint16_t)(255.0f * bodyF));
-            const uint16_t claw  = blend(BG, t.color565(255,   0,   0), (uint16_t)(255.0f * bodyF));
-            const uint16_t maw   = blend(BG, t.color565(146,   0,   0), (uint16_t)(255.0f * bodyF));
-            const uint16_t tooth = blend(BG, t.color565(255, 255, 255), (uint16_t)(255.0f * bodyF));
-            const uint16_t eyeR  = blend(BG, t.color565(255,   0,   0), (uint16_t)(255.0f * eyeF));
-            const uint16_t eyeC  = blend(BG, t.color565(255, 219,   0), (uint16_t)(255.0f * eyeF));
+            const uint16_t body  = blend(BG, (uint16_t)0x6920, (uint16_t)(255.0f * bodyF));
+            const uint16_t pelt  = blend(BG, (uint16_t)0x4A4A, (uint16_t)(255.0f * bodyF));
+            const uint16_t lit   = blend(BG, (uint16_t)0x9490, (uint16_t)(255.0f * bodyF));
+            const uint16_t claw  = blend(BG, (uint16_t)0xF800, (uint16_t)(255.0f * bodyF));
+            const uint16_t maw   = blend(BG, (uint16_t)0x9000, (uint16_t)(255.0f * bodyF));
+            const uint16_t tooth = blend(BG, (uint16_t)0xFFFF, (uint16_t)(255.0f * bodyF));
+            const uint16_t eyeR  = blend(BG, (uint16_t)0xF800, (uint16_t)(255.0f * eyeF));
+            const uint16_t eyeC  = blend(BG, (uint16_t)0xFEC0, (uint16_t)(255.0f * eyeF));
 
             // Standing back up the slope, not on the fire's own ground
             // line: the counter rows and the densest flames both live at
@@ -5439,7 +5713,7 @@ void drawFire(TFT_eSPI& t, uint32_t now, int yStart, int yEnd) {
                     // Full strength at the near edge: these have to read
                     // against flame, which is the brightest thing in the
                     // scene, so anything dimmer than this is simply lost.
-                    const uint16_t ring = blend(BG, t.color565(255, 219, 0),
+                    const uint16_t ring = blend(BG, (uint16_t)0xFEC0,
                                                 (uint16_t)(255.0f * (1.0f - k * 0.75f) * bodyF));
                     int px = 0, py = 0;
                     for (int i = 0; i <= 12; i++) {
@@ -5560,9 +5834,20 @@ void drawFire(TFT_eSPI& t, uint32_t now, int yStart, int yEnd) {
             // it a few times. Check this stays coprime if the list
             // length changes -- a stride sharing a factor with the count
             // silently hides some of the lines forever.
+            //
+            // Every third slot is his own line instead, WHAT REEKS?!, and a
+            // tap on him while he is asking it is the SHAMBLER unlock (see
+            // backgroundTap()). Every third, not one in ten like a quip:
+            // once a minute and a half is findable; once in five minutes,
+            // at three and a half seconds a time, is not. Once the costume
+            // is earned he stops asking (setOwlAsks), and that slot goes back
+            // to an ordinary quip.
+            const uint32_t slot = now / CYCLE;
+            const bool reek = s_owlAsks && !wolfOut && (slot % 3) == 1;
             const char* q = wolfOut
                 ? SCARED[((now - s_wolfAt) / 1400) % (sizeof(SCARED) / sizeof(SCARED[0]))]
-                : QUIPS[((now / CYCLE) * 5 + 2) % NQUIP];
+                : reek ? "WHAT REEKS?!"
+                : QUIPS[(slot * 5 + 2) % NQUIP];
             t.setTextSize(1);
             const int bw = t.textWidth(q) + 8;
             // Derived, not the hard-coded 11 this used to be. Squachy's
@@ -5591,8 +5876,8 @@ void drawFire(TFT_eSPI& t, uint32_t now, int yStart, int yEnd) {
             if (bx + bw > w - 2)    bx = w - 2 - bw;
             if (bx < 1)             bx = 1;
             if (by < yStart + 1)    by = yStart + 1;
-            const uint16_t paper = t.color565(236, 232, 218);
-            const uint16_t ink   = t.color565(16, 12, 10);
+            const uint16_t paper = (uint16_t)0xEF5B;
+            const uint16_t ink   = (uint16_t)0x1061;
             t.fillRect(bx, by, bw, bh, paper);
             t.drawRect(bx, by, bw, bh, ink);
             // Tail points at the owl, not at the corner of the bubble.
@@ -5609,6 +5894,12 @@ void drawFire(TFT_eSPI& t, uint32_t now, int yStart, int yEnd) {
             t.setTextColor(ink, paper);
             t.setCursor(bx + 4, by + 3);
             t.print(q);
+            if (reek) {
+                // Where he is and where his bubble is, for the tap.
+                s_owlX = owlX; s_owlY = owlY;
+                s_owlBubX = bx; s_owlBubY = by; s_owlBubW = bw; s_owlBubH = bh;
+                s_owlReekAt = now ? now : 1;
+            }
         }
     }
 
@@ -5669,8 +5960,8 @@ void drawFire(TFT_eSPI& t, uint32_t now, int yStart, int yEnd) {
         float lifeFrac = (ey[i] - (float)yStart) / (float)bandH;
         if (lifeFrac < 0.0f) lifeFrac = 0.0f;
         uint16_t emberCol = (lifeFrac > 0.6f)
-            ? t.color565(255, 220, 80)
-            : blend(BG, t.color565(255, 120, 20), (uint16_t)(255 * (lifeFrac / 0.6f)));
+            ? (uint16_t)0xFEEA
+            : blend(BG, (uint16_t)0xFBC2, (uint16_t)(255 * (lifeFrac / 0.6f)));
         t.drawPixel((int)ex[i], (int)ey[i], emberCol);
     }
 }
@@ -5830,7 +6121,7 @@ static void snowSay(TFT_eSPI& t, int x, int topY, const char* txt) {
     if (bx < 1) bx = 1;
     if (bx + bw > t.width() - 1) bx = t.width() - 1 - bw;
     const int by = topY - bh - 4;
-    const uint16_t paper = t.color565(240, 238, 228), ink = t.color565(18, 14, 12);
+    const uint16_t paper = (uint16_t)0xF77C, ink = (uint16_t)0x1061;
     t.fillRect(bx, by, bw, bh, paper);
     t.drawRect(bx, by, bw, bh, ink);
     int tx = x - 2;
@@ -5871,19 +6162,19 @@ static const uint32_t EAT_TOTAL = EAT_PAT;
 static void snowVictim(TFT_eSPI& t, int x, int y, uint32_t age, uint32_t now,
                        uint8_t kind, uint8_t var) {
     if (age >= EAT_CHOMP) return;          // nothing left to show
-    const uint16_t skin = t.color565(240, 192, 140), boot = t.color565(35, 40, 48);
-    uint16_t coat = t.color565(47, 79, 208), coatL = t.color565(122, 160, 255);
-    uint16_t pant = t.color565(47, 179, 30), hat = t.color565(224, 32, 10);
-    uint16_t gear = t.color565(255, 210, 26);
+    const uint16_t skin = (uint16_t)0xF611, boot = (uint16_t)0x2146;
+    uint16_t coat = (uint16_t)0x2A7A, coatL = (uint16_t)0x7D1F;
+    uint16_t pant = (uint16_t)0x2D83, hat = (uint16_t)0xE101;
+    uint16_t gear = (uint16_t)0xFE83;
     if (kind) {                            // a boarder: different kit
-        coat = t.color565(146, 60, 210); coatL = t.color565(196, 140, 250);
-        pant = t.color565(38, 42, 54);   hat  = t.color565(255, 210, 26);
-        gear = t.color565(255, 96, 20);
+        coat = (uint16_t)0x91FA; coatL = (uint16_t)0xC47F;
+        pant = (uint16_t)0x2146;   hat  = (uint16_t)0xFE83;
+        gear = (uint16_t)0xFB02;
     }
-    if (var == 1) { coat = t.color565(224, 46, 30); coatL = t.color565(255, 140, 110);
-                    pant = t.color565(30, 34, 46); hat = t.color565(255, 210, 26); }
-    else if (var == 2) { coat = t.color565(236, 238, 244); coatL = WHITE;
-                         pant = t.color565(146, 60, 210); hat = t.color565(47, 179, 30); }
+    if (var == 1) { coat = (uint16_t)0xE163; coatL = (uint16_t)0xFC6D;
+                    pant = (uint16_t)0x1905; hat = (uint16_t)0xFE83; }
+    else if (var == 2) { coat = (uint16_t)0xEF7E; coatL = WHITE;
+                         pant = (uint16_t)0x91FA; hat = (uint16_t)0x2D83; }
 
     const int B = y - (int)(sinf((float)now / 90.0f) * 1.5f);
     // How hard he is struggling. Frantic on the way up, then almost
@@ -5916,11 +6207,11 @@ static void snowVictim(TFT_eSPI& t, int x, int y, uint32_t age, uint32_t now,
         // Eyes: wide on the way up, then flat resignation while he is
         // being inspected. Two pixels of difference and it does the work.
         if (age < EAT_RAISE) {
-            t.fillRect(vx - 2, vy - 5, 2, 3, t.color565(58, 42, 26));
-            t.fillRect(vx + 2, vy - 5, 2, 3, t.color565(58, 42, 26));
+            t.fillRect(vx - 2, vy - 5, 2, 3, (uint16_t)0x3943);
+            t.fillRect(vx + 2, vy - 5, 2, 3, (uint16_t)0x3943);
         } else {
-            t.fillRect(vx - 2, vy - 4, 2, 1, t.color565(58, 42, 26));
-            t.fillRect(vx + 2, vy - 4, 2, 1, t.color565(58, 42, 26));
+            t.fillRect(vx - 2, vy - 4, 2, 1, (uint16_t)0x3943);
+            t.fillRect(vx + 2, vy - 4, 2, 1, (uint16_t)0x3943);
         }
         t.fillRect(vx - 4, vy - 11, 10, 4, hat);
         return;
@@ -6034,11 +6325,11 @@ static void snowAurora(TFT_eSPI& t, int w, int yStart, int bandH,
 // varying independently reads as a building with people in it.
 static void snowLodge(TFT_eSPI& t, int x, int ridgeY, uint32_t now,
                       float dawn, uint16_t haze) {
-    const uint16_t beam  = blend(t.color565(84, 58, 40), haze, 60);
-    const uint16_t beamD = blend(t.color565(52, 36, 26), haze, 60);
-    const uint16_t roof  = blend(t.color565(232, 240, 248), haze, 40);
-    const uint16_t roofE = blend(t.color565(176, 190, 206), haze, 40);
-    const uint16_t frame = blend(t.color565(40, 30, 24), haze, 50);
+    const uint16_t beam  = blend((uint16_t)0x51C5, haze, 60);
+    const uint16_t beamD = blend((uint16_t)0x3123, haze, 60);
+    const uint16_t roof  = blend((uint16_t)0xEF9F, haze, 40);
+    const uint16_t roofE = blend((uint16_t)0xB5F9, haze, 40);
+    const uint16_t frame = blend((uint16_t)0x28E3, haze, 50);
     // Night is when the windows matter; they wash out as the sun comes up.
     const float lit = 1.0f - dawn * 0.85f;
 
@@ -6099,9 +6390,9 @@ static void snowLodge(TFT_eSPI& t, int x, int ridgeY, uint32_t now,
     }
     // Door, with light spilling onto the snow in front of it.
     t.fillRect(x + 12, ridgeY - 8, 5, 8, frame);
-    t.fillRect(x + 13, ridgeY - 7, 3, 7, blend(beam, t.color565(255, 190, 90),
+    t.fillRect(x + 13, ridgeY - 7, 3, 7, blend(beam, (uint16_t)0xFDEB,
                                                (uint16_t)(170 * lit)));
-    t.fillRect(x + 11, ridgeY, 8, 2, blend(roof, t.color565(255, 200, 110),
+    t.fillRect(x + 11, ridgeY, 8, 2, blend(roof, (uint16_t)0xFE4D,
                                            (uint16_t)(110 * lit)));
     // Chimney and its smoke, leaning with the same wind as everything else.
     t.fillRect(x - 9, ridgeY - 32, 4, 7, beamD);
@@ -6121,14 +6412,14 @@ static void snowLodge(TFT_eSPI& t, int x, int ridgeY, uint32_t now,
 // four frames reads as a glitch, and one that holds still for a second
 // reads as a person having a bad time.
 static void snowWreck(TFT_eSPI& t, int x, int y, uint32_t age, uint8_t kind, uint8_t var) {
-    const uint16_t skin = t.color565(240, 192, 140);
-    uint16_t coat = t.color565(47, 79, 208), pant = t.color565(47, 179, 30);
-    uint16_t hat  = t.color565(224, 32, 10),  gear = t.color565(255, 210, 26);
-    if (var == 1) { coat = t.color565(224, 46, 30); pant = t.color565(30, 34, 46);
-                    hat = t.color565(255, 210, 26); }
-    else if (var == 2) { coat = t.color565(236, 238, 244); pant = t.color565(146, 60, 210);
-                         hat = t.color565(47, 179, 30); }
-    if (kind) gear = t.color565(255, 96, 20);        // a board, not skis
+    const uint16_t skin = (uint16_t)0xF611;
+    uint16_t coat = (uint16_t)0x2A7A, pant = (uint16_t)0x2D83;
+    uint16_t hat  = (uint16_t)0xE101,  gear = (uint16_t)0xFE83;
+    if (var == 1) { coat = (uint16_t)0xE163; pant = (uint16_t)0x1905;
+                    hat = (uint16_t)0xFE83; }
+    else if (var == 2) { coat = (uint16_t)0xEF7E; pant = (uint16_t)0x91FA;
+                         hat = (uint16_t)0x2D83; }
+    if (kind) gear = (uint16_t)0xFB02;        // a board, not skis
     const uint16_t coatL = blend(coat, WHITE, 90), pantD = blend(pant, BLACK, 80);
 
     // How far the debris has travelled. It stops where it lands: gear
@@ -6146,8 +6437,8 @@ static void snowWreck(TFT_eSPI& t, int x, int y, uint32_t age, uint8_t kind, uin
         t.fillRect(x - 14 - d, y - 2, 14, 2, gear);
         t.fillRect(x + 7 + d, y - 9 - up, 3, 13, gear);
     }
-    t.fillRect(x - 17 - d, y - 5, 8, 1, t.color565(58, 64, 73));    // a pole
-    t.fillRect(x + 12 + d, y - 7 - up / 2, 1, 8, t.color565(58, 64, 73));
+    t.fillRect(x - 17 - d, y - 5, 8, 1, (uint16_t)0x3A09);    // a pole
+    t.fillRect(x + 12 + d, y - 7 - up / 2, 1, 8, (uint16_t)0x3A09);
 
     // Him. Face down at first, then up on one elbow, then sitting.
     if (age < 420u) {
@@ -6164,8 +6455,8 @@ static void snowWreck(TFT_eSPI& t, int x, int y, uint32_t age, uint8_t kind, uin
         t.fillRect(x + 6,  y - 5, 6, 4, pant);
         t.fillRect(x - 3, y - 16, 8, 7, skin);
         // Eyes shut. Two dashes, and they do more than a whole face would.
-        t.fillRect(x - 2, y - 13, 2, 1, t.color565(58, 42, 26));
-        t.fillRect(x + 2, y - 13, 2, 1, t.color565(58, 42, 26));
+        t.fillRect(x - 2, y - 13, 2, 1, (uint16_t)0x3943);
+        t.fillRect(x + 2, y - 13, 2, 1, (uint16_t)0x3943);
         t.fillRect(x - 4, y - 20, 9, 4, hat);
         // An arm going up to check the head is still there.
         if (age > 900u) t.fillRect(x + 4, y - 22, 3, 7, coat);
@@ -6174,7 +6465,7 @@ static void snowWreck(TFT_eSPI& t, int x, int y, uint32_t age, uint8_t kind, uin
     for (uint8_t i = 0; i < 5; i++) {
         const int px = x - 12 + i * 6 + (int)(fly * ((i & 1) ? 4 : -4));
         const int py = y - 14 - (int)((1.0f - fly) * 10.0f) + (i % 3) * 4;
-        t.fillRect(px, py, 2, 2, blend(WHITE, t.color565(196, 214, 236), (uint16_t)(fly * 160.0f)));
+        t.fillRect(px, py, 2, 2, blend(WHITE, (uint16_t)0xC6BD, (uint16_t)(fly * 160.0f)));
     }
 }
 
@@ -6184,13 +6475,13 @@ static void snowPine(TFT_eSPI& t, int x, int y, int h, bool snowy, uint16_t haze
     // Blue kept under 30 on every green: this panel quantises blue to
     // 0/85/170/255, so anything near 42 rounds UP and the tree lands on
     // a teal slate instead of a colour a tree could be.
-    const uint16_t deep = blend(t.color565( 8,  62, 10), haze, mix);
-    const uint16_t dk   = blend(t.color565(14,  92, 14), haze, mix);
-    const uint16_t md   = blend(t.color565(28, 124, 20), haze, mix);
-    const uint16_t lt   = blend(t.color565(54, 162, 26), haze, mix);
-    const uint16_t tip  = blend(t.color565(96, 200, 40), haze, mix);
-    const uint16_t bark = blend(t.color565(96,  62, 30), haze, mix);
-    const uint16_t snow = blend(t.color565(238, 244, 250), haze, mix);
+    const uint16_t deep = blend((uint16_t)0x09E1, haze, mix);
+    const uint16_t dk   = blend((uint16_t)0x0AE1, haze, mix);
+    const uint16_t md   = blend((uint16_t)0x1BE2, haze, mix);
+    const uint16_t lt   = blend((uint16_t)0x3503, haze, mix);
+    const uint16_t tip  = blend((uint16_t)0x6645, haze, mix);
+    const uint16_t bark = blend((uint16_t)0x61E3, haze, mix);
+    const uint16_t snow = blend((uint16_t)0xEFBF, haze, mix);
     const int w = (h * 58) / 100;
 
     // Trunk, with its own shaded side.
@@ -6283,25 +6574,25 @@ static void snowPine(TFT_eSPI& t, int x, int y, int h, bool snowy, uint16_t haze
 static void snowSkier(TFT_eSPI& t, int x, int y, int8_t carve, uint8_t trick,
                       uint8_t var = 0) {
     const int l = carve * 2;
-    const uint16_t ski = t.color565(255, 210, 26), boot = t.color565(35, 40, 48);
-    const uint16_t skin = t.color565(240, 192, 140);
+    const uint16_t ski = (uint16_t)0xFE83, boot = (uint16_t)0x2146;
+    const uint16_t skin = (uint16_t)0xF611;
     // Three of them share the hill now, so they cannot share a jacket.
     // Only the coat, trousers and hat change -- the silhouette is the
     // same person, which is the point; the colour is what says it is a
     // different one.
-    uint16_t pant = t.color565(47, 179, 30), coat = t.color565(47, 79, 208);
-    uint16_t coatL = t.color565(122, 160, 255), arm = t.color565(224, 85, 159);
-    uint16_t hat = t.color565(224, 32, 10);
+    uint16_t pant = (uint16_t)0x2D83, coat = (uint16_t)0x2A7A;
+    uint16_t coatL = (uint16_t)0x7D1F, arm = (uint16_t)0xE2B3;
+    uint16_t hat = (uint16_t)0xE101;
     if (var == 1) {
-        coat = t.color565(224, 46, 30);  coatL = t.color565(255, 140, 110);
-        pant = t.color565(30, 34, 46);   hat   = t.color565(255, 210, 26);
-        arm  = t.color565(255, 196, 96);
+        coat = (uint16_t)0xE163;  coatL = (uint16_t)0xFC6D;
+        pant = (uint16_t)0x1905;   hat   = (uint16_t)0xFE83;
+        arm  = (uint16_t)0xFE2C;
     } else if (var == 2) {
-        coat = t.color565(236, 238, 244); coatL = t.color565(255, 255, 255);
-        pant = t.color565(146, 60, 210);  hat   = t.color565(47, 179, 30);
-        arm  = t.color565(58, 64, 73);
+        coat = (uint16_t)0xEF7E; coatL = (uint16_t)0xFFFF;
+        pant = (uint16_t)0x91FA;  hat   = (uint16_t)0x2D83;
+        arm  = (uint16_t)0x3A09;
     }
-    const uint16_t pole = t.color565(58, 64, 73);
+    const uint16_t pole = (uint16_t)0x3A09;
     if (trick >= 3) {
         // Backflip. No rotation on this display, so it is four discrete
         // tucked orientations -- the same trick the Squachy flip uses,
@@ -6338,10 +6629,10 @@ static void snowSkier(TFT_eSPI& t, int x, int y, int8_t carve, uint8_t trick,
     if (trick == 2) { t.fillRect(x - 12, y - 25, 7, 4, arm); t.fillRect(x + 6, y - 25, 7, 4, arm); }
     else            { t.fillRect(x - 9,  y - 23, 4, 7, arm); t.fillRect(x + 6, y - 23, 4, 7, arm); }
     t.fillRect(x - 3, y - 30, 7, 6, skin);
-    t.fillRect(x - 2, y - 28, 2, 2, t.color565(58, 42, 26));
-    t.fillRect(x + 1, y - 28, 2, 2, t.color565(58, 42, 26));
+    t.fillRect(x - 2, y - 28, 2, 2, (uint16_t)0x3943);
+    t.fillRect(x + 1, y - 28, 2, 2, (uint16_t)0x3943);
     t.fillRect(x - 4, y - 34, 9, 4, hat);
-    t.fillRect(x - 4, y - 31, 9, 2, t.color565(245, 247, 250));
+    t.fillRect(x - 4, y - 31, 9, 2, (uint16_t)0xF7BF);
     t.fillRect(x - 1, y - 37, 3, 3, WHITE);
     if (!trick) {
         t.drawLine(x - 8, y - 21, x - 13, y - 1, pole);
@@ -6360,19 +6651,19 @@ static void snowSkier(TFT_eSPI& t, int x, int y, int8_t carve, uint8_t trick,
 static void snowBoarder(TFT_eSPI& t, int x, int y, int8_t carve, uint8_t trick,
                         uint8_t var = 0) {
     const int l = carve * 2;
-    const uint16_t skin = t.color565(240, 192, 140), boot = t.color565(24, 26, 34);
-    const uint16_t eye  = t.color565(58, 42, 26);
-    uint16_t deck = t.color565(255, 96, 20), deckD = t.color565(176, 58, 10);
-    uint16_t coat = t.color565(146, 60, 210), coatL = t.color565(196, 140, 250);
-    uint16_t pant = t.color565(38, 42, 54),  beanie = t.color565(255, 210, 26);
+    const uint16_t skin = (uint16_t)0xF611, boot = (uint16_t)0x18C4;
+    const uint16_t eye  = (uint16_t)0x3943;
+    uint16_t deck = (uint16_t)0xFB02, deckD = (uint16_t)0xB1C1;
+    uint16_t coat = (uint16_t)0x91FA, coatL = (uint16_t)0xC47F;
+    uint16_t pant = (uint16_t)0x2146,  beanie = (uint16_t)0xFE83;
     if (var == 1) {
-        deck = t.color565(36, 200, 190); deckD = t.color565(20, 130, 124);
-        coat = t.color565(30, 34, 46);   coatL = t.color565(96, 104, 124);
-        pant = t.color565(200, 202, 210); beanie = t.color565(255, 96, 20);
+        deck = (uint16_t)0x2657; deckD = (uint16_t)0x140F;
+        coat = (uint16_t)0x1905;   coatL = (uint16_t)0x634F;
+        pant = (uint16_t)0xCE5A; beanie = (uint16_t)0xFB02;
     } else if (var == 2) {
-        deck = t.color565(255, 232, 40); deckD = t.color565(176, 150, 10);
-        coat = t.color565(224, 46, 30);  coatL = t.color565(255, 140, 110);
-        pant = t.color565(38, 42, 54);   beanie = t.color565(240, 240, 246);
+        deck = (uint16_t)0xFF45; deckD = (uint16_t)0xB4A1;
+        coat = (uint16_t)0xE163;  coatL = (uint16_t)0xFC6D;
+        pant = (uint16_t)0x2146;   beanie = (uint16_t)0xF79E;
     }
 
     if (trick >= 3) {
@@ -6438,7 +6729,7 @@ static void snowBoarder(TFT_eSPI& t, int x, int y, int8_t carve, uint8_t trick,
 // made the first version look like a smoke machine.
 static void snowSpray(TFT_eSPI& t, int x, int gy, int8_t carve, float power, uint32_t now) {
     if (power < 0.45f) return;                 // nothing through the flat part
-    const uint16_t pw = blend(WHITE, t.color565(206, 224, 244), 70);
+    const uint16_t pw = blend(WHITE, (uint16_t)0xCF1E, 70);
     const int n = 2 + (int)(power * 2.6f);     // three or four, not eight
     for (int i = 0; i < n; i++) {
         const float ph = fmodf((float)now / 78.0f + (float)i * 2.1f, 5.0f);
@@ -6460,11 +6751,11 @@ static void snowYeti(TFT_eSPI& t, int x, int y, uint32_t now, YPose pose, int bu
     // (219,219,255) -- within one palette step of the snow he stands on,
     // so his whole body vanished and he read as a floating head. The
     // reference sprite is plainly grey against white for the same reason.
-    const uint16_t fur = t.color565(150, 155, 168), furHi = t.color565(205, 210, 222);
-    const uint16_t furS = t.color565(100, 106, 128), mane = t.color565(120, 126, 140);
-    const uint16_t head = t.color565(49, 54, 63),   limb = t.color565(43, 48, 56);
-    const uint16_t eye = t.color565(255, 36, 20),   tooth = t.color565(255, 210, 26);
-    const uint16_t claw = t.color565(232, 237, 243);
+    const uint16_t fur = (uint16_t)0x94D5, furHi = (uint16_t)0xCE9B;
+    const uint16_t furS = (uint16_t)0x6350, mane = (uint16_t)0x7BF1;
+    const uint16_t head = (uint16_t)0x31A7,   limb = (uint16_t)0x2987;
+    const uint16_t eye = (uint16_t)0xF922,   tooth = (uint16_t)0xFE83;
+    const uint16_t claw = (uint16_t)0xEF7E;
 
     if (pose == YPose::DOWN) {
         // Face down in the snow, legs still going. The funniest of the
@@ -6624,8 +6915,8 @@ void drawBackgroundOverlay(TFT_eSPI& t, uint32_t now) {
             int bx = w - 2 - bw;
             if (bx < 1)          bx = 1;
             if (by < yStart + 1) by = yStart + 1;
-            const uint16_t paper = blend(BG, t.color565(236, 232, 218), dim);
-            const uint16_t ink   = blend(BG, t.color565(16, 12, 10), dim);
+            const uint16_t paper = blend(BG, (uint16_t)0xEF5B, dim);
+            const uint16_t ink   = blend(BG, (uint16_t)0x1061, dim);
             t.fillRect(bx, by, bw, bh, paper);
             t.drawRect(bx, by, bw, bh, ink);
             // Tail under the wolf, not under the corner of the bubble.
@@ -6911,7 +7202,7 @@ void drawSnowfall(TFT_eSPI& t, uint32_t now, int yStart, int yEnd) {
     // the sky rather than one soft gradient. Sets as dawn comes up.
     if (dawn < 0.92f) {
         const int mx = (int)(w * 0.16f), my = yStart + 30 + (int)(dawn * 46.0f);
-        const uint16_t moon = blend(t.color565(232, 240, 252), skyTop, (uint16_t)(dawn * 200.0f));
+        const uint16_t moon = blend((uint16_t)0xEF9F, skyTop, (uint16_t)(dawn * 200.0f));
         // Halo blended against the sky AT THE MOON'S HEIGHT, not against
         // skyTop. Using skyTop drew a disc darker than its surroundings
         // -- a hole in the sky rather than a glow, because the gradient
@@ -6957,7 +7248,7 @@ void drawSnowfall(TFT_eSPI& t, uint32_t now, int yStart, int yEnd) {
     // moment dawn warms the horizon. Snow takes a little of the light but
     // it does not become the light, so the haze is weaker and is pulled
     // most of the way to white before it is mixed in.
-    const uint16_t farSnow = blend(t.color565(196, 214, 236),
+    const uint16_t farSnow = blend((uint16_t)0xC6BD,
                                    blend(haze, WHITE, 160), 70);
     t.fillRect(0, ridgeY, w, yBot - ridgeY, farSnow);
     // The lodge sits ON the ridge line and travels with the far plane, so
@@ -6982,7 +7273,7 @@ void drawSnowfall(TFT_eSPI& t, uint32_t now, int yStart, int yEnd) {
     // ---- the slope ---------------------------------------------------
     const uint16_t snowLit = blend(WHITE, VAPOR_BLUE, (uint16_t)(16 + inten * 26.0f));
     const uint16_t snowDim = blend(snowLit, VAPOR_BLUE, 74);
-    const uint16_t trackC  = blend(snowDim, t.color565(120, 160, 205), 150);
+    const uint16_t trackC  = blend(snowDim, (uint16_t)0x7D19, 150);
     const int colW = (w + SNOW_COLS - 1) / SNOW_COLS;
     for (uint8_t i = 0; i < SNOW_COLS; i++) {
         const int x0 = i * w / SNOW_COLS, gy = groundAt(x0 + colW / 2);
@@ -7031,11 +7322,11 @@ void drawSnowfall(TFT_eSPI& t, uint32_t now, int yStart, int yEnd) {
         if (px < -30 || px > w + 30) continue;
         const int gy = groundAt(px) + 2;
         if (s_prop[i].b == 0) {
-            t.fillRect(px - 7, gy - 8, 15, 8, t.color565(93, 106, 118));
-            t.fillRect(px - 5, gy - 10, 9, 3, t.color565(123, 137, 150));
+            t.fillRect(px - 7, gy - 8, 15, 8, (uint16_t)0x5B4E);
+            t.fillRect(px - 5, gy - 10, 9, 3, (uint16_t)0x7C52);
         } else if (s_prop[i].b == 1) {
-            t.fillRect(px - 4, gy - 8, 9, 8, t.color565(96, 62, 30));
-            t.fillRect(px - 4, gy - 9, 9, 2, t.color565(132, 88, 46));
+            t.fillRect(px - 4, gy - 8, 9, 8, (uint16_t)0x61E3);
+            t.fillRect(px - 4, gy - 9, 9, 2, (uint16_t)0x82C5);
         } else {
             // A jump. Wedge rising to the right, because that is the way
             // he is going -- a ramp facing the wrong way is a wall.
@@ -7338,7 +7629,7 @@ void drawSnowfall(TFT_eSPI& t, uint32_t now, int yStart, int yEnd) {
                 if (age >= EAT_GULP) {
                     // A hand on the belly. One rectangle, and it lands.
                     const int py = groundAt(yx) - 26 + (int)(sinf((float)now / 110.0f) * 2.0f);
-                    t.fillRect(yx - 3, py, 8, 4, t.color565(232, 237, 243));
+                    t.fillRect(yx - 3, py, 8, 4, (uint16_t)0xEF7E);
                 }
             } else {
                 snowYeti(t, yx, groundAt(yx), now, p);
@@ -7347,7 +7638,7 @@ void drawSnowfall(TFT_eSPI& t, uint32_t now, int yStart, int yEnd) {
             if (p == YPose::RECOIL && s_chaseTgt >= 0 && s_rid[s_chaseTgt].live) {
                 const int sx = (int)s_rid[s_chaseTgt].x;
                 t.drawLine(sx + 4, groundAt(sx) - 22, yx - 8, groundAt(yx) - 30,
-                           t.color565(58, 64, 73));
+                           (uint16_t)0x3A09);
             }
         }
     }
@@ -7407,12 +7698,12 @@ void drawSnowfall(TFT_eSPI& t, uint32_t now, int yStart, int yEnd) {
     }
     if (s_dogX > -24.0f && s_dogX < (float)w + 24.0f) {
         const int dx = (int)s_dogX, dy = groundAt(dx);
-        const uint16_t dog = t.color565(181, 112, 40), dogD = t.color565(132, 78, 26);
+        const uint16_t dog = (uint16_t)0xB385, dogD = (uint16_t)0x8263;
         const int gait = (int)(sinf((float)now / 95.0f) * 2.0f);
         t.fillRect(dx - 8, dy - 10, 15, 7, dog);
         t.fillRect(dx + 5, dy - 15, 8, 7, dog);              // head
         t.fillRect(dx + 11, dy - 16, 3, 4, dogD);            // ear
-        t.fillRect(dx + 12, dy - 11, 3, 2, t.color565(40, 30, 24));
+        t.fillRect(dx + 12, dy - 11, 3, 2, (uint16_t)0x28E3);
         t.fillRect(dx - 11, dy - 13, 4, 5, dogD);            // tail, up
         t.fillRect(dx - 6, dy - 4 + gait, 3, 4, dogD);
         t.fillRect(dx + 2, dy - 4 - gait, 3, 4, dogD);
@@ -7427,7 +7718,7 @@ void drawSnowfall(TFT_eSPI& t, uint32_t now, int yStart, int yEnd) {
         t.fillRect(hx + 6, hy2 - 14, 2, 6, WHITE);           // ears, laid back
         t.fillRect(hx + 3, hy2 - 14, 2, 6, WHITE);
         t.fillRect(hx - 6, hy2 - 3, 3, 3, WHITE);            // scut
-        t.fillRect(hx + 7, hy2 - 8, 2, 2, t.color565(180, 60, 60));
+        t.fillRect(hx + 7, hy2 - 8, 2, 2, (uint16_t)0xB1E7);
     }
     if (s_birdAt && now - s_birdAt < 2600u) {
         // Startled off a pine by the jump. They climb and scatter.
@@ -8435,11 +8726,11 @@ void drawSunsetSky(TFT_eSPI& t, uint32_t now, int yTop, int yHoriz) {
 }
 
 void drawSunsetSun(TFT_eSPI& t, int cx, int cy, int r, int yTop, int yHoriz) {
-    t.fillCircle(cx, cy, r,      t.color565(255,  50,  80));
-    t.fillCircle(cx, cy, r -  6, t.color565(255, 100,  40));
-    t.fillCircle(cx, cy, r - 13, t.color565(255, 165,  20));
-    t.fillCircle(cx, cy, r - 20, t.color565(255, 215,  70));
-    t.fillCircle(cx, cy, r - 27 > 0 ? r - 27 : 1, t.color565(255, 240, 150));
+    t.fillCircle(cx, cy, r,      (uint16_t)0xF98A);
+    t.fillCircle(cx, cy, r -  6, (uint16_t)0xFB25);
+    t.fillCircle(cx, cy, r - 13, (uint16_t)0xFD22);
+    t.fillCircle(cx, cy, r - 20, (uint16_t)0xFEA8);
+    t.fillCircle(cx, cy, r - 27 > 0 ? r - 27 : 1, (uint16_t)0xFF92);
 
     // Horizon cutout stripes, widening toward the bottom, each painted
     // with the sky color at that exact row so the sun blends into the
@@ -8452,7 +8743,7 @@ void drawSunsetSun(TFT_eSPI& t, int cx, int cy, int r, int yTop, int yHoriz) {
         int half = (int)sqrtf((float)(r * r - delta * delta));
         t.fillRect(cx - half, sy2, half * 2, 2, sunsetSkyColorAt(t, sy2, yTop, yHoriz));
     }
-    t.drawCircle(cx, cy, r, t.color565(255, 235, 235));
+    t.drawCircle(cx, cy, r, (uint16_t)0xFF5D);
 }
 
 void drawSeagulls(TFT_eSPI& t, uint32_t now, int yTop, int yHoriz) {
@@ -8495,7 +8786,7 @@ void drawSeagulls(TFT_eSPI& t, uint32_t now, int yTop, int yHoriz) {
         }
     }
 
-    uint16_t col = t.color565(25, 10, 45);
+    uint16_t col = (uint16_t)0x1845;
     for (int i = 0; i < N; i++) {
         int bx = birds[i].x, by = birds[i].y;
         if (bx < -8 || bx > w + 8 || by < yTop || by >= yHoriz) continue;
@@ -8511,8 +8802,8 @@ void drawRetroFloor(TFT_eSPI& t, uint32_t now, int yHoriz, int yBottom) {
         uint8_t b = (uint8_t)(15 + 30 * tt);
         t.drawFastHLine(0, y, w, t.color565(b, 0, (uint8_t)(b * 0.7f)));
     }
-    t.drawFastHLine(0, yHoriz - 1, w, t.color565(255, 90, 130));
-    t.drawFastHLine(0, yHoriz,     w, t.color565(140, 25,  70));
+    t.drawFastHLine(0, yHoriz - 1, w, (uint16_t)0xFAD0);
+    t.drawFastHLine(0, yHoriz,     w, (uint16_t)0x88C8);
 
     int vanishX = w / 2;
     uint16_t gridCol = blend(BG, CYAN, 55);
@@ -8540,11 +8831,11 @@ void drawRetroFloor(TFT_eSPI& t, uint32_t now, int yHoriz, int yBottom) {
 // re-drawing circles it would then have to distort.
 static uint16_t sunBandColor(TFT_eSPI& t, float rr) {
     if (rr > 1.0f) rr = 1.0f;
-    if (rr > 0.88f) return t.color565(255,  50,  80);
-    if (rr > 0.72f) return t.color565(255, 100,  40);
-    if (rr > 0.54f) return t.color565(255, 165,  20);
-    if (rr > 0.36f) return t.color565(255, 215,  70);
-    return                 t.color565(255, 240, 150);
+    if (rr > 0.88f) return (uint16_t)0xF98A;
+    if (rr > 0.72f) return (uint16_t)0xFB25;
+    if (rr > 0.54f) return (uint16_t)0xFD22;
+    if (rr > 0.36f) return (uint16_t)0xFEA8;
+    return                 (uint16_t)0xFF92;
 }
 
 // ---- SYNTHWAVE ------------------------------------------------------
@@ -8639,7 +8930,7 @@ void drawSynthwave(TFT_eSPI& t, uint32_t now, int yTop, int yBottom,
     for (uint8_t layer = 0; layer < 2; layer++) {
         const uint8_t* pk = layer ? nearPk : farPk;
         int      maxH = layer ? nearMax : farMax;
-        uint16_t c    = layer ? t.color565(28, 4, 38) : t.color565(60, 12, 68);
+        uint16_t c    = layer ? (uint16_t)0x1824 : (uint16_t)0x3868;
         int step = w / (NPEAK - 1);
         if (step < 1) step = 1;
         for (uint8_t i = 0; i + 1 < NPEAK; i++) {
@@ -8679,7 +8970,7 @@ void drawSynthwave(TFT_eSPI& t, uint32_t now, int yTop, int yBottom,
             }
             birdsInited = true; birdW = w; birdH = skyH;
         }
-        const uint16_t birdCol = t.color565(26, 6, 34);
+        const uint16_t birdCol = (uint16_t)0x1824;
         const float    span    = (float)(w + 28);
         for (uint8_t i = 0; i < NBIRD; i++) {
             const float spd = 0.009f + (float)(i % 3) * 0.005f;   // px per ms
@@ -8707,7 +8998,7 @@ void drawSynthwave(TFT_eSPI& t, uint32_t now, int yTop, int yBottom,
         int y = yHoriz + dy;
         if (y < yTop || y >= yBottom) continue;
         uint8_t a = (dy == -1 || dy == 0) ? 235 : 120;
-        t.drawFastHLine(0, y, w, blend(t.color565(90, 10, 60), t.color565(255, 150, 190), a));
+        t.drawFastHLine(0, y, w, blend((uint16_t)0x5847, (uint16_t)0xFCB7, a));
     }
 
     // ---- water -----------------------------------------------------
@@ -8720,7 +9011,7 @@ void drawSynthwave(TFT_eSPI& t, uint32_t now, int yTop, int yBottom,
     // and show nothing. What reads as a moving surface is a travelling
     // *brightness* ripple, one sinf per row. The sun's reflection does
     // get displaced, because there the shape is visible.
-    const uint16_t waterBase = t.color565(10, 0, 30);
+    const uint16_t waterBase = (uint16_t)0x0803;
     for (int y = DrawBand::top(yHoriz); y < DrawBand::bot(yBottom); y++) {
         const float d = (float)(y - yHoriz) / (float)seaH;   // 0 horizon, 1 viewer
         const int srcY = yHoriz - (int)(d * skyH * 0.82f);
@@ -8806,7 +9097,7 @@ void drawTransitionGlitch(TFT_eSPI& t, uint32_t elapsedMs, uint32_t totalMs) {
     int bands = 2 + (int)(fade * 5);
 
     static const int MAX_W = 400;
-    static uint16_t rowBuf[MAX_W];
+    uint16_t rowBuf[MAX_W];
     int useW = (w < MAX_W) ? w : MAX_W;
 
     for (int i = 0; i < bands; i++) {
@@ -9191,7 +9482,7 @@ void drawClockBackdrop(TFT_eSPI& t, uint32_t now, int x, int y, int w, int h, ui
         // for every pixel across. Sizes and speeds from the same ranges the
         // background uses, at its smaller end, so they are the same flock in
         // a smaller sky rather than a new drawing.
-        const uint16_t chrome = t.color565(190, 190, 150);
+        const uint16_t chrome = (uint16_t)0xBDF2;
         struct Flyer { uint16_t speed; float sc; bool toast; int8_t lift; };
         static const Flyer F[4] = {
             { 20, 0.62f, false,  0 }, { 26, 0.55f, true,  10 },
@@ -9258,9 +9549,9 @@ void drawClockBackdrop(TFT_eSPI& t, uint32_t now, int x, int y, int w, int h, ui
                 const int v = s_cfHeat[r * cols + c];
                 if (v < 4) continue;
                 uint16_t col;
-                if (v < 14)      col = blend(BG, t.color565(120, 12, 0), (uint16_t)((v - 3) * 23));
-                else if (v < 26) col = blend(t.color565(120, 12, 0), t.color565(180, 70, 0), (uint16_t)((v - 14) * 21));
-                else             col = blend(t.color565(180, 70, 0), t.color565(200, 150, 30), (uint16_t)((v - 26) * 25));
+                if (v < 14)      col = blend(BG, (uint16_t)0x7860, (uint16_t)((v - 3) * 23));
+                else if (v < 26) col = blend((uint16_t)0x7860, (uint16_t)0xB220, (uint16_t)((v - 14) * 21));
+                else             col = blend((uint16_t)0xB220, (uint16_t)0xCCA3, (uint16_t)((v - 26) * 25));
                 t.fillRect(x + c * CELL, y + h - (rows - r) * CELL + CELL, CELL, CELL, col);
             }
         }
@@ -9300,9 +9591,9 @@ void drawClockBackdrop(TFT_eSPI& t, uint32_t now, int x, int y, int w, int h, ui
             // Lit more of the time than dark, and never quite out while lit.
             float glow = (sinf((float)now / (700.0f + (float)((hsh >> 11) % 900)) + ph) + 0.35f) / 1.35f;
             if (glow < 0.0f) continue;
-            const uint16_t core = blend(BG, t.color565(230, 255, 110), (uint16_t)(110 + glow * 145.0f));
-            const uint16_t halo = blend(BG, t.color565(150, 200, 50), (uint16_t)(40 + glow * 120.0f));
-            const uint16_t far  = blend(BG, t.color565(90, 130, 30), (uint16_t)(glow * 90.0f));
+            const uint16_t core = blend(BG, (uint16_t)0xE7ED, (uint16_t)(110 + glow * 145.0f));
+            const uint16_t halo = blend(BG, (uint16_t)0x9646, (uint16_t)(40 + glow * 120.0f));
+            const uint16_t far  = blend(BG, (uint16_t)0x5C03, (uint16_t)(glow * 90.0f));
             const int ix = (int)fx, iy = (int)fy;
             if (glow > 0.5f) {
                 t.drawPixel(ix - 2, iy, far); t.drawPixel(ix + 2, iy, far);
@@ -9412,8 +9703,9 @@ void drawBangersOutline(TFT_eSPI& t, int x, int y, const char* s, uint16_t color
 // The strlen() check added below is the actual fix (forces a break the
 // moment the buffer itself would fill, independent of maxW); the wider
 // buffer just means that happens less often in the first place.
-uint8_t wrapText(TFT_eSPI& t, const char* text, int maxW,
-                 char lines[][48], uint8_t maxLines, const char** remaining) {
+template<size_t N>
+static uint8_t wrapInto(TFT_eSPI& t, const char* text, int maxW,
+                 char lines[][N], uint8_t maxLines, const char** remaining) {
     const char* p = text ? text : "";
     uint8_t n=0;
     while (*p && (unsigned char)*p <= ' ') ++p;
@@ -9421,7 +9713,7 @@ uint8_t wrapText(TFT_eSPI& t, const char* text, int maxW,
         const char* start=p;
         const char* space=nullptr;
         size_t used=0;
-        char trial[48] = {};
+        char trial[N] = {};
         while (*p && *p!='\n') {
             // Keep UTF-8 codepoints together, including when splitting a word.
             size_t bytes=1;
@@ -9447,7 +9739,7 @@ uint8_t wrapText(TFT_eSPI& t, const char* text, int maxW,
         // Callers without continuation support must advertise truncation.
         char* last=lines[n-1];size_t len=strlen(last);
         while (true) {
-            if (len+3<48) {
+            if (len+3<N) {
                 memcpy(last+len,"...",4);
                 if (t.textWidth(last)<=maxW) break;
             }
@@ -9457,6 +9749,13 @@ uint8_t wrapText(TFT_eSPI& t, const char* text, int maxW,
         }
     }
     return n;
+}
+
+uint8_t wrapText(TFT_eSPI& t,const char* text,int maxW,char lines[][48],uint8_t maxLines,const char** remaining) {
+    return wrapInto<48>(t,text,maxW,lines,maxLines,remaining);
+}
+uint8_t wrapText(TFT_eSPI& t,const char* text,int maxW,char lines[][80],uint8_t maxLines) {
+    return wrapInto<80>(t,text,maxW,lines,maxLines,nullptr);
 }
 
 // Info panel geometry -- see theme.h's comment on drawInfoPanel() for
@@ -9473,10 +9772,15 @@ static void infoRects(int screenW, int screenH,
     // description text (size 1, see drawInfoPanel()) still needs real
     // room, and a small-margin modal reads fine here since it's the
     // only thing on screen while it's up.
+    // Wider and taller on the large panels, where the text is the body font.
+    // In portrait there it takes most of the height too: the text is
+    // size 2, 25 letters to a line, and the longest explanation needs 13.
+    const bool big = s_large;
     pw = screenW - 16;
-    if (pw > 300) pw = 300;
+    if (pw > (big ? 440 : 300)) pw = big ? 440 : 300;
     ph = screenH - 8;
-    if (ph > 260) ph = 260;
+    const int phMax = big ? (screenH > screenW ? 440 : 304) : 260;
+    if (ph > phMax) ph = phMax;
     px = (screenW - pw) / 2;
     py = (screenH - ph) / 2;
 
@@ -9486,25 +9790,88 @@ static void infoRects(int screenW, int screenH,
     squachyBaseY = py + 88;
     squachyWander = pw / 2 - 40;
     if (squachyWander < 0) squachyWander = 0;
-    textTop = py + 104;
+    textTop = py + (big ? 92 : 104);
     textMaxW = pw - 16;
 
-    btnH = 26;
+    btnH = big ? 32 : 26;
     btnW = pw - 20;
     btnX = px + 10;
     btnY = py + ph - btnH - 8;
 }
 
+// On a compact screen the text is shown a page at a time, and GOT IT reads
+// MORE until the last one. The page goes back to the first whenever the
+// panel has not been drawn for a moment, which is how a new one opens.
+static uint8_t  s_infoPage = 0, s_infoPages = 1;
+static uint32_t s_infoDrawnAt = 0;
 bool infoPanelHitDismiss(int x, int y, int screenW, int screenH) {
+    if (s_compact) {
+        const int bw = screenW - 28, bh = 18, bx = 14, by = screenH - 4 - 4 - bh;
+        if (!(x >= bx && x <= bx + bw && y >= by && y <= by + bh)) return false;
+        static uint32_t last = 0;
+        const uint32_t now = millis();
+        if (now - last < 250) return false;     // one press, one page
+        last = now;
+        if (s_infoPage + 1 < s_infoPages) { s_infoPage++; return false; }
+        s_infoPage = 0;
+        return true;
+    }
     int px, py, pw, ph, headingY, squachyCx, squachyBaseY, squachyWander, textTop, textMaxW, btnX, btnY, btnW, btnH;
     float squachyScale;
     infoRects(screenW, screenH, px, py, pw, ph, headingY, squachyCx, squachyBaseY, squachyScale, squachyWander,
               textTop, textMaxW, btnX, btnY, btnW, btnH);
-    return x >= btnX && x <= btnX + btnW && y >= btnY && y <= btnY + btnH;
+    if (!(x >= btnX && x <= btnX + btnW && y >= btnY && y <= btnY + btnH)) return false;
+    // The large panels page their size-2 text the way the compact ones do:
+    // the button reads MORE until the last page.
+    if (s_large) {
+        static uint32_t last = 0;
+        const uint32_t now = millis();
+        if (now - last < 250) return false;     // one press, one page
+        last = now;
+        if (s_infoPage + 1 < s_infoPages) { s_infoPage++; return false; }
+        s_infoPage = 0;
+    }
+    return true;
 }
 
 void drawInfoPanel(TFT_eSPI& t, int w, int h, uint32_t now,
                    const char* typeName, const char* text) {
+    if (s_compact) {
+        if (now - s_infoDrawnAt > 400) s_infoPage = 0;
+        s_infoDrawnAt = now;
+        const int px = 4, py = 4, pw = w - 8, ph = h - 8;
+        t.fillRoundRect(px, py, pw, ph, 5, BG);
+        t.drawRoundRect(px, py, pw, ph, 5, PURPLE);
+        t.setTextWrap(false);
+        int ly = py + 5;
+        if (typeName) {
+            t.setTextSize(1);
+            t.setTextColor(VAPOR_PINK, BG);
+            t.setCursor(px + (pw - t.textWidth(typeName)) / 2, ly);
+            t.print(typeName);
+            ly += 12;
+        }
+        const int btnH = 18, btnY = py + ph - btnH - 4;
+        const int per = (btnY - 3 - ly) / 10;
+        static const uint8_t MAXL = 24;
+        char lines[MAXL][48];
+        t.setTextSize(1);
+        const uint8_t n = wrapText(t, text, pw - 10, lines, MAXL);
+        s_infoPages = (uint8_t)(per > 0 ? (n + per - 1) / per : 1);
+        if (!s_infoPages) s_infoPages = 1;
+        if (s_infoPage >= s_infoPages) s_infoPage = 0;
+        t.setTextColor(WHITE, BG);
+        for (int i = s_infoPage * per; i < n && i < (s_infoPage + 1) * per; i++) {
+            t.setCursor(px + 5, ly);
+            t.print(lines[i]);
+            ly += 10;
+        }
+        char lbl[24];
+        if (s_infoPage + 1 < s_infoPages) snprintf(lbl, sizeof lbl, "[ MORE %u/%u ]", s_infoPage + 1, s_infoPages);
+        else                              snprintf(lbl, sizeof lbl, "[ GOT IT ]");
+        drawButton(t, px + 10, btnY, pw - 20, btnH, lbl, false, 1);
+        return;
+    }
     int px, py, pw, ph, headingY, squachyCx, squachyBaseY, squachyWander, textTop, textMaxW, btnX, btnY, btnW, btnH;
     float squachyScale;
     infoRects(w, h, px, py, pw, ph, headingY, squachyCx, squachyBaseY, squachyScale, squachyWander,
@@ -9535,20 +9902,47 @@ void drawInfoPanel(TFT_eSPI& t, int w, int h, uint32_t now,
 
     Squachy::drawWaving(t, squachyCx, squachyBaseY, now, squachyScale, nullptr, true, squachyWander);
 
-    t.setTextSize(1);
+    // The large panels set it at size 2, a page of as many lines as fit
+    // above the button; everywhere else the size-1 seven it always had.
+    t.setTextSize(s_large ? 2 : 1);
     t.setTextWrap(false);
     t.setTextColor(WHITE, BG);
-    char lines[INFO_MAX_LINES][48];
-    uint8_t n = wrapText(t, text, textMaxW, lines, INFO_MAX_LINES);
-    int ly = textTop;
-    for (uint8_t i = 0; i < n; i++) {
-        int lw = t.textWidth(lines[i]);
-        t.setCursor(px + (pw - lw) / 2, ly);
-        t.print(lines[i]);
-        ly += 12;
+    const int step = s_large ? t.fontHeight() + 3 : 12;
+#if defined(DNSP_RUNTIME_DISPLAY)
+    static const uint8_t WIDE_MAX = INFO_MAX_LINES; // no 480x320 panel in DNSP releases
+#else
+    static const uint8_t WIDE_MAX = 32;
+#endif
+    char wide[WIDE_MAX][80];
+    char narrow[INFO_MAX_LINES][48];
+    int per = (btnY - 4 - textTop) / step;
+    if (per < 1) per = 1;
+    const uint8_t n = s_large ? wrapText(t, text, textMaxW, wide, WIDE_MAX)
+                              : wrapText(t, text, textMaxW, narrow, INFO_MAX_LINES);
+    int first = 0, last = n;
+    if (s_large) {
+        if (now - s_infoDrawnAt > 400) s_infoPage = 0;   // a new panel opens on page one
+        s_infoDrawnAt = now;
+        s_infoPages = (uint8_t)((n + per - 1) / per);
+        if (!s_infoPages) s_infoPages = 1;
+        if (s_infoPage >= s_infoPages) s_infoPage = 0;
+        first = s_infoPage * per;
+        last  = first + per < n ? first + per : n;
     }
+    int ly = textTop;
+    for (int i = first; i < last; i++) {
+        const char* line = s_large ? wide[i] : narrow[i];
+        int lw = t.textWidth(line);
+        t.setCursor(px + (pw - lw) / 2, ly);
+        t.print(line);
+        ly += step;
+    }
+    t.setTextSize(1);
 
-    drawButton(t, btnX, btnY, btnW, btnH, "[ GOT IT ]", false, 2);
+    char lbl[24];
+    if (s_large && s_infoPage + 1 < s_infoPages) snprintf(lbl, sizeof lbl, "[ MORE %u/%u ]", s_infoPage + 1, s_infoPages);
+    else                                         snprintf(lbl, sizeof lbl, "[ GOT IT ]");
+    drawButton(t, btnX, btnY, btnW, btnH, lbl, false, 2);
 }
 
 }  // namespace Theme

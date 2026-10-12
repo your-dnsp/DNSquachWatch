@@ -9,10 +9,11 @@
 
 namespace {
 
-const int BTN_H   = 28;
 const int ROW_Y0  = 36;
-const int ROW_H   = 26;
 const int ROW_GAP = 3;
+// A size up on the large panels, where rows carry the 16-row body font.
+int btnH() { return Theme::dialogBtnH(28); }
+int rowH() { return Theme::large() ? 40 : 26; }
 
 int s_selected = -1;
 
@@ -31,18 +32,18 @@ Bar bar(TFT_eSPI& t, int n) {
     const int perRow = wide ? n : 2;
     b.rows = (n + perRow - 1) / perRow;
     b.w = (t.width() - 16 - (perRow - 1) * gap) / perRow;
-    if (b.w > 110) b.w = 110;
+    if (b.w > (Theme::large() ? 140 : 110)) b.w = Theme::large() ? 140 : 110;
     for (int i = 0; i < n; i++) {
         const int r = i / perRow, c = i % perRow;
         const int span = perRow * b.w + (perRow - 1) * gap;
         b.x[i] = (t.width() - span) / 2 + c * (b.w + gap);
-        b.y[i] = t.height() - 6 - (b.rows - r) * BTN_H - (b.rows - 1 - r) * 6;
+        b.y[i] = t.height() - 6 - (b.rows - r) * btnH() - (b.rows - 1 - r) * 6;
     }
     return b;
 }
 
 int rowsThatFit(TFT_eSPI& t, int barTop) {
-    const int n = (barTop - 6 - ROW_Y0) / (ROW_H + ROW_GAP);
+    const int n = (barTop - 6 - ROW_Y0) / (rowH() + ROW_GAP);
     return n < 1 ? 1 : n;
 }
 
@@ -60,7 +61,7 @@ void paragraph(TFT_eSPI& t, int y, uint16_t c, const char* s) {
         char trial[72];
         snprintf(trial, sizeof trial, "%s%s%s", line, line[0] ? " " : "", word);
         if (line[0] && t.textWidth(trial) > maxW) {
-            t.setCursor(8, y); t.print(line); y += 11;
+            t.setCursor(8, y); t.print(line); y += t.fontHeight() + 3;
             snprintf(line, sizeof line, "%s", word);
         } else {
             snprintf(line, sizeof line, "%s", trial);
@@ -112,7 +113,7 @@ int  uiWifiNetsSelected()      { return s_selected; }
 void uiWifiNetsTick(TFT_eSPI& t, uint32_t now) {
     t.fillRect(0, 0, t.width(), t.height(), Theme::BG);
     Theme::drawTitleBar(t, ">> WIFI NETWORKS <<");
-    t.setTextSize(1);
+    Theme::bodyFontOn(t);
     t.setTextWrap(false);
     const int w = t.width();
     const uint8_t n = OtaWifi::savedCount();
@@ -124,11 +125,11 @@ void uiWifiNetsTick(TFT_eSPI& t, uint32_t now) {
     }
     const int fit = rowsThatFit(t, b.y[0]);
     for (int i = 0; i < n && i < fit; i++) {
-        const int y = ROW_Y0 + i * (ROW_H + ROW_GAP);
+        const int y = ROW_Y0 + i * (rowH() + ROW_GAP);
         const bool sel = i == s_selected;
         const bool use = i == OtaWifi::savedUse();
-        t.fillRect(8, y, w - 16, ROW_H, Theme::TASKBAR);
-        t.drawRect(8, y, w - 16, ROW_H, sel ? Theme::VAPOR_PINK : Theme::VAPOR_PURPLE);
+        t.fillRect(8, y, w - 16, rowH(), Theme::TASKBAR);
+        t.drawRect(8, y, w - 16, rowH(), sel ? Theme::VAPOR_PINK : Theme::VAPOR_PURPLE);
         const char* tag  = use ? "USE" : "";
         const int   tagW = tag[0] ? t.textWidth(tag) + 6 : 0;
         const int maxChars = (w - 16 - 12 - tagW) / t.textWidth("M");
@@ -145,15 +146,15 @@ void uiWifiNetsTick(TFT_eSPI& t, uint32_t now) {
         }
         const OtaWifi::SavedResult r = OtaWifi::savedResult((uint8_t)i);
         t.setTextColor(resultColour(r), Theme::TASKBAR);
-        t.setCursor(14, y + 15);
+        t.setCursor(14, y + (Theme::large() ? 21 : 15));
         t.print(resultWords(r));
     }
     const bool haveSel = s_selected >= 0 && s_selected < n;
     const bool full    = n >= OtaWifi::SAVED_MAX;
-    Theme::drawWin95Button(t, b.x[0], b.y[0], b.w, BTN_H, "CONNECT", !haveSel);
-    Theme::drawWin95Button(t, b.x[1], b.y[1], b.w, BTN_H, "REMOVE", !haveSel);
-    Theme::drawWin95Button(t, b.x[2], b.y[2], b.w, BTN_H, full ? "FULL" : "ADD", full);
-    Theme::drawWin95Button(t, b.x[3], b.y[3], b.w, BTN_H, "BACK",   false);
+    Theme::drawWin95Button(t, b.x[0], b.y[0], b.w, btnH(), "CONNECT", !haveSel);
+    Theme::drawWin95Button(t, b.x[1], b.y[1], b.w, btnH(), "REMOVE", !haveSel);
+    Theme::drawWin95Button(t, b.x[2], b.y[2], b.w, btnH(), full ? "FULL" : "ADD", full);
+    Theme::drawWin95Button(t, b.x[3], b.y[3], b.w, btnH(), "BACK",   false);
     Theme::drawToast(t, now);
 }
 
@@ -162,16 +163,16 @@ WifiNetsHit uiWifiNetsHit(TFT_eSPI& t, int x, int y, int* row) {
     const int fit = rowsThatFit(t, b.y[0]);
     const uint8_t n = OtaWifi::savedCount();
     for (int i = 0; i < n && i < fit; i++) {
-        const int ry = ROW_Y0 + i * (ROW_H + ROW_GAP);
-        if (y >= ry && y < ry + ROW_H + ROW_GAP && x >= 8 && x <= t.width() - 8) {
+        const int ry = ROW_Y0 + i * (rowH() + ROW_GAP);
+        if (y >= ry && y < ry + rowH() + ROW_GAP && x >= 8 && x <= t.width() - 8) {
             if (row) *row = i;
             return WifiNetsHit::ROW;
         }
     }
-    if (in(x, y, b.x[0], b.y[0], b.w, BTN_H)) return WifiNetsHit::USE;
-    if (in(x, y, b.x[1], b.y[1], b.w, BTN_H)) return WifiNetsHit::REMOVE;
-    if (in(x, y, b.x[2], b.y[2], b.w, BTN_H)) return WifiNetsHit::ADD;
-    if (in(x, y, b.x[3], b.y[3], b.w, BTN_H)) return WifiNetsHit::BACK;
+    if (in(x, y, b.x[0], b.y[0], b.w, btnH())) return WifiNetsHit::USE;
+    if (in(x, y, b.x[1], b.y[1], b.w, btnH())) return WifiNetsHit::REMOVE;
+    if (in(x, y, b.x[2], b.y[2], b.w, btnH())) return WifiNetsHit::ADD;
+    if (in(x, y, b.x[3], b.y[3], b.w, btnH())) return WifiNetsHit::BACK;
     return WifiNetsHit::NONE;
 }
 
@@ -184,7 +185,7 @@ void uiWifiAddInit(TFT_eSPI& t) {
 void uiWifiAddTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
     t.fillRect(0, 0, t.width(), t.height(), Theme::BG);
     Theme::drawTitleBar(t, ">> ADD A NETWORK <<");
-    t.setTextSize(1);
+    Theme::bodyFontOn(t);
     t.setTextWrap(false);
     const int w = t.width();
     const Bar b = bar(t, 2);
@@ -199,12 +200,12 @@ void uiWifiAddTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
     }
     const uint8_t n = eng.rawWifiCount();
     for (int i = 0; i < n && i < fit; i++) {
-        const int y = ROW_Y0 + i * (ROW_H + ROW_GAP);
+        const int y = ROW_Y0 + i * (rowH() + ROW_GAP);
         const char* ssid = eng.rawWifiSsid((uint8_t)i);
         const bool saved = OtaWifi::savedIndexOf(ssid) >= 0;
         const bool open  = eng.rawWifiOpen((uint8_t)i);
-        t.fillRect(8, y, w - 16, ROW_H, Theme::TASKBAR);
-        t.drawRect(8, y, w - 16, ROW_H, Theme::VAPOR_PURPLE);
+        t.fillRect(8, y, w - 16, rowH(), Theme::TASKBAR);
+        t.drawRect(8, y, w - 16, rowH(), Theme::VAPOR_PURPLE);
         const char* tag  = saved ? "SAVED" : (open ? "OPEN" : "");
         const int   tagW = tag[0] ? t.textWidth(tag) + 6 : 0;
         const int maxChars = (w - 16 - 12 - 20 - tagW) / t.textWidth("M");
@@ -212,17 +213,18 @@ void uiWifiAddTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
         char pv[40];
         snprintf(name, sizeof name, "%.*s", maxChars > 32 ? 32 : maxChars, ssid[0] ? Privacy::name(ssid, pv, sizeof pv) : "(hidden)");
         t.setTextColor(Theme::WHITE, Theme::TASKBAR);
-        t.setCursor(14, y + (ROW_H - t.fontHeight()) / 2);
+        t.setCursor(14, y + (rowH() - t.fontHeight()) / 2);
         t.print(name);
         if (tag[0]) {
             t.setTextColor(saved ? Theme::CYAN : Theme::AMBER, Theme::TASKBAR);
-            t.setCursor(w - 16 - 20 - tagW, y + (ROW_H - t.fontHeight()) / 2);
+            t.setCursor(w - 16 - 20 - tagW, y + (rowH() - t.fontHeight()) / 2);
             t.print(tag);
         }
-        signalBars(t, w - 16 - 16, y + ROW_H - 5, eng.rawWifiRssi((uint8_t)i));
+        signalBars(t, w - 16 - 16, y + rowH() - 5, eng.rawWifiRssi((uint8_t)i));
     }
-    Theme::drawWin95Button(t, b.x[0], b.y[0], b.w, BTN_H, "RESCAN", false);
-    Theme::drawWin95Button(t, b.x[1], b.y[1], b.w, BTN_H, "BACK",   false);
+    Theme::drawWin95Button(t, b.x[0], b.y[0], b.w, btnH(), "RESCAN", false);
+    Theme::drawWin95Button(t, b.x[1], b.y[1], b.w, btnH(), "BACK",   false);
+    Theme::bodyFontOff(t);
     Theme::drawToast(t, now);
 }
 
@@ -231,14 +233,14 @@ WifiAddHit uiWifiAddHit(TFT_eSPI& t, int x, int y, const DetectionEngine& eng, i
     const int fit = rowsThatFit(t, b.y[0]);
     const uint8_t n = eng.rawWifiScanDone() ? eng.rawWifiCount() : 0;
     for (int i = 0; i < n && i < fit; i++) {
-        const int ry = ROW_Y0 + i * (ROW_H + ROW_GAP);
-        if (y >= ry && y < ry + ROW_H + ROW_GAP && x >= 8 && x <= t.width() - 8) {
+        const int ry = ROW_Y0 + i * (rowH() + ROW_GAP);
+        if (y >= ry && y < ry + rowH() + ROW_GAP && x >= 8 && x <= t.width() - 8) {
             if (row) *row = i;
             return WifiAddHit::ROW;
         }
     }
-    if (in(x, y, b.x[0], b.y[0], b.w, BTN_H)) return WifiAddHit::RESCAN;
-    if (in(x, y, b.x[1], b.y[1], b.w, BTN_H)) return WifiAddHit::BACK;
+    if (in(x, y, b.x[0], b.y[0], b.w, btnH())) return WifiAddHit::RESCAN;
+    if (in(x, y, b.x[1], b.y[1], b.w, btnH())) return WifiAddHit::BACK;
     return WifiAddHit::NONE;
 }
 

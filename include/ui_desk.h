@@ -22,6 +22,8 @@ void uiDeskTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool adva
 // The two buttons at the bottom: the timer (FOCUS / the count / BREAK) and
 // BACK. Returns true when the tap did something.
 bool uiDeskHitTimer(int x, int y, int screenW, int screenH);
+// Where a cursor should stop, for the boards with no touch panel.
+uint8_t uiDeskStops(int screenW, int screenH, uint32_t now, int16_t* xs, int16_t* ys, uint8_t cap);
 bool uiDeskHitBack(int x, int y, int screenW, int screenH);
 // A tap on the clock's left or right fifth: -1 or +1, the way an edge tap
 // turns the background over; 0 anywhere else.

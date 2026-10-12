@@ -24,7 +24,7 @@ int main(){
     strcpy(t.name,"\xFF");assert(ResearchSubmission::format(out,sizeof out,t,l,0,true));assert(strstr(out,"\\u00ff"));
     strcpy(l.subtag,"DA:27:C1:44:55:66");assert(ResearchSubmission::format(out,sizeof out,t,l,0,false));assert(!strstr(out,"44:55:66"));
     assert(ResearchSubmission::savePair(t,l,555,path,sizeof path));assert(strstr(path,"REDACTED"));assert(SD.exists("/Research Submissions/PRIVATE/report-0000022b-0001-PRIVATE.txt"));
-    t.mac[3]=t.mac[4]=t.mac[5]=0;t.addressRole=AddressRole::BSSID;strcpy(l.subtag,"friend");
+    t.mac[3]=t.mac[4]=t.mac[5]=0xDD;t.addressRole=AddressRole::BSSID;strcpy(l.subtag,"friend");
     assert(ResearchSubmission::format(out,sizeof out,t,l,0,false));
     assert(strstr(out,"DA:27:C1:XX:XX:XX")&&strstr(out,"\"simulated\":true")&&strstr(out,"\"simulation_subtag\":\"SIMULATED\"")&&strstr(out,"\"address_provenance\":\"BSSID\"")&&strstr(out,"\"subtag\":\"friend\""));
     UserLabels::storageWipe();assert(!SD.exists("/Research Submissions"));

@@ -3,6 +3,9 @@
 #include "location_label.h"
 #include "../test/test_util.h"
 #include "settings.h"
+#include "ui_phone.h"
+#include "ui_clear.h"
+#include "ignore_list.h"
 #include "ui_device.h"
 #include "crash_reports.h"
 #include <filesystem>
@@ -10,6 +13,7 @@
 #include "ui_boot.h"
 #include "ui_colorcheck.h"
 #include "squachy.h"
+#include "pet.h"
 #include "ui_sysprops.h"
 #include "research.h"
 #include "ui_research.h"
@@ -56,6 +60,77 @@ static void testDetection(DetectionType type,unsigned id) {
     d.active=true;d.hits=1;d.firstSeen=d.lastSeen=millis();engine.postBle(d);
 }
 static int runDnspUiChecks() {
+    if(getenv("DNSP_UPSTREAM_UI_TEST")) {
+      suite("Upstream v1.29/v1.30 integration");
+      Squachy::unlockAllOutfits();
+      ck("both new outfits available",Squachy::outfitCount()==20 && Squachy::shamblerUnlocked() && Squachy::th3Unlocked());
+      for(unsigned i=0;i<Squachy::outfitCount()&&!Squachy::th3Wearing();++i)Squachy::cycleOutfit();
+      ck("TH3 wearable",Squachy::th3Wearing());
+      for(bool portrait:{false,true}) {
+        TFT_eSPI panel(portrait?240:320,portrait?320:240);
+        auto hash=[&](){uint32_t v=0;for(int y=18;y<30;y++)for(int x=90;x<150;x++)v=v*33+panel.readPixel(x,y);return v;};
+        Field::config.reduced=false;uiPhoneInit(panel);uiPhoneTick(panel,100,engine);
+        uiPhoneTouch(150,110,200,PhoneTouch::DOWN);uiPhoneTick(panel,201,engine);const auto typed=hash();
+        uiPhoneTick(panel,3201,engine);ck("input visible immediately and after ring",typed==hash());
+        // Paint all costumes through the real rendering path at normal and
+        // thumbnail scale, with both accessibility switches exercised.
+        for(bool reduced:{false,true}){Field::config.reduced=reduced;
+          for(unsigned n=0;n<Squachy::outfitCount();++n){Squachy::setOutfitPreview(n);Squachy::drawWaving(panel,panel.width()/2,150,100,0.7f);}
+        }
+        Squachy::setOutfitPreview(-1);
+      }
+      Field::config.reduced=false;
+      // The native receiver tests cover burst attribution. Here exercise the
+      // actual headline's Ignore/Snooze gates, without silencing other sources.
+      Detection a{};a.type=DetectionType::DEAUTH;a.mac[0]=0xAC;a.mac[5]=240;a.active=true;a.rssi=-60;a.conf=Confidence::MED_CONF;a.firstSeen=a.lastSeen=millis();engine.postBle(a);
+      for(unsigned i=0;i<4;++i)testStep(300);
+      TFT_eSPI panel(320,240);if(Settings::detXp())Settings::toggleDetXp();uiClearInit(panel);
+      auto nearby=[&](){for(int y=0;y<240;++y)for(int x=0;x<320;++x)if(uiClearNearbyHit(x,y))return true;return false;};
+      uiClearTick(panel,millis(),engine);ck("ordinary DEAUTH keeps NEARBY visible",nearby());
+      IgnoreList::add(a.mac,a.type);testStep(300);uiClearTick(panel,millis(),engine);ck("explicitly ignored source does not light NEARBY",!nearby());
+      a.mac[5]=241;engine.postBle(a);testStep(300);uiClearTick(panel,millis(),engine);ck("another DEAUTH source remains visible",nearby());
+      IgnoreList::snooze(a.mac);testStep(300);uiClearTick(panel,millis(),engine);ck("snoozed source does not light NEARBY",!nearby());
+      suite("Upstream v1.34-v1.35 brightness controls");
+      for(bool portrait:{false,true}) {
+        TFT_eSPI bright(portrait?240:320,portrait?320:240);uiSettingsInit(bright);uiSettingsOpenPage(SettingsPage::APPEARANCE);
+        for(int i=0;i<20;++i){
+          int rowY=-1;
+          for(int y=34;y<bright.height()-Theme::pinnedBackH(bright.width());++y)
+            if(uiSettingsHitTest(bright,bright.width()/2,y,bright.width(),bright.height())==SettingsRow::BRIGHTNESS){rowY=y+5;break;}
+          if(rowY>=0){
+            bool minus=false,plus=false;for(int x=0;x<bright.width();++x){const int hit=uiSettingsStepHit(bright,x,rowY,bright.width(),bright.height());minus|=hit<0;plus|=hit>0;}
+            ck("brightness has minus and plus in both orientations",minus&&plus);
+            ck("brightness label does not change value",uiSettingsStepHit(bright,8,rowY,bright.width(),bright.height())==0);
+            break;
+          }
+          uiSettingsScroll(1);
+        }
+        uiSettingsTick(bright,millis(),engine);
+      }
+      suite("Upstream v1.31-v1.33 classic CYD additions");
+      if(!Settings::detXp())Settings::toggleDetXp();
+      for(bool portrait:{false,true}) {
+        TFT_eSPI xp(portrait?240:320,portrait?320:240);uiClearInit(xp);uiClearTick(xp,millis(),engine);
+        bool hit=false;DetectionType column{};
+        for(int y=0;y<xp.height();++y)for(int x=0;x<xp.width();++x)if(uiClearCounterHit(x,y,column))hit=true;
+        ck("XP counter buttons fit both orientations",hit);
+        ck("XP keeps CLASSIC nearby separate",!uiClearNearbyHit(160,20));
+        for(bool reduced:{false,true}) {
+          Field::config.reduced=reduced;
+          Squachy::unlockClippy("bench");Pet::reset();
+          for(unsigned i=0;i<8;++i){testStep(100);Squachy::drawWaving(xp,xp.width()/2,150,100,0.7f);Pet::tick(xp,millis(),xp.width(),0,xp.height());}
+          ck("Clippy unlock retained",Squachy::clippyUnlocked());
+          Squachy::unlockToaster("bench");Pet::reset();
+          for(unsigned i=0;i<8;++i){testStep(100);Squachy::drawWaving(xp,xp.width()/2,150,100,0.7f);Pet::tick(xp,millis(),xp.width(),0,xp.height());}
+          ck("Toaster unlock retained",Squachy::toasterUnlocked());
+          Pet::arrest(millis());ck("jail starts at ten minutes",Squachy::jailed() && Squachy::jailLeftMs()<=600000);
+          Squachy::drawWaving(xp,xp.width()/2,150,100,0.7f);Pet::tick(xp,millis(),xp.width(),0,xp.height());
+          Squachy::jailFree();ck("serving jail unlocks ball",Squachy::ballUnlocked());
+        }
+      }
+      Field::config.reduced=false;
+      return report();
+    }
     if(getenv("DNSP_SD_UI_TEST")){
       for(bool portrait:{false,true}){
         TFT_eSPI panel(portrait?240:320,portrait?320:240);const int w=panel.width(),h=panel.height();
@@ -632,9 +707,10 @@ static int runDnspUiChecks() {
     expectedFrame.pushSprite(0,0);
     ck("shutdown message and single reboot button match full screen",expected.pixelsRGB565()==tft.pixelsRGB565());
     auto simShot=[](const char* leaf){const char* dir=getenv("DNSP_TEST_SHOTS");if(!dir)return;std::vector<uint8_t> rgb;for(uint16_t v:tft.pixelsRGB565()){rgb.push_back(((v>>11)&31)*255/31);rgb.push_back(((v>>5)&63)*255/63);rgb.push_back((v&31)*255/31);}char path[1024];snprintf(path,sizeof path,"%s/%s.png",dir,leaf);ck("simulation review image written",PngWriter::write(path,tft.width(),tft.height(),rgb.data()));};
-    Detection marked{};marked.type=DetectionType::FLOCK;marked.mac[0]=0xB4;marked.mac[1]=0x1E;marked.mac[2]=0x52;marked.addressRole=AddressRole::BSSID;marked.conf=Confidence::LOW_CONF;marked.evidence=MatchEvidence::OUI;marked.hits=1;marked.rssi=-45;marked.channel=6;marked.vendor="Flock";
+    Detection marked{};marked.type=DetectionType::FLOCK;marked.mac[0]=0xB4;marked.mac[1]=0x1E;marked.mac[2]=0x52;marked.mac[3]=marked.mac[4]=marked.mac[5]=0xDD;marked.addressRole=AddressRole::BSSID;marked.conf=Confidence::LOW_CONF;marked.evidence=MatchEvidence::OUI;marked.hits=1;marked.rssi=-45;marked.channel=6;marked.vendor="Flock";
+    ck("simulation screenshot uses current exact suffix",Simulation::marked(marked));
     uiAlertInit(tft,marked);uiAlertSetFirst(true);uiAlertTick(tft,millis(),engine,false,"","");simShot("simulated-alert");
-    SketchyRule::Incident mixed{};mixed.alpr.type=DetectionType::FLOCK;memcpy(mixed.alpr.mac,marked.mac,6);mixed.deauth.mac[5]=1;mixed.gapSeconds=30;uiRuleAlertDraw(tft,mixed);simShot("simulation-mixed-rule");
+    SketchyRule::Incident mixed{};mixed.alpr.type=DetectionType::FLOCK;memcpy(mixed.alpr.mac,marked.mac,6);mixed.deauth.mac[5]=1;mixed.gapSeconds=30;ck("mixed incident keeps simulation evidence",strcmp(SketchyRule::simulationLabel(mixed),"CONTAINS SIMULATED EVIDENCE")==0);uiRuleAlertDraw(tft,mixed);simShot("simulation-mixed-rule");
     return report();
 }
 
@@ -642,6 +718,7 @@ static int runDnspUiChecks() {
 #include "duress_device.h"
 #include "ui_security.h"
 #include "ui_phone.h"
+#include "ui_clear.h"
 extern unsigned simEngineInitCalls,simEngineLoopCalls;
 static int runDuressUiChecks(bool earlyBoot) {
     if(earlyBoot)ck("early duress boot skips engine initialization",simEngineInitCalls==0);

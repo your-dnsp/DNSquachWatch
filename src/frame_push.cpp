@@ -42,7 +42,11 @@ static const uint32_t PX_PER_BURST = 32;
 // every board a stale-row window three times longer: six seconds on a 2.8"
 // running at thirty frames a second, where today it is two. That is a bad
 // trade to make on five boards for one percent on the sixth.
-static const int32_t MAX_ROWS = 480;   // the 3.5" in portrait, the tallest there is
+#if defined(DNSP_RUNTIME_DISPLAY)
+static const int32_t MAX_ROWS = 320; // supported 2.8-inch CYDs, including portrait
+#else
+static const int32_t MAX_ROWS = 480;
+#endif
 static uint32_t s_rowHash[MAX_ROWS];
 static bool     s_valid   = false;
 static int32_t  s_validW  = 0, s_validH = 0;

@@ -20,6 +20,10 @@
 #include <Preferences.h>  // AWOK's own per-rotation touch-cal storage; see the AWOK block below pollTouch()'s globals
 #include <esp_heap_caps.h>   // heap_caps_get_largest_free_block() -- diagnostics screen
 #include <esp_system.h>      // esp_reset_reason() -- diagnostics screen
+#if defined(ESP32)
+#include <esp_sleep.h>       // deep sleep: the watch's heal cycle, the Freenove boards' POWER OFF
+#include <driver/rtc_io.h>   // the pull-up that keeps BOOT high through that sleep
+#endif
 // The core dump's own summary -- which task, and where. The emulator has
 // neither header, and nothing to summarise.
 #if __has_include(<esp_core_dump.h>)
@@ -357,6 +361,7 @@ static void drawCrashCard(TFT_eSPI& t) {
 #include "detection_info.h"
 #include "ui_diary.h"
 #include "ui_outfit.h"
+#include "pet.h"
 #include "ui_outfit_unlock.h"
 #include "ui_ignorelist.h"
 #include "frame_push.h"
@@ -392,6 +397,8 @@ static void drawCrashCard(TFT_eSPI& t) {
 #endif
 #include "touch_cal.h"
 #include "settings.h"
+#include "pocket_screen.h"
+#include "sound.h"
 #include "privacy.h"
 #include "card_content.h"
 #include "signatures.h"
@@ -468,7 +475,7 @@ static void drawCrashCard(TFT_eSPI& t) {
     #define TOUCH_SHARES_DISPLAY_BUS 1
 #endif
 
-#if defined(CYD35)
+#if defined(CYD35R)
     #define TOUCH_SCK  TFT_SCLK
     #define TOUCH_MOSI TFT_MOSI
     #define TOUCH_MISO TFT_MISO
@@ -764,7 +771,7 @@ static uint16_t RAW_Y_MIN = 200, RAW_Y_MAX = 3800;
 static const int16_t CAP_TOUCH_MIN_SPREAD = 50;
 static const int16_t RESISTIVE_MIN_SPREAD = 800;
 
-#if defined(TOUCH_ON_DISPLAY_BUS) || defined(CYD35)
+#if defined(TOUCH_ON_DISPLAY_BUS) || defined(CYD35R)
 // TFT_eSPI::setTouch()'s own calibration format, as older firmware saved it
 // on AWOK and the 3.5": [0] and [2] are the raw readings at the low edge of
 // each axis, [1] and [3] the SPANS from there (calibrateTouch() subtracts
@@ -787,12 +794,25 @@ static bool touchCalPlausible(const uint16_t* p) {
 // Rotation is applied after the Fit, so one calibration serves all four.
 static TouchFit::Fit s_touchFit = TouchFit::fromRanges(RAW_X_MIN, RAW_X_MAX, RAW_Y_MIN, RAW_Y_MAX, 240, 320);
 
+// The phone app's emulator changes its panel while it runs (sim/main_wasm.cpp,
+// sw_resize): the band above the lists is the board's own upright screen, full
+// screen is phone-shaped. The sim's sprite re-buffers itself on a resizeInPlace()
+// to a new size, which a board's never could. The touch fit is rebuilt for the new
+// panel too: kept from boot, it stretched a tap near the bottom of the 240x320 band
+// past the button bar, so LOG and DESK never answered. Only the emulator calls
+// this; on a board it is a few bytes nobody reaches.
+void simResizeFrame(int w, int h) {
+    if (frame.created()) frame.resizeInPlace((int16_t)w, (int16_t)h);
+    const int n0 = w < h ? w : h, n1 = w < h ? h : w;      // the panel's own upright frame
+    s_touchFit = TouchFit::fromRanges(RAW_X_MIN, RAW_X_MAX, RAW_Y_MIN, RAW_Y_MAX, n0, n1);
+}
+
 // Where s_touchFit came from, for the diagnostics screen and for deciding
 // whether boot has to ask for a calibration.
 enum class CalSource : uint8_t { BUILT_IN, OLD_SAVED, SAVED };
 static CalSource s_calSource = CalSource::BUILT_IN;
 
-#if defined(TOUCH_ON_DISPLAY_BUS) || defined(CYD35)
+#if defined(TOUCH_ON_DISPLAY_BUS) || defined(CYD35R)
 // ---- Calibrations older firmware saved through TFT_eSPI ----
 // AWOK and the 3.5" used to hand touch to TFT_eSPI's calibrateTouch() /
 // getTouch(). Its blob is only read now, once, so an owner who SKIPs the
@@ -800,7 +820,7 @@ static CalSource s_calSource = CalSource::BUILT_IN;
 // Fit. The 3.5" kept one per rotation, because the blob bakes in the
 // rotation it was taken at; any one of them is enough for a Fit, which
 // does not.
-#if defined(CYD35)
+#if defined(CYD35R)
 static const char* TFT_ESPI_TOUCH_NS = "cyd35touch";
 #else
 static const char* TFT_ESPI_TOUCH_NS = "awoktouch";
@@ -833,7 +853,7 @@ static bool fitFromTftEspiBlobs(TouchFit::Fit& out) {
         rh = same ? h : w;
     };
     uint16_t blob[5];
-#if defined(CYD35)
+#if defined(CYD35R)
     for (uint8_t i = 0; i < 4; i++) {
         const uint8_t r = (uint8_t)((screenRotation + i) & 3);   // this rotation's first
         char key[8];
@@ -861,6 +881,9 @@ static bool readTouchRaw(int16_t& a, int16_t& b);
 // in the panel's native (rotation 0) frame, and the rotation step turns it
 // into this rotation's coordinates. No board has its own maths any more.
 static TouchPoint pollTouch() {
+#if defined(SQW_SMALL)
+    return stickPoll();
+#endif
     TouchPoint tp = { false, 0, 0 };
     int16_t a, b;
     if (!readTouchRaw(a, b)) return tp;
@@ -898,7 +921,7 @@ static bool rawReadCap(int16_t& a, int16_t& b) {
 }
 
 static bool rawReadResistive(int16_t& a, int16_t& b) {
-#if defined(TOUCH_SHARES_DISPLAY_BUS) || defined(CYD35)
+#if defined(TOUCH_SHARES_DISPLAY_BUS) || defined(CYD35R)
     // None of these boards' `touch` (XPT2046_Touchscreen) object is ever
     // begin()'d -- a second SPI driver on the display's own bus produced
     // garbage -- so this goes through TFT_eSPI's raw-touch accessors.
@@ -919,7 +942,7 @@ static bool rawReadResistive(int16_t& a, int16_t& b) {
 #endif
 }
 
-#if defined(TOUCH_ON_DISPLAY_BUS) || defined(CYD35)
+#if defined(TOUCH_ON_DISPLAY_BUS) || defined(CYD35R)
 // AWOK and the 3.5" used TFT_eSPI's getTouch(), whose filtering is part of
 // how their touch feels. It is private to the library (validTouch()), so it
 // is repeated here step for step: wait for the pressure to stop rising,
@@ -953,7 +976,7 @@ static bool rawReadFiltered(int16_t& a, int16_t& b) {
 // use, so what the calibration measures is exactly what touch then reads.
 static bool readTouchRaw(int16_t& a, int16_t& b) {
     if (usingCapTouch) return rawReadCap(a, b);
-#if defined(TOUCH_ON_DISPLAY_BUS) || defined(CYD35)
+#if defined(TOUCH_ON_DISPLAY_BUS) || defined(CYD35R)
     return rawReadFiltered(a, b);
 #else
     return rawReadResistive(a, b);
@@ -965,7 +988,8 @@ static bool readTouchRaw(int16_t& a, int16_t& b) {
 // coming back from a reboot into a dimmed screen with no memory of why would
 // look exactly like a broken backlight.
 static bool s_screenDimmed = false;
-static bool s_bootDark = false; // manual CYD screen-off overrides automatic brightness
+static PocketScreen::State s_pocket;
+static bool& s_bootDark = s_pocket.active;
 #if defined(TWATCH_S3)
 // A watch goes dark, not dim. When the screen timeout lands, the backlight
 // goes off and the ST7789 is put to sleep (DISPOFF, SLPIN: about a milliamp
@@ -994,7 +1018,7 @@ static void snapshotLight(uint16_t& light,uint8_t& duty,bool& enabled,uint8_t& m
     light=s_lightReading;duty=s_backlightDuty;enabled=Settings::ambientLight();mhz=Settings::displayMhz();
 }
 static void applyBrightness() {
-    uint8_t duty = s_bootDark ? 0 : s_screenDimmed ? Settings::dimLevel() : s_backlightDuty;
+    uint8_t duty = s_screenDimmed ? (s_bootDark ? 0 : Settings::dimLevel()) : s_backlightDuty;
 #if defined(TWATCH_S3)
     if (s_screenDimmed) {
         if (!s_panelAsleep) {
@@ -1057,7 +1081,7 @@ static void initTouchFit() {
     }
 
     s_calSource = CalSource::BUILT_IN;
-#if defined(TOUCH_ON_DISPLAY_BUS) || defined(CYD35)
+#if defined(TOUCH_ON_DISPLAY_BUS) || defined(CYD35R)
     TouchFit::Fit old;
     if (fitFromTftEspiBlobs(old)) {
         s_touchFit = old;
@@ -1131,7 +1155,8 @@ static void clearSharedFrameBuffer() {
 // modules needing to know about DetectionEngine's tracking API at all,
 // just how to draw/hit-test the panel they're given. Shared by both
 // screens since only one can ever be showing at a time.
-static bool    s_confirmPending = false;
+static bool s_confirmPending = false;
+static bool s_infoPending = false;
 static uint8_t s_confirmMac[6];
 // Which DEVICE the MORE INFO page is about, not just which type: the label
 // and name off the log entry, which is what device_info.cpp matches on. The
@@ -1180,7 +1205,14 @@ static bool alertEligible(const Detection& d) {
 static bool takeAlert(Detection& d, uint32_t now) {
     if(AlertSnooze::active(now)){while(engine.alerts.pop(d,now))AlertSnooze::note((uint8_t)d.type);return false;}
     while (engine.alerts.pop(d, now))
-        if (alertEligible(d) && alertMayInterrupt(d)) return true;
+        if (alertEligible(d) && alertMayInterrupt(d)) {
+#if SQUACH_MESH
+            // Share only an alert that passed DNSP's filters and Ignore/Snooze.
+            // Test evidence stays local: do not warn a squad about a fixture.
+            if (!Simulation::marked(d)) MeshTalk::noteCatch((uint8_t)d.type, d.rssi, d.mac, now);
+#endif
+            return true;
+        }
     return false;
 }
 static Detection s_alertSnapshot{};
@@ -1224,7 +1256,6 @@ static void labelTargetFromDetection(const Detection& d){
 // which of the (at most) two pages is up: the one-time RSSI/confidence
 // primer first if it's never been shown (see Settings::infoPrimerShown()),
 // then s_confirmType's own explanation either way.
-static bool          s_infoPending       = false;
 static bool          s_infoShowingPrimer = false;
 // Same "ignore the touch that opened this" gate s_confirmArmed uses,
 // applied to the info panel's own GOT IT button.
@@ -1302,6 +1333,8 @@ static void enterBoot() {
 // [BLE][WIFI][BACK] picker (see the CLEAR case's touch handling in
 // loop()). Reset on every enterClear() so returning here from
 // anywhere else never leaves a stale picker showing.
+// The column of the counter tile a tap just landed on.
+static DetectionType s_tileColumn = DetectionType::UNKNOWN;
 static bool s_scanPickerOpen = false;
 
 static void enterLocked();
@@ -1407,6 +1440,7 @@ static void squachyCatch(DetectionType type, const uint8_t* mac, uint32_t hits, 
     Squachy::catchContext(Regulars::nameFor(mac), Regulars::takeNewRegular(mac),
                           Dex::nemesis(engine) == type, Dex::takeNewClosest(type));
     Squachy::trigger(Squachy::Event::DETECTION, type, engine.lifetimeTotal(), hits, rssi, conf);
+    Pet::noteCatch((uint8_t)type);
 }
 
 #if defined(TWATCH_S3)
@@ -1498,6 +1532,7 @@ static void enterWatchAlert() {
 #if defined(TWATCH_S3)
     twatchBuzz(Buzz::WATCH);
 #endif
+    Sound::play(Sound::Id::WATCH_HIT);   // the one sound that ignores the night
     watchAlertStart = millis();
     transitionStart = watchAlertStart;
     uiWatchAlertInit(*canvas);
@@ -1528,6 +1563,9 @@ static void enterRawScan(bool isBle) {
 
 static SettingsPage s_settingsReturn = SettingsPage::MAIN;
 static void enterSettings() {
+#if defined(SQW_SMALL)
+    if (state == AppState::CLEAR) Squachy::noteSettingsOpened();   // C1iPPY's unlock on these boards
+#endif
     restoreFrameBuffer();   // lent to a download that did not end in a restart
     Settings::deskActive(false);
     Theme::releaseClockBackdrop();
@@ -1621,12 +1659,17 @@ static void enterInvite() {
 
 // INVERT and ROT on the console -- see clock.cpp. Consumed in loop().
 volatile bool g_consoleXyzzy=false, g_consoleLegend=false, g_consoleCharge=false;
+volatile bool g_consoleClippy=false, g_consoleToaster=false, g_consoleBall=false;
+volatile bool g_consolePet=false, g_consoleJail=false, g_consoleFree=false;
+volatile uint8_t g_consoleHeadsUp=0;
 volatile bool g_consoleOutfitSet=false, g_consoleAura=false;
 volatile int8_t g_consoleOutfit=-1;
 volatile bool g_consoleInvert = false;
 volatile bool g_consoleRotate = false;
 volatile bool g_consoleWatchTest = false;
 volatile bool g_consoleRadioTest = false; // RADIO TEST: cycle even on the cable with the screen on (bench)
+volatile int8_t g_consoleSound = -1;      // SOUND n: play sound n on the speaker; 20/21 flip the amp pin (Freenove S3)
+volatile bool g_consoleScreen  = false;   // SCREEN: say why the screen is dark, and light it (the BOOT-button boards)
 volatile bool g_consoleBatt    = false;   // BATT: one reading, now
 volatile bool g_consoleBattLog = false;   // BATTLOG: every sample kept, newest first
 volatile bool g_consoleHeal = false;
@@ -2422,18 +2465,7 @@ static void twatchCrownTick(uint32_t now) {
     if (!s_pmuOk || now - at < 100) return;
     at = now;
     s_pmu.getIrqStatus();
-    if (s_pmu.isPekeyShortPressIrq()) {
-        if (!s_screenDimmed) {
-            s_crownDark = true;
-            s_crownDarkAt = now;
-            s_crownLitUntil = 0;
-            Serial.println("[crown] screen off");
-        } else {
-            s_crownDark = false;
-            lastTouch = now;
-            Serial.println("[crown] screen on");
-        }
-    }
+    if (s_pmu.isPekeyShortPressIrq()) pocketPress(now);
     s_pmu.clearIrqStatus();
 }
 #endif
@@ -2468,7 +2500,7 @@ static void printBootBanner() {
     // "v1.5.36-dirty" and a commit past a tag as "v1.5.36-3-g554330d", both
     // of which walk the border off the end of the line. Truncated here only;
     // the boot screen and the diary still show the version in full.
-    Serial.println("DNSquachWatch v" FIRMWARE_VERSION " by DNSP | SquachWatch base 1.28.0");
+    Serial.println("DNSquachWatch v" FIRMWARE_VERSION " by DNSP | SquachWatch base " DNSP_BASE_VERSION);
     Serial.printf ("║  |   -   |     TALKING SASQUACH  .  %-13.13s║\n", FIRMWARE_VERSION);
     // Same %-34s trick as the version line above: the reason is variable
     // length ("interrupt watchdog" is the longest at eighteen characters)
@@ -2580,6 +2612,15 @@ static void triggerDuress() {
 
 // ---- Arduino setup / loop ----
 void setup() {
+#if defined(DNSP_SD_COMPAT)
+    // The classic CYD shares VSPI with the display. Deselect the SD card
+    // before any display traffic or the delayed card initialization.
+    digitalWrite(5,HIGH);
+    pinMode(5,OUTPUT);
+#endif
+#if defined(ARDUINO_ARCH_ESP32)
+    g_frameSprite = &frame;
+#endif
     const Duress::Boot duress=DuressDevice::boot();
     if(duress!=Duress::Boot::NORMAL){beginDuressDisplay(duress);return;}
 
@@ -2602,6 +2643,7 @@ void setup() {
     printBootBanner();
 #if defined(TWATCH_S3)
     twatchPowerUp();
+    uiClearSetBatterySource(twatchBatteryState);
 #endif
 #if defined(CYD35)
     // One-time diagnostic: is PSRAM actually present on this unit? The
@@ -2650,7 +2692,7 @@ void setup() {
     // Which version lives in this slot, and whether this boot is a fresh
     // update on probation or the aftermath of one that was rolled back.
     OtaCore::boot();
-#if !defined(AWOK)
+#if !defined(AWOK) && !defined(SQW_SMALL)   // the StickS3 is landscape only, by its owner's choice
     // AWOK has no rotate button and stays fixed at its one physical
     // orientation (see screenRotation's own comment above) -- only
     // boards that can actually rotate restore a saved orientation.
@@ -2661,6 +2703,22 @@ void setup() {
     // ST7796U and will lock up an ST7789 panel; do not re-add it unless
     // we confirm the panel is actually ST7796.
     tft.setRotation(screenRotation);
+    {
+        // The short side decides it, so it holds in every rotation.
+        const int sw = tft.width(), sh = tft.height();
+        Theme::setLarge((sw < sh ? sw : sh) >= 320);
+    }
+#if defined(SQW_SMALL)
+    Theme::setRotateIconVisible(false);
+    Theme::setCompact(true);
+#if defined(STICKS3)
+    pinMode(STICK_KEY1, INPUT_PULLUP);
+    pinMode(STICK_KEY2, INPUT_PULLUP);
+#endif
+    // Its colours were looked at on the bench, and the check's own buttons
+    // sit below the bottom of a 135-row screen.
+    if (!Settings::colorChecked()) Settings::markColorChecked();
+#endif
 #if defined(AWOK)
     // No rotate button on this board (see the rotate handler in
     // loop(), not even compiled in on AWOK) -- hide the icon too so
@@ -2728,7 +2786,7 @@ void setup() {
     // and can go anywhere after the display is up.
     FramePush::begin();
 
-#if defined(CYD35)
+#if defined(CYD35R)
     // The standalone XPT2046_Touchscreen library (own SPIClass, own
     // IRQ pin) produced constant garbage reads and a free-running IRQ
     // here -- not a wrong-pin problem, a second SPI master fighting
@@ -2811,7 +2869,7 @@ void setup() {
             }
         }
     }
-    tft.fillScreen(Theme::BG);
+    tft.fillRect(0, 0, tft.width(), tft.height(), Theme::BG);
 
     if(manualSafe||g_safeRequested){
         state=AppState::SAFE_MODE;
@@ -3025,6 +3083,25 @@ static inline void pushFrame(int x, int y) {
 #if defined(TWATCH_S3)
     if (s_panelAsleep) return;   // nothing to show it to; see applyBrightness()
 #endif
+#if defined(CARDPUTER_ADV)
+    // With the EXT panel taking a push of its own, the built-in screen is
+    // only sent when it has changed: a menu sits still, and 17 ms a frame
+    // spent re-sending it is the big screen's frame rate.
+    if (s_extOn && frame.getColorDepth() == 8) {
+        static uint32_t last = 0;
+        const uint32_t* p = (const uint32_t*)frame.buf();
+        const size_t n = (size_t)frame.bufW() * (size_t)frame.bufH() / 4;
+        uint32_t h = 2166136261u;
+        for (size_t i = 0; i < n; i++) h = (h ^ p[i]) * 16777619u;
+        if (h == last) return;
+        // A list's dimmed backdrop still drifts, which is not worth a push a
+        // frame: four a second while nobody is pressing anything, every
+        // frame for a moment after a key.
+        static uint8_t idle = 0;
+        if (millis() - lastTouch > 1500 && (++idle & 3)) return;
+        last = h;
+    }
+#endif
     uint32_t t0 = micros();
     // The overlapped push converts the next 64 bytes while the previous 64
     // are on the wire, instead of spinning -- see frame_push.h. It declines
@@ -3093,7 +3170,7 @@ static const char* timedScreenName(AppState s) {
         default:                    return nullptr;
     }
 }
-static void openSettingsRow(SettingsRow row,uint32_t now,int gestureStartX) {
+static void openSettingsRow(SettingsRow row,uint32_t now,int gestureStartX,int gestureStartY=-1) {
     if(state==AppState::SETTINGS) s_settingsReturn=uiSettingsCurrentPage();
     if (Security::locked()) {enterLocked();return;}
     if (uiSettingsRowIsOff(row)) {Theme::showToast("BORING MODE IS ON",nullptr,Theme::CYAN);return;}
@@ -3173,7 +3250,10 @@ static void openSettingsRow(SettingsRow row,uint32_t now,int gestureStartX) {
                             break;
                         case SettingsRow::ROTATION_LOCK: Settings::toggleRotationLock(); break;
                         case SettingsRow::BRIGHTNESS:
-                            Settings::adjustBrightness(gestureStartX < tft.width() / 2 ? -16 : 16);
+                            {
+                                const int step=uiSettingsStepHit(*canvas,gestureStartX,gestureStartY,tft.width(),tft.height());
+                                if(step)Settings::adjustBrightness(step * 16);
+                            }
                             applyBrightness();
                             break;
                         case SettingsRow::POWER_CONTROL:
@@ -3309,9 +3389,18 @@ static void openSettingsRow(SettingsRow row,uint32_t now,int gestureStartX) {
                             break;
                         case SettingsRow::SHADES_COLOR: Squachy::cycleShadesColor(); break;
                         case SettingsRow::SQUACHY_SIZE: Settings::cycleSquachySize(); break;
-                        case SettingsRow::OUTFIT:       enterOutfit(); break;
-                        case SettingsRow::PET:          Squachy::cyclePet(); break;
+                        case SettingsRow::OUTFIT:
+                        case SettingsRow::PET:
+                            if (Squachy::jailed()) {
+                                const uint32_t left = (Squachy::jailLeftMs() + 999) / 1000;
+                                char b[24];
+                                snprintf(b, sizeof b, "%u:%02u left. Behave.", (unsigned)(left / 60), (unsigned)(left % 60));
+                                Theme::showToast("SERVING TIME", b, Theme::AMBER, 2500);
+                            } else if (row == SettingsRow::OUTFIT) enterOutfit();
+                            else Squachy::cyclePet();
+                            break;
                         case SettingsRow::BANTER:       Settings::cycleBanter(); break;
+                        case SettingsRow::DET_STYLE: Settings::toggleDetXp(); break;
                         case SettingsRow::VIEW_DIARY:   enterDiary(); break;
                         case SettingsRow::BINGO:        enterBingo(); break;
                         case SettingsRow::DEX:          enterDex(); break;
@@ -3435,6 +3524,8 @@ void loop() {
     // is the only way in for the one serial command the firmware takes.
     Clock::pollSerial();
     runtimeTick(millis());
+    if(g_consoleScreen){g_consoleScreen=false;s_pocket.exit();s_screenDimmed=false;lastTouch=millis();applyBrightness();FramePush::invalidate();}
+
 #if defined(ARDUINO_ARCH_ESP32) && !defined(TWATCH_S3)
     if(chargeTick(millis()))return;
 #endif
@@ -3461,6 +3552,29 @@ void loop() {
                           (unsigned)r.cpuMhz10 * 10, (unsigned)r.why);
             return true;
         }, nullptr);
+    }
+#endif
+#if defined(FREENOVE_S3) || defined(FREENOVE_S3_35)
+    if (g_consoleBatt) { g_consoleBatt = false; boardBatteryPrintLog(); }
+    // The speaker's housekeeping: hushed while the saver has the screen
+    // dimmed; a chime for a squad message that just landed (once per
+    // message, by its arrival time); and the console's SOUND commands.
+    Sound::hush(s_screenDimmed);
+#if SQUACH_MESH
+    {
+        static uint32_t lastMsgAt = 0;
+        const MeshTalk::Message& ib = MeshTalk::inbox();
+        if (ib.have && ib.at != lastMsgAt) {
+            if (lastMsgAt) Sound::play(Sound::Id::MESSAGE);   // not the one restored at boot
+            lastMsgAt = ib.at ? ib.at : 1;
+        }
+    }
+#endif
+    if (g_consoleSound >= 0) {
+        const int8_t c = g_consoleSound; g_consoleSound = -1;
+        if (c == 20)      { Sound::ampLow(false); Serial.println("[sound] amp enable is now HIGH = on"); }
+        else if (c == 21) { Sound::ampLow(true);  Serial.println("[sound] amp enable is now LOW = on"); }
+        else if (c < (int8_t)Sound::Id::COUNT) { Serial.printf("[sound] play %d\n", c); Sound::play((Sound::Id)c, true); }
     }
 #endif
     Clock::tick(now);   // the note to self, when it is due
@@ -3514,6 +3628,12 @@ void loop() {
     }
 
     TouchPoint tp = pollTouch();
+#if defined(SQW_SMALL)
+    if (s_stickHome) {
+        s_stickHome = false;
+        if (state != AppState::CLEAR && state != AppState::BOOT) goHome();
+    }
+#endif
     // True only on the exact frame a touch begins/ends -- unlike
     // TOUCH_DEBOUNCE_MS below (a cooldown timer that still re-fires on a
     // long-held finger once the cooldown elapses), these compare this
@@ -3530,10 +3650,11 @@ void loop() {
     // so a wake tap that turns into a drag cannot scroll a list either.
     //
     // lastTouch is still updated here, because that is what actually undims
-    // on the next frame -- the touch is being consumed, not ignored.
+    // on the next frame -- the touch is being consumed, not ignored. In
+    // POCKET MODE it undims nothing: only the button does.
     static bool s_swallowTouch = false;
 #if defined(ARDUINO_ARCH_ESP32) && !defined(TWATCH_S3)
-    if(s_bootDark&&touchJustDown){s_bootDark=false;s_screenDimmed=false;applyBrightness();lastTouch=now;touchJustDown=false;}
+    if(s_bootDark && s_screenDimmed && tp.valid){touchJustDown=false;tp.valid=false;} // pocket touch cannot wake or operate hidden controls
 #endif
     if (s_screenDimmed && touchJustDown) {
         s_swallowTouch = true;
@@ -3606,6 +3727,32 @@ void loop() {
             static char line[32];
             snprintf(line, sizeof line, "%s read it.", who);
             if (state == AppState::CLEAR) Squachy::announce(line);
+        }
+    }
+    {
+        MeshTalk::HeadsUpIn hu;
+        if (MeshTalk::takeHeadsUp(hu)) {
+            // Said nothing about a device this board has on its own list:
+            // its owner has had the card already.
+            bool mine = false;
+            for (uint8_t i = 0; !mine && i < engine.logCount(); i++) {
+                const Detection* d = engine.logAt(i);
+                mine = d && d->active && memcmp(d->mac + 3, hu.tail, 3) == 0;
+            }
+            const char* what = detectionTypeName((DetectionType)hu.type);
+            if (mine) Serial.printf("[headsup] %s's %s is already on this board\n", hu.from, what);
+            else {
+                static char sub[40];
+                snprintf(sub, sizeof sub, "%s near %s", what, hu.from);
+                Theme::showToast("HEADS-UP", sub, Theme::AMBER, 8000);
+                Serial.printf("[headsup] shown: %s\n", sub);
+                static char line[40];
+                snprintf(line, sizeof line, "%s says: %s!", hu.from, what);
+                if (state == AppState::CLEAR) Squachy::announce(line);
+#if defined(TWATCH_S3)
+                twatchBuzz(Buzz::MESSAGE);
+#endif
+            }
         }
     }
     {
@@ -3737,6 +3884,35 @@ void loop() {
         }
     }
 #endif
+    if (g_consoleClippy) {
+        g_consoleClippy = false;
+        Squachy::unlockClippy("It looks like you're having trouble typing.");
+        Serial.println("[pet] C1iPPY unlocked and put on");
+    }
+    if (g_consoleJail) {
+        g_consoleJail = false;
+        Pet::arrest(millis());
+        Serial.println("[jail] arrested: ten minutes");
+    }
+    if (g_consoleFree) {
+        g_consoleFree = false;
+        Squachy::jailFree();
+        Serial.println("[jail] time served");
+    }
+    if (g_consoleBall) { g_consoleBall = false; Squachy::unlockBall(); Serial.println("[pet] ball and chain unlocked"); }
+    if (g_consolePet)  { g_consolePet = false; Squachy::cyclePet(); Serial.printf("[pet] now %s\n", Squachy::petName()); }
+    if (g_consoleToaster) {
+        g_consoleToaster = false;
+        Squachy::unlockToaster("Reporting for duty. I'm not scared.");
+        Serial.println("[pet] T0@$TY unlocked and put on");
+    }
+#if SQUACH_MESH
+    if(g_consoleHeadsUp){
+        const uint8_t ty=g_consoleHeadsUp;g_consoleHeadsUp=0;
+        static uint8_t n=0;const uint8_t mac[6]={0x02,0,0,0xBE,0xEF,n++};
+        MeshTalk::noteCatch(ty,-55,mac,millis());
+    }
+#endif
     if(g_consoleLegend){g_consoleLegend=false;Squachy::previewLegend(!Squachy::legendPreview());}
     if(g_consoleAura){g_consoleAura=false;Settings::toggleAura();}
     if(g_consoleOutfitSet){g_consoleOutfitSet=false;Squachy::wearForBench(g_consoleOutfit);}
@@ -3749,6 +3925,7 @@ void loop() {
                       PANEL_NEEDS_INVERSION ? "inverted" : "normal");
     }
     if (g_consoleRotate || (tp.valid && !Settings::rotationLocked() && !Squachy::isHeld() &&
+#endif
         (state == AppState::CLEAR || state == AppState::LOG ||
                       state == AppState::SETTINGS || state == AppState::OUTFIT ||
                       state == AppState::RAWSCAN || state == AppState::DETECTION_FILTER ||
@@ -3804,7 +3981,6 @@ void loop() {
         }
         transitionStart = now;
     }
-#endif  // !AWOK
 
     // Settings button lives in the title bar's top-left corner, shown
     // on the same screens as the rotate button. Tapping it while
@@ -3904,6 +4080,41 @@ void loop() {
        tp.x>=tft.width()/10&&tp.x<tft.width()*9/10&&tp.y>=28&&
        tp.y<Theme::computeButtonBar(tft.width(),tft.height()).y){Remington::backgroundTap(now);}
     FrameProf::lap(FrameProf::PRE);
+#if defined(CARDPUTER_ADV)
+    // The main scene on the EXT panel, whatever the built-in screen is
+    // showing. This call is the one that advances him; the built-in screen's
+    // own copy, when it is on the main screen too, is the same frame again.
+    // On by the setting. One try at the panel's frame: a board that cannot
+    // find 77 KB for it says so once and carries on with the one screen.
+    {
+        static bool tried = false;
+        if (Settings::extScreen() && !s_extOk && !tried) { tried = true; extBegin(); }
+        s_extOn = Settings::extScreen() && s_extOk;
+        Theme::setStillBackdrop(s_extOn);
+    }
+    const bool extFrame = s_extOn && state != AppState::BOOT;
+    // With him on the big screen the built-in one has no main screen to
+    // show -- two moving pictures is more than this chip pushes -- so its
+    // home is the settings list, which sits still. A catch still takes it
+    // over: the same gate the main screen uses, asked from here because
+    // nothing is ever on the main screen to ask it.
+    if (extFrame && state == AppState::CLEAR && !Security::locked()) enterSettings();
+    if (extFrame && state == AppState::SETTINGS) {
+        const Detection* latest = engine.latest();
+        if (latest && (now - latest->firstSeen) < 200 &&
+            latest->conf >= Settings::minConfidence() && !IgnoreList::silenced(latest->mac) &&
+            alertMayInterrupt(*latest)) {
+            uiAlertSetRedacted(false);
+            enterAlert(*latest);
+        }
+    }
+    if (extFrame) {
+        uiClearTick(frameExt, now, engine, true, false);
+        static bool odd = false;
+        odd = !odd;
+        if (odd) extPush();             // 46 ms a push: every other frame
+    }
+#endif
     switch (state) {
         case AppState::BOOT: {
             drawTwoBand([&](TFT_eSPI& t, bool) {
@@ -4119,9 +4330,14 @@ void loop() {
             // renderer stays unaware of the outfit system.
             if (Theme::consumeWerewolfSummon()) Squachy::unlockWolfPelt();
             if (Theme::consumeToasterCatch())   Squachy::unlockChromeWing();
+            if (Theme::consumeToasterPetCatch()) Squachy::unlockToaster("You came for me? I knew you would. I wasn't scared.");
             if (Theme::consumeEyeCatch())       Squachy::unlockVoidEye();
             if (Theme::consumeLodgeKnock())     Squachy::unlockParka();
             if (Theme::consumeSharkCatch())     Squachy::unlockShark();
+            if (Theme::consumeOwlReek()) Squachy::unlockShambler();
+            if (Theme::consumeRedGlyph()) Squachy::unlockTh3();
+            Theme::setOwlAsks(!Squachy::shamblerUnlocked());
+            Theme::setRedGlyph(!Squachy::th3Unlocked());
             if(const uint8_t said=Theme::consumeXyzzy())Squachy::magicWord(said);
     if (Theme::consumePetUnlock())      Squachy::unlockPet();
 
@@ -4173,14 +4389,15 @@ void loop() {
             static uint32_t clrHoldStart  = 0;
             constexpr uint32_t CLR_UNLOCK_HOLD_MS = 4000;
 
-            // Long-press NEARBY: open the closest live device. The headline
-            // sits on top of Squachy, so the same touch is also tracked as a
-            // possible pet -- a quick tap still pets him, a stroke still
-            // strokes him, and only a still press held past the threshold
-            // becomes this instead.
+            // CLASSIC only: long-press NEARBY to open the closest live
+            // device. The headline sits on top of Squachy, so the same touch
+            // is also tracked as a possible pet -- a quick tap still pets
+            // him, a stroke still strokes him, and only a still press held
+            // past the threshold becomes this instead.
             static bool     nbActive = false;
             static uint32_t nbStart  = 0;
             constexpr uint32_t NEARBY_HOLD_MS = 600;
+
 
             // Decide up front whether a brand-new touch lands on Squachy
             // -- this only updates gesture-tracking state, it doesn't by
@@ -4190,6 +4407,22 @@ void loop() {
             // active gesture, still takes priority over the button bar
             // in the branch below -- Squachy is drawn well clear of the
             // button row, so the two never really compete in practice.)
+            // A touch on C1iPPY is his, not Squachy's or the background's:
+            // the whole gesture, from the press to the let-go, which is a
+            // poke, a drop or a throw depending on what the finger did.
+            static bool clipActive = false;
+            if (touchJustDown && !boring && Pet::clippyHit(tp.x, tp.y)) {
+                clipActive = true;
+                Pet::clippyGrab(tp.x, tp.y, now);
+                lastTouch = now;
+                break;
+            }
+            if (clipActive) {
+                if (tp.valid) Pet::clippyDrag(tp.x, tp.y, now);
+                else { Pet::clippyRelease(now); clipActive = false; }
+                lastTouch = now;
+                break;
+            }
             if (touchJustDown) {
                 sqActive = !boring && Squachy::hitTest(tp.x, tp.y);
                 sqHeld = false;
@@ -4247,13 +4480,18 @@ void loop() {
                 enterMeshCompose();
             } else if (touchJustDown && (now - lastTouch) > TOUCH_DEBOUNCE_MS &&
                        uiClearWatchPillHit(tp.x, tp.y)) {
-                // The watch/hunt pill. Opens the alert screen, which names the
-                // target and carries REMOVE FROM WATCH LIST -- the same screen
-                // a real sighting would have opened, just asked for rather
-                // than waited for.
+                // The watch/hunt pill. With a watch set it opens the alert
+                // screen, which names the target and carries REMOVE FROM WATCH
+                // LIST -- the same screen a real sighting would have opened,
+                // just asked for rather than waited for. With only a hunt it
+                // opens HUNT MODE, whose STOP HUNT is the way out: the alert
+                // screen knows nothing about hunts, and its REMOVE cleared the
+                // watch and left the hunt running (2026-10-05).
                 lastTouch = now;
                 sqActive  = false;
-                enterWatchAlert();
+                if (engine.watchKind() == DetectionEngine::WatchKind::NONE &&
+                    engine.huntKind()  != DetectionEngine::WatchKind::NONE) enterHunt();
+                else                                                         enterWatchAlert();
             } else if (touchJustDown && (now - lastTouch) > TOUCH_DEBOUNCE_MS &&
                        uiClearSquadHit(tp.x, tp.y)) {
                 // The squad badge, ahead of the scene gestures for the same
@@ -4270,6 +4508,29 @@ void loop() {
                 lastTouch = now;
                 sqActive  = false;
 #endif
+            } else if (touchJustDown && (now - lastTouch) > TOUCH_DEBOUNCE_MS && !s_scanPickerOpen &&
+                       uiClearCounterHit(tp.x, tp.y, s_tileColumn)) {
+                // A counter tile: the closest device of that kind, by signal.
+                // One you have not silenced if there is one, since that is the
+                // one the tile is lit for.
+                lastTouch = now;
+                sqActive  = false;
+                const Detection* best = nullptr;
+                bool bestQuiet = true;
+                for (uint8_t i = 0; i < engine.logCount(); i++) {
+                    const Detection* d = engine.logAt(i);
+                    if (!d || !d->active || !uiClearColumnHolds(s_tileColumn, d->type)) continue;
+                    const bool quiet = IgnoreList::silenced(d->mac);
+                    if (!best || (bestQuiet && !quiet) || (quiet == bestQuiet && d->rssi > best->rssi)) {
+                        best = d; bestQuiet = quiet;
+                    }
+                }
+                if (best) {
+                    uiAlertSetRedacted(false);
+                    enterAlert(*best);
+                } else {
+                    Theme::showToast("GONE", "It just left", Theme::CYAN);
+                }
             } else if (touchJustDown && (now - lastTouch) > TOUCH_DEBOUNCE_MS &&
                        Theme::backgroundTap(tp.x, tp.y, now)) {
                 // Something tappable in the background itself claimed
@@ -4374,7 +4635,12 @@ void loop() {
             // slide off him mid-stroke and still release cleanly).
             if (touchJustUp && sqActive) {
                 if (sqHeld) {
-                    Squachy::release();     // drop him wherever he ended up
+#if defined(SQW_SMALL)
+                    // No finger to throw him with: a hold, let go, tosses him.
+                    Squachy::toss(random(0, 2) ? 1 : -1);
+#else
+                    Squachy::release();     // drop him, or throw him if the finger was moving
+#endif
                 } else if (!sqPetting) {
                     Squachy::noteTapAt(sqStartX, sqStartY);
                     Squachy::trigger(Squachy::Event::PETTED);
@@ -5081,7 +5347,7 @@ void loop() {
                         gestureActive = false;
                         break;
                     }
-                    openSettingsRow(row, now, gestureStartX);
+                    openSettingsRow(row, now, gestureStartX,gestureStartY);
                 }
                 gestureActive = false;
             }
@@ -5104,7 +5370,9 @@ void loop() {
                 // carrying whatever is typed so far.
                 if (hit == ComposeHit::TYPE) { enterPhoneMessage(uiMeshComposeTyped()); break; }
                 // "?" replays the tutorial, which runs on the main screen.
+#if !defined(SQW_SMALL)   // no walkthrough on the StickS3
                 if (hit == ComposeHit::HELP) MeshTutor::start();
+#endif
                 if (hit != ComposeHit::NONE) enterClear();
             }
             break;
@@ -5143,13 +5411,20 @@ void loop() {
                         // marked seen as it STARTS, so skipping it counts; the
                         // "?" on the message screen replays it. Not in boring
                         // mode, which has no Squachy to visit.
+#if defined(SQW_SMALL)
+                        // Nor the walkthrough: its cards and arrows are laid
+                        // out for a screen with room for them.
+                        if (!Settings::meshTutorSeen()) Settings::setMeshTutorSeen();
+#else
                         if (Settings::messagesOn() && !Settings::meshTutorSeen() &&
                             !Settings::boringMode()) {
                             Settings::setMeshTutorSeen();
                             MeshTutor::start();
                             enterClear();
                         }
+#endif
                         break;
+                    case MeshMenuRow::HEADSUP:  Settings::toggleMeshHeadsUp(); break;
                     case MeshMenuRow::CROWD:    Settings::cycleMeshCrowd();    break;
                     case MeshMenuRow::SQUAD:    enterSquad(true);              break;
                     case MeshMenuRow::PHRASE:   enterMeshPhrase();             break;
@@ -5502,6 +5777,7 @@ void loop() {
                     // Back to the main screen to watch the swap happen.
                     case SquadHit::INVITED: enterClear(); break;
                     case SquadHit::REPLY:   enterMeshCompose(); break;
+                    case SquadHit::SEND:    enterMeshCompose(); break;
                     // A fox hunt: their board is the target, the HUNT gauge the
                     // receiver. Already hunting them: just go to the gauge.
                     case SquadHit::HUNT: {
@@ -6096,7 +6372,7 @@ void loop() {
             if(touchJustDown&&now-transitionStart>TOUCH_DEBOUNCE_MS){
                 lastTouch=now;SettingsRow action=CareUI::tap(tp.x,tp.y,tft.width(),tft.height(),now,engine);
                 if(action==SettingsRow::BACK)returnSettings();
-                else if(action!=SettingsRow::NONE){returnSettings();openSettingsRow(action,now,tp.x);}
+                else if(action!=SettingsRow::NONE){returnSettings();openSettingsRow(action,now,tp.x,tp.y);}
             }
             break;
         }
@@ -6205,6 +6481,14 @@ void loop() {
             info.usingCapTouch = usingCapTouch;
 #if defined(TOUCH_ON_DISPLAY_BUS)
             info.boardName = "AWOK";
+#elif defined(STICKS3)
+            info.boardName = "StickS3 LAB";
+#elif defined(CARDPUTER_ADV)
+            info.boardName = "Cardputer ADV LAB";
+#elif defined(FREENOVE_S3_35)
+            info.boardName = "freenove-s3-35 BETA";
+#elif defined(CYD35C)
+            info.boardName = "cyd35c BETA";
 #elif defined(CYD35)
             info.boardName = "cyd35 BETA";
 #else
@@ -6236,6 +6520,9 @@ void loop() {
                 uiDiagnosticsHitBack(tp.x, tp.y, tft.width(), tft.height())) {
                 lastTouch = now;
                 enterSettings();
+            } else if (touchJustDown && Theme::compact()) {
+                lastTouch = now;
+                uiDiagnosticsNextPage();
             }
             break;
         }
@@ -6324,6 +6611,9 @@ void loop() {
         if (!Field::config.reduced && now - transitionStart < TRANSITION_MS) {
             Theme::drawTransitionGlitch(frame, now - transitionStart, TRANSITION_MS);
         }
+#if defined(SQW_SMALL)
+        stickDrawCursor(frame, now);
+#endif
         FrameProf::lap(FrameProf::POST);
         pushFrame(0, 0);
         FrameProf::lap(FrameProf::PUSH);
@@ -6404,38 +6694,34 @@ void loop() {
         // The crown, which beats the cable, the desk and a timeout of NEVER.
         // A touch since the press, or an alert that wants the screen, ends it.
         //
-        // An alert lights it without ending it: once the alert is over the
-        // screen goes dark again after the screen timeout (30 s when that is
-        // NEVER), the way it would on battery. Taps on the alert card -- the
-        // one that dismisses it above all -- do not count as the touch that
-        // ends crown mode; a touch after that does.
+        // Things that need to be seen borrow the screen without ending it:
+        // an alert card for as long as it is up on its own (ten seconds; a
+        // WATCH card, which waits for a tap, goes dark with the card still
+        // on it), a squad member's update offer or invite for its countdown,
+        // and the first-time note. Then it is dark again, no Squachy after.
         {
-            static bool wasAlerting = false;
-            if (s_crownDark) {
-                if (alerting || wasAlerting) s_crownDarkAt = now;
-                if (wasAlerting && !alerting) {
-                    uint32_t t = Settings::screenTimeoutSecRaw();
-                    if (!t) t = 30;
-                    s_crownLitUntil = now + t * 1000UL;
-                    if (!s_crownLitUntil) s_crownLitUntil = 1;
-                }
-                if ((int32_t)(lastTouch - s_crownDarkAt) > 0) s_crownDark = false;
-            }
-            wasAlerting = alerting;
-        }
-        if (s_crownDark) {
-            const bool alertWants = Settings::wakeOnAlert() && alerting;
-            const bool lit = s_crownLitUntil && (int32_t)(s_crownLitUntil - now) > 0;
-            wantDim = !alertWants && !lit;
+            const uint32_t shownAt = state == AppState::WATCH_ALERT ? watchAlertStart : alertStart;
+            const bool alertLit = alerting && Settings::wakeOnAlert() &&
+                                  (int32_t)(now - shownAt) < (int32_t)ALERT_AUTO_DISMISS_MS &&
+                                  (int32_t)(shownAt - s_crownPressAt) > 0;
+            const bool askLit  = state == AppState::NUDGE || state == AppState::INVITE;
+            const bool noteLit = s_pocketNoteUntil && (int32_t)(s_pocketNoteUntil - now) > 0;
+            if (!noteLit) s_pocketNoteUntil = 0;
+            if (s_crownDark) wantDim = !alertLit && !askLit && !noteLit;
         }
 #endif
 #if defined(ARDUINO_ARCH_ESP32) && !defined(TWATCH_S3)
-        if(s_bootDark&&Settings::wakeOnAlert()&&alerting)s_bootDark=false;
-        if(s_bootDark)wantDim=true;
+        if(s_bootDark) {
+            const uint32_t shownAt=state==AppState::WATCH_ALERT?watchAlertStart:state==AppState::RULE_ALERT?s_ruleAlertAt:alertStart;
+            wantDim=s_pocket.dark(now,alerting,shownAt,alertDurationMs(),Settings::wakeOnAlert());
+        }
 #endif
         if (wantDim != s_screenDimmed) {
             s_screenDimmed = wantDim;
             applyBrightness();
+#if defined(TWATCH_S3) || SQW_BOOT_BTN
+            if (s_crownDark) Serial.println(wantDim ? "[pocket] screen dark" : "[pocket] screen lit for an alert");
+#endif
         }
 
         if(s_screenDimmed && state==AppState::BREAKOUT &&

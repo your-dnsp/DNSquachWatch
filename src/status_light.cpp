@@ -29,7 +29,7 @@
 // status LED" rather than as a bug.
 #if defined(ESP32) && !defined(CYD35) && !defined(AWOK) && !defined(SQW_S3) && !defined(CROWPANEL7) && !defined(NM_CYD_C5)
 #define STATUS_LIGHT_HW 1
-#elif defined(FREENOVE_S3) || defined(NM_CYD_C5)
+#elif defined(FREENOVE_S3) || defined(FREENOVE_S3_35) || defined(NM_CYD_C5)
 #define STATUS_LIGHT_HW 2
 #else
 #define STATUS_LIGHT_HW 0
@@ -50,6 +50,8 @@ static const uint8_t CH_R  = 3, CH_G  = 4,  CH_B  = 5;
 #if STATUS_LIGHT_HW == 2
 #if defined(NM_CYD_C5)
 static const uint8_t PIN_WS2812 = 27;
+#elif defined(FREENOVE_S3_35)
+static const uint8_t PIN_WS2812 = 40;   // the 3.5", per Freenove's LED sketch
 #else
 static const uint8_t PIN_WS2812 = 42;
 #endif

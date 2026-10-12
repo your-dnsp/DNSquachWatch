@@ -234,7 +234,7 @@ void uiBootAttribution(TFT_eSPI& t) {
     const char* line="modified firmware by dnsp";
     t.setCursor((w-t.textWidth(line))/2,h-25);t.print(line);
     t.setTextColor(Theme::CYAN,Theme::BG);
-    const char* version="DNSP v" FIRMWARE_VERSION " | base v1.28.0";
+    const char* version="DNSP v" FIRMWARE_VERSION " | base v" DNSP_BASE_VERSION;
     t.setCursor((w-t.textWidth(version))/2,h-13);t.print(version);
 }
 

@@ -109,5 +109,7 @@ void uiDiagnosticsInit(TFT_eSPI& t);
 void uiDiagnosticsTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, const DiagnosticsInfo& info);
 
 // Single [ BACK ] button, same shape as the raw-scan screen's.
+// The next page of the report, on a screen too short for all of it.
+void uiDiagnosticsNextPage();
 bool uiDiagnosticsHitBack(int x, int y, int screenW, int screenH);
 

@@ -61,6 +61,41 @@ static SquachMesh::Peer s_squadPeer[SQUAD_N];   // what each one looks like
 static uint8_t  s_preferMac[6] = { 0 };
 static bool     s_preferSet    = false;
 
+// Phones heard lately: the address each one advertises from, and the six
+// bytes its frames are sealed under (squachmesh.h, phoneMac). A phone's
+// address changes every quarter of an hour; its identity does not, so a
+// frame is opened, and replay-checked, by the identity. Four is plenty:
+// this is the companion app, not a crowd. Written and read in the BLE task.
+static const uint8_t PHONE_N = 4;
+static uint8_t  s_phoneAddr[PHONE_N][6];
+static uint8_t  s_phoneMac[PHONE_N][6];
+static uint32_t s_phoneSeen[PHONE_N];
+static bool     s_phoneLive[PHONE_N];
+
+static void phoneNote(const uint8_t* addr, const uint8_t id[SquachMesh::PHONE_ID_LEN], uint32_t now) {
+    uint8_t slot = 0;
+    bool found = false;
+    for (uint8_t i = 0; i < PHONE_N; i++)
+        if (s_phoneLive[i] && memcmp(s_phoneAddr[i], addr, 6) == 0) { slot = i; found = true; break; }
+    if (!found) {
+        for (uint8_t i = 0; i < PHONE_N; i++) {
+            if (!s_phoneLive[i]) { slot = i; break; }
+            if ((int32_t)(s_phoneSeen[i] - s_phoneSeen[slot]) < 0) slot = i;
+        }
+        memcpy(s_phoneAddr[slot], addr, 6);
+        s_phoneLive[slot] = true;
+    }
+    SquachMesh::phoneMac(id, s_phoneMac[slot]);
+    s_phoneSeen[slot] = now;
+}
+
+// The identity a frame from this address is sealed under, if it is a phone's.
+static const uint8_t* phoneMacFor(const uint8_t* addr) {
+    for (uint8_t i = 0; i < PHONE_N; i++)
+        if (s_phoneLive[i] && memcmp(s_phoneAddr[i], addr, 6) == 0) return s_phoneMac[i];
+    return nullptr;
+}
+
 static void squadNote(const uint8_t* mac, uint32_t now, const SquachMesh::Peer& p) {
     uint8_t slot = SQUAD_N;
     for (uint8_t i = 0; i < SQUAD_N; i++)
@@ -138,6 +173,7 @@ size_t buildSelf(uint8_t* out) {
     me.nick   = Squachy::nicknameIndex();
     me.outfit = Squachy::outfitIndex();
     me.shade  = Squachy::shadesIndex();
+    me.aura   = Squachy::hasAura() && Settings::auraShown();
     const char* cn = Squachy::customName();
     me.custom = (cn && cn[0]);
     me.name[0] = '\0';
@@ -167,12 +203,14 @@ bool onManufacturerData(const uint8_t* d, size_t len, const uint8_t* mac, uint32
     if (MeshMsg::isFrame(d + 2, len - 2)) {
         if (!Settings::messagesOn()) return false;
         MeshTalk::onFrame(mac, d + 2, len - 2,
-                          memcmp(mac, s_nameMac, 6) == 0 ? s_name : "");
+                          memcmp(mac, s_nameMac, 6) == 0 ? s_name : "",
+                          phoneMacFor(mac));
         return true;
     }
 
     SquachMesh::Peer p;
     if (!SquachMesh::decode(d + 2, len - 2, p)) return false;
+    if (p.phone) phoneNote(mac, p.id, now);
     squadNote(mac, now, p);     // everybody counts, visiting or not
 
     // Remembered for a message frame later in this same callback: the name
@@ -194,6 +232,13 @@ bool onManufacturerData(const uint8_t* d, size_t len, const uint8_t* mac, uint32
     const bool chosen = s_preferSet && memcmp(mac, s_preferMac, 6) == 0;
     if (s_havePeer && memcmp(mac, s_peerMac, 6) != 0 && !chosen) return true;
 
+#ifdef BENCH_TOOLS
+    // A new visitor, for proving a phone (or anything) can visit from the bench.
+    if (!s_havePeer || memcmp(mac, s_peerMac, 6) != 0)
+        Serial.printf("[mesh] visitor %02X:%02X:%02X:%02X:%02X:%02X nick %u outfit %u shade %u aura %u name \"%s\"\n",
+                      mac[5], mac[4], mac[3], mac[2], mac[1], mac[0], (unsigned)p.nick, (unsigned)p.outfit,
+                      (unsigned)p.shade, (unsigned)p.aura, p.custom ? p.name : "");
+#endif
     s_peer = p;
     memcpy(s_peerMac, mac, 6);
     s_peerSeen = now;

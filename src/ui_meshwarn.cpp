@@ -34,17 +34,72 @@ const char* const PARAS[] = {
 };
 const uint8_t PARA_N = sizeof(PARAS) / sizeof(PARAS[0]);
 
-const int BTN_W = 92, BTN_H = 28, BTN_GAP = 18;
+const int BTN_GAP = 18;
+// Bigger on the large panels, where the rest of the screen grew with them.
+int btnW() { return Theme::large() ? 120 : 92; }
+int btnH() { return Theme::large() ? 36 : 28; }
 
 // Buttons sit a fixed distance off the bottom, and both drawing and hit
 // testing come through here so they cannot drift apart -- the same reason
 // every other two-part control in this codebase shares its geometry.
 void buttonGeom(TFT_eSPI& t, int& yesX, int& noX, int& y) {
     const int w = t.width(), h = t.height();
-    const int total = BTN_W * 2 + BTN_GAP;
+    const int total = btnW() * 2 + BTN_GAP;
     yesX = (w - total) / 2;
-    noX  = yesX + BTN_W + BTN_GAP;
-    y    = h - BTN_H - 10;
+    noX  = yesX + btnW() + BTN_GAP;
+    // Inside the dialog window's bottom edge on the large panels (WIN_M).
+    y    = h - btnH() - (Theme::large() ? 18 : 10);
+}
+
+// The large panels: the same words in a Win95 dialog, black on grey, in
+// front of the dimmed room. It is a system warning, so it looks like one,
+// and dark text on a light face is the easiest thing on the board to read.
+const int WIN_M = 8;
+const uint16_t WARN_RED = 0xA000;
+
+void drawAsWindow(TFT_eSPI& t) {
+    const int w = t.width(), h = t.height();
+    const int wx = WIN_M, ww = w - 2 * WIN_M;
+    int y = Theme::drawWin95Window(t, wx, WIN_M, ww, h - 2 * WIN_M, "SquachMesh");
+    const int tx = wx + 12, tw = ww - 24;
+    t.setTextWrap(false);
+
+    t.setTextFont(1);
+    t.setTextSize(2);
+    t.setTextColor(WARN_RED, Theme::W95_FACE);
+    t.setCursor(tx, y);
+    t.print("THIS MAKES YOU TRACKABLE");
+    y += t.fontHeight() + 8;
+
+    Theme::bodyFontOn(t);
+    int maxW = tw;
+    if (maxW > 79 * t.textWidth("M")) maxW = 79 * t.textWidth("M");
+    const int lineH = t.fontHeight() + 1;
+    t.setTextColor(Theme::BLACK, Theme::W95_FACE);
+    for (uint8_t p = 0; p < PARA_N; p++) {
+        char lines[8][80];
+        const uint8_t n = Theme::wrapText(t, PARAS[p], maxW, lines, 8);
+        for (uint8_t i = 0; i < n; i++) {
+            t.setCursor(tx, y);
+            t.print(lines[i]);
+            y += lineH;
+        }
+        y += 5;
+    }
+
+    int yesX, noX, by;
+    buttonGeom(t, yesX, noX, by);
+    // The question, in bold the way Win95 drew one: the same word twice, a
+    // pixel apart.
+    const char* q = "Turn on SquachMesh?";
+    const int qx = (w - t.textWidth(q)) / 2, qy = by - t.fontHeight() - 8;
+    t.setCursor(qx, qy);     t.print(q);
+    t.setTextColor(Theme::BLACK);   // transparent: the second pass only thickens
+    t.setCursor(qx + 1, qy); t.print(q);
+    Theme::bodyFontOff(t);
+
+    Theme::drawWin95Button(t, yesX, by, btnW(), btnH(), "YES", false);
+    Theme::drawWin95Button(t, noX,  by, btnW(), btnH(), "NO",  false);
 }
 
 } // namespace
@@ -62,6 +117,8 @@ void uiMeshWarnTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool 
     Theme::drawActiveBackground(t, now, 0, h, eng, advance);
     Theme::restorePalette(saved);
     Theme::dimRegion(t, 0, 0, w, h, 110);
+
+    if (Theme::large()) { drawAsWindow(t); return; }
 
     t.setTextWrap(false);
     t.setTextSize(2);
@@ -109,17 +166,17 @@ void uiMeshWarnTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool 
     // NO is not the quiet one. A consent dialog whose decline is styled as
     // the lesser option is doing the opposite of what it is for, so both are
     // ordinary system buttons and neither is preselected.
-    Theme::drawWin95Button(t, yesX, by, BTN_W, BTN_H, "YES", false);
-    Theme::drawWin95Button(t, noX,  by, BTN_W, BTN_H, "NO",  false);
+    Theme::drawWin95Button(t, yesX, by, btnW(), btnH(), "YES", false);
+    Theme::drawWin95Button(t, noX,  by, btnW(), btnH(), "NO",  false);
 }
 
 MeshWarnHit uiMeshWarnHitTest(TFT_eSPI& t, int x, int y) {
     int yesX, noX, by;
     buttonGeom(t, yesX, noX, by);
     const int SLOP = 6;
-    if (y < by - SLOP || y > by + BTN_H + SLOP) return MeshWarnHit::NONE;
-    if (x >= yesX - SLOP && x <= yesX + BTN_W + SLOP) return MeshWarnHit::YES;
-    if (x >= noX  - SLOP && x <= noX  + BTN_W + SLOP) return MeshWarnHit::NO;
+    if (y < by - SLOP || y > by + btnH() + SLOP) return MeshWarnHit::NONE;
+    if (x >= yesX - SLOP && x <= yesX + btnW() + SLOP) return MeshWarnHit::YES;
+    if (x >= noX  - SLOP && x <= noX  + btnW() + SLOP) return MeshWarnHit::NO;
     return MeshWarnHit::NONE;
 }
 

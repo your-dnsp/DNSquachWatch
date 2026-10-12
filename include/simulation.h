@@ -2,7 +2,7 @@
 #include "state.h"
 #include <stddef.h>
 namespace Simulation {
-// DNSP test-address convention, not a reservation or authenticated identity.
+// Exact DD:DD:DD suffix: DNSP test-address convention, not a reservation or authenticated identity.
 // Always inspect decoded/display-order address bytes, never packet substrings.
 bool marked(const uint8_t* mac);
 inline bool marked(const Detection& d) { return marked(d.mac); }

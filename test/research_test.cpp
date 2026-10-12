@@ -81,9 +81,9 @@ int main(){
  discard();r=Record{};strcpy(r.note,"\"\\\n=FORMULA()");Stats raw;raw.raw=true;
  ck("untrusted note cannot escape JSON string",encode(r,raw,j,sizeof j,c,sizeof c)&&!strstr(j,"\\\n")&&strstr(j,"=FORMULA()")&&strstr(c,"FORMULA")==nullptr);
  suite("Research simulation survives RAW-off redaction");
- Record simRecord{};memcpy(simRecord.mac,mac,6);simRecord.mac[3]=simRecord.mac[4]=simRecord.mac[5]=0;simRecord.radio=1;
+ Record simRecord{};memcpy(simRecord.mac,mac,6);simRecord.mac[3]=simRecord.mac[4]=simRecord.mac[5]=0xDD;simRecord.radio=1;
  Stats masked{};char sj[1240],sc[360];
- ck("redacted record keeps simulation flag and provenance",encode(simRecord,masked,sj,sizeof sj,sc,sizeof sc)&&strstr(sj,"\"simulated\":true")&&strstr(sj,"claimed transmitter")&&!strstr(sj,"b41e52000000"));
+ ck("redacted record keeps simulation flag and provenance",encode(simRecord,masked,sj,sizeof sj,sc,sizeof sc)&&strstr(sj,"\"simulated\":true")&&strstr(sj,"claimed transmitter")&&!strstr(sj,"b41e52dddddd"));
  simRecord.mac[5]=1;ck("ordinary classification stays unchanged",encode(simRecord,masked,sj,sizeof sj,sc,sizeof sc)&&strstr(sj,"\"simulated\":false")&&simRecord.match.type==DetectionType::UNKNOWN);
  simRecord.length=PAYLOAD_CAP;simRecord.original=65535;memset(simRecord.payload,0xff,sizeof simRecord.payload);simRecord.id=simRecord.at=simRecord.reference=UINT32_MAX;masked.raw=true;masked.session=masked.catalog=UINT32_MAX;simRecord.match.bits=simRecord.match.rule=65535;memset(simRecord.note,'N',sizeof simRecord.note-1);
  ck("maximum raw research record fits added metadata",encode(simRecord,masked,sj,sizeof sj,sc,sizeof sc));

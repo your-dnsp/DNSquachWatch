@@ -18,7 +18,9 @@
 
 class DetectionEngine;
 
-enum class SquadHit : uint8_t { NONE, BACK, INVITED, REPLY, ADD, HUNT };
+// SEND opens the message screen to write to the squad, without needing a
+// message in the inbox to reply to. On the in-range page only.
+enum class SquadHit : uint8_t { NONE, BACK, INVITED, REPLY, ADD, HUNT, SEND };
 // Whether the roster is showing rather than the boards in range: BACK goes
 // to a different screen in each case.
 bool uiSquadRosterMode();

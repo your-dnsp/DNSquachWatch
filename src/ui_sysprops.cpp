@@ -25,9 +25,11 @@ const uint16_t NAVY = 0x0010;
 // and was hard to read on the board: at eight rows a line of grey label on
 // silver is a smudge. So the window is bigger, the lines are fewer and
 // wrapped to fit, and labels are black rather than grey.
-const int TITLE_H = 18;
-const int TAB_H   = 20;
-const int BTN_H   = 24;
+// Set by geom(): a compact screen (240x135) gets a thinner title bar, tabs
+// and buttons, and the Update tab loses its paragraph and checkbox.
+int TITLE_H = 18;
+int TAB_H   = 20;
+int BTN_H   = 24;
 const int LINE    = 17;       // one font-2 line and a pixel of air
 const int SLOP    = 5;        // a fingertip is wider than a tab
 
@@ -48,13 +50,15 @@ struct Geom {
 Geom geom(TFT_eSPI& t) {
     Geom g;
     const int sw = t.width(), sh = t.height();
+    const bool c = Theme::compact();
+    TITLE_H = c ? 16 : 18; TAB_H = c ? 18 : 20; BTN_H = c ? 20 : 24;
     g.w = sw - 8 < 300 ? sw - 8 : 300;
     g.h = sh - 8 < 232 ? sh - 8 : 232;
     g.x = (sw - g.w) / 2;
     g.y = (sh - g.h) / 2;
     g.tabY = g.y + 3 + TITLE_H + 3;
     g.tabW = (g.w - 8) / TAB_N;
-    g.btnY = g.y + g.h - 6 - BTN_H;
+    g.btnY = g.y + g.h - (Theme::compact() ? 4 : 6) - BTN_H;
     g.px = g.x + 4;
     g.py = g.tabY + TAB_H;
     g.pw = g.w - 8;
@@ -210,13 +214,13 @@ void drawUpdateTab(TFT_eSPI& t, const Geom& g) {
             if(count>=s_creditScroll&&count<s_creditScroll+visible)
                 text(t,g.px+8,g.py+5+(count-s_creditScroll)*LINE,lines[i],Theme::BLACK);
     };
-    add("Original SquachWatch base: 1.28.0");
+    add("Original SquachWatch base: " DNSP_BASE_VERSION);
     const char* version=OtaCore::availableVersion();char line[100];
     snprintf(line,sizeof line,"Latest original release heard: %s",version[0]?version:"not checked / none known");add(line);
     const char* source=OtaCore::availableFrom();
     snprintf(line,sizeof line,"Source: %s",!version[0]?"none this boot":source[0]?source:"squachwatch.com");add(line);
     add("Current DNSP firmware: v" FIRMWARE_VERSION);
-    add("Based on SquachWatch v1.28.0.");
+    add("Based on SquachWatch v" DNSP_BASE_VERSION ".");
     add("Last flash date: unknown (USB flashing does not record it).");
     add("The system is running custom firmware by DNSP. Updating from SquachWatch directly will remove the customizations.");
     add("If you need a newer DNSP firmware update, contact dnsp@duck.com.");
@@ -277,6 +281,7 @@ void drawBoardTab(TFT_eSPI& t, const Geom& g) {
     Settings::displayMhz());
     row(t, g, y, "Display", buf);
     y += LINE;
+    const int limit = g.py + g.ph - 3;
 
     snprintf(buf, sizeof buf, "%s  %s", OtaCore::runningSlot(), OtaCore::runningVersion());
     row(t, g, y, "Installed", "DNSP v" FIRMWARE_VERSION);
@@ -285,14 +290,17 @@ void drawBoardTab(TFT_eSPI& t, const Geom& g) {
     const char* other = OtaCore::otherVersion();
     row(t, g, y, "Fallback", other && other[0] ? other : "nothing to go back to");
     y += LINE;
+    if (y + 16 > limit) return;
 
     uptimeText(buf, sizeof buf, millis());
     row(t, g, y, "Up", buf);
     y += LINE;
+    if (y + 16 > limit) return;
 
     snprintf(buf, sizeof buf, "%lu KB free", (unsigned long)(ESP.getFreeHeap() / 1024));
     row(t, g, y, "Memory", buf);
     y += LINE;
+    if (y + 16 > limit) return;
 
     snprintf(buf, sizeof buf, "%lu KB in one piece",
              (unsigned long)(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) / 1024));
@@ -376,6 +384,22 @@ void uiSysPropsTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool 
     Theme::bubbleFontOff(t);
 }
 
+uint8_t uiSysPropsStops(TFT_eSPI& t, int16_t* xs, int16_t* ys, uint8_t cap) {
+    const Geom g = geom(t);
+    const Buttons b = buttons(t, g);
+    Theme::bubbleFontOff(t);
+    uint8_t n = 0;
+    auto add = [&](int x, int y) { if (n < cap) { xs[n] = (int16_t)x; ys[n] = (int16_t)y; n++; } };
+    if (s_tab == TAB_UPDATE) {
+        add(b.updX + b.updW / 2, g.btnY + BTN_H / 2);
+        add(b.laterX + b.laterW / 2, g.btnY + BTN_H / 2);
+    } else {
+        add(b.closeX + b.closeW / 2, g.btnY + BTN_H / 2);
+    }
+    for (uint8_t i = 0; i < TAB_N; i++) add(g.x + 4 + i * g.tabW + g.tabW / 2, g.tabY + TAB_H / 2);
+    return n;
+}
+
 SysPropsHit uiSysPropsTouch(TFT_eSPI& t, int x, int y) {
     const Geom g = geom(t);
     const Buttons b = buttons(t, g);
@@ -400,7 +424,7 @@ SysPropsHit uiSysPropsTouch(TFT_eSPI& t, int x, int y) {
         if (in(x, y, b.updX, g.btnY, b.updW, BTN_H))     return SysPropsHit::UPDATE_NOW;
         // The checkbox, and its words: a label you can tap is the difference
         // between a setting people find and one they do not.
-        if (in(x, y, g.px + 8, checkboxY(g), g.pw - 16, 16)) { Settings::toggleUpdateCheck(); return SysPropsHit::NONE; }
+        if (!Theme::compact() && in(x, y, g.px + 8, checkboxY(g), g.pw - 16, 16)) { Settings::toggleUpdateCheck(); return SysPropsHit::NONE; }
     } else if (in(x, y, b.closeX, g.btnY, b.closeW, BTN_H)) {
         return SysPropsHit::CLOSE;
     }

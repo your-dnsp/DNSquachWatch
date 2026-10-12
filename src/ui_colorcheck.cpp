@@ -28,15 +28,18 @@ static void computeGeom(int w, int h,
                          int& ordX, int& ordY, int& ordW, int& ordH,
                          int& doneX, int& doneY, int& doneW, int& doneH) {
     (void)h;
-    squachyScale = 0.6f;
-    squachyBaseY = 50;
+    // Everything a step up on the large panels: Squachy, the 16-row body
+    // font for the caption, size-4 colour words and taller buttons.
+    const bool big = Theme::large();
+    squachyScale = big ? 1.0f : 0.6f;
+    squachyBaseY = big ? 80 : 50;
     captionTop = squachyBaseY + 14;
     captionMaxW = w - 24;
-    wordsTop  = captionTop + CAPTION_MAX_LINES * 10 + 4;
-    wordRowH  = 24;
+    wordsTop  = captionTop + CAPTION_MAX_LINES * (big ? 18 : 10) + 4;
+    wordRowH  = big ? 32 : 24;
 
     int btnY = wordsTop + wordRowH * 3 + 6;
-    int btnH = 20;
+    int btnH = big ? 30 : 20;
     const int margin = 12, gap = 8;
     int btnW = (w - 2 * margin - gap) / 2;
     invX = margin;           invY = btnY; invW = btnW; invH = btnH;
@@ -71,7 +74,7 @@ void uiColorCheckTick(TFT_eSPI& t, uint32_t now) {
     // wrapped block below him instead, with a real line budget.
     Squachy::drawWaving(t, w / 2, squachyBaseY, now, squachyScale, nullptr);
 
-    t.setTextSize(1);
+    Theme::bodyFontOn(t);
     t.setTextWrap(false);
     t.setTextColor(Theme::WHITE, Theme::BG);
     char capLines[CAPTION_MAX_LINES][48];
@@ -81,10 +84,11 @@ void uiColorCheckTick(TFT_eSPI& t, uint32_t now) {
         int lw = t.textWidth(capLines[i]);
         t.setCursor((w - lw) / 2, cy);
         t.print(capLines[i]);
-        cy += 10;
+        cy += t.fontHeight() + 2;
     }
+    Theme::bodyFontOff(t);
 
-    t.setTextSize(3);
+    t.setTextSize(Theme::upSize(3));
     const char* words[3] = { "RED", "GREEN", "BLUE" };
     uint16_t cols[3] = { PURE_RED, PURE_GREEN, PURE_BLUE };
     int y = wordsTop;

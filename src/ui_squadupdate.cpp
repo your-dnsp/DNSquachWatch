@@ -13,7 +13,7 @@
 #include <string.h>
 
 namespace {
-const int BTN_H = 28;
+int btnH() { return Theme::dialogBtnH(28); }
 const int SLOP  = 6;
 const uint8_t TALLY_N = 8;
 
@@ -34,13 +34,13 @@ struct Geom { int shareY, shareH, sendX, sendY, sendW; };
 
 Geom geom(TFT_eSPI& t) {
     Geom g;
-    t.setTextSize(2);
+    t.setTextSize(Theme::upSize(2));
     g.shareH = t.fontHeight() + 10;
     t.setTextSize(1);
-    g.shareY = Theme::LIST_TOP + Theme::LIST_HEADING_H + 4 + 12 * 3 + 6;
+    g.shareY = Theme::LIST_TOP + Theme::listHeadingH() + 4 + Theme::bodyY(12 * 3) + 6;
     g.sendW  = 150;
     g.sendX  = (t.width() - g.sendW) / 2;
-    g.sendY  = t.height() - Theme::pinnedBackH(t.width()) - BTN_H - 8;
+    g.sendY  = t.height() - Theme::pinnedBackH(t.width()) - btnH() - 8;
     return g;
 }
 
@@ -119,21 +119,21 @@ void uiSquadUpdateTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
     t.fillRect(0, 0, w, h, Theme::BG);
     Theme::drawListHeading(t, "UPDATE SQUAD", Theme::VAPOR_PINK);
     const Geom g = geom(t);
-    t.setTextSize(1);
-    int y = Theme::LIST_TOP + Theme::LIST_HEADING_H + 4;
+    Theme::bodyFontOn(t);
+    int y = Theme::LIST_TOP + Theme::listHeadingH() + 4;
     char buf[48];
 
     if (!s_sent) {
         line(t, y, Theme::WHITE, "Tells every SquachWatch in range with");
-        y += 12;
+        y += Theme::bodyY(12);
         snprintf(buf, sizeof buf, "your phrase to update to %s,", OtaCore::runningVersion());
         line(t, y, Theme::WHITE, buf);
-        y += 12;
+        y += Theme::bodyY(12);
         line(t, y, Theme::WHITE, "the version this one runs.");
 
         // The SHARE WIFI row, a settings row in shape.
         Theme::drawListRowPanel(t, w, g.shareY, g.shareH);
-        t.setTextSize(2);
+        t.setTextFont(1); t.setTextSize(Theme::upSize(2));
         const bool can = s_shareIdx >= 0;
         t.setTextColor(can ? Theme::VAPOR_PINK : Theme::blend(Theme::BG, Theme::VAPOR_PINK, 110), Theme::BG);
         t.setCursor(8, g.shareY + (g.shareH - t.fontHeight()) / 2);
@@ -142,7 +142,7 @@ void uiSquadUpdateTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
         t.setTextColor(can ? Theme::WHITE : Theme::blend(Theme::BG, Theme::WHITE, 110), Theme::BG);
         t.setCursor(w - 18 - t.textWidth(v), g.shareY + (g.shareH - t.fontHeight()) / 2);
         t.print(v);
-        t.setTextSize(1);
+        Theme::bodyFontOn(t);
         y = g.shareY + g.shareH + 4;
         if (can)
         {
@@ -160,24 +160,24 @@ void uiSquadUpdateTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
             // see, and the boards it told could never act on it.
             snprintf(buf, sizeof buf, "None of your networks are in range.");
         line(t, y, Theme::W95_LIGHT, buf);
-        y += 12;
+        y += Theme::bodyY(12);
         line(t, y, Theme::W95_LIGHT, "Boards with their own WiFi use that.");
 
-        Theme::drawWin95Button(t, g.sendX, g.sendY, g.sendW, BTN_H, "SEND", false);
+        Theme::drawWin95Button(t, g.sendX, g.sendY, g.sendW, btnH(), "SEND", false);
     } else {
         const uint32_t left = (now - s_sentAt < 60000u) ? (60000u - (now - s_sentAt)) / 1000u : 0;
         if (left) snprintf(buf, sizeof buf, "Sent. On the air for %lu s more.", (unsigned long)left);
         else      snprintf(buf, sizeof buf, "Sent. Boards report back here.");
         line(t, y, Theme::WHITE, buf);
-        y += 12;
+        y += Theme::bodyY(12);
         line(t, y, Theme::W95_LIGHT, "Each one joins WiFi, installs, restarts,");
-        y += 12;
+        y += Theme::bodyY(12);
         line(t, y, Theme::W95_LIGHT, "and says so. A minute or two each.");
-        y += 18;
+        y += Theme::bodyY(18);
         if (s_tallyN == 0) {
             line(t, y, Theme::CYAN, "Nobody yet.");
         } else {
-            t.setTextSize(2);
+            t.setTextFont(1); t.setTextSize(Theme::upSize(2));
             const int colW = w / 2;
             for (uint8_t i = 0; i < s_tallyN; i++) {
                 const int cx = 8 + (i % 2) * colW, cy = y + (i / 2) * (t.fontHeight() + 4);
@@ -186,9 +186,10 @@ void uiSquadUpdateTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
                 t.setCursor(cx, cy);
                 t.print(s_tally[i]);
             }
-            t.setTextSize(1);
+            Theme::bodyFontOn(t);
         }
     }
+    Theme::bodyFontOff(t);
     Theme::drawPinnedBack(t, "[ BACK ]");
 }
 
@@ -197,7 +198,7 @@ SquadUpdateHit uiSquadUpdateHit(TFT_eSPI& t, int x, int y) {
     if (s_sent) return SquadUpdateHit::NONE;
     const Geom g = geom(t);
     if (in(x, y, 3, g.shareY, t.width() - 10, g.shareH)) return SquadUpdateHit::SHARE;
-    if (in(x, y, g.sendX, g.sendY, g.sendW, BTN_H))     return SquadUpdateHit::SEND;
+    if (in(x, y, g.sendX, g.sendY, g.sendW, btnH()))     return SquadUpdateHit::SEND;
     return SquadUpdateHit::NONE;
 }
 #endif // SQUACH_MESH

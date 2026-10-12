@@ -1,6 +1,9 @@
 #include "integer_scan.h"
 // SquachWatch-CYD — wall-clock time. See clock.h.
 #include "clock.h"
+#if defined(BENCH_TOOLS) && SQUACH_MESH
+#include "meshtalk.h"
+#endif
 #include "serial_flush.h"
 #include "security.h"   // a locked device takes no console commands
 #include "ota_wifi.h"    // the WIFI command lists the saved networks
@@ -63,6 +66,16 @@ extern volatile bool g_benchUpdateStop;
 extern volatile bool g_consoleInvert;
 extern volatile bool g_consoleXyzzy;
 extern volatile bool g_consoleLegend;
+extern volatile uint8_t g_consoleHeadsUp;
+extern volatile bool g_consoleClippy;
+extern volatile bool g_consoleToaster;
+extern volatile bool g_consoleBall;
+extern volatile bool g_consolePet;
+extern volatile bool g_consoleJail;
+extern volatile bool g_consoleFree;
+#if defined(CARDPUTER_ADV)
+extern volatile int8_t g_consoleExt;
+#endif
 extern volatile bool g_consoleOutfitSet;
 extern volatile bool g_consoleAura;
 extern volatile int8_t g_consoleOutfit;
@@ -70,6 +83,11 @@ extern volatile bool g_consoleWatchTest;
 extern volatile bool g_consoleRotate;
 extern volatile bool g_consoleBatt;
 extern volatile bool g_consoleBattLog;
+extern volatile int8_t g_consoleSound;
+extern volatile bool g_consoleScreen;
+#if defined(FREENOVE_S3) || defined(FREENOVE_S3_35)
+extern volatile bool g_consolePowerOff;   // main.cpp: POWER OFF, the Freenove boards' deep sleep
+#endif
 extern volatile bool g_consoleRadioTest;
 extern volatile bool g_consolePmu;
 extern volatile bool g_consoleRtc;
@@ -550,12 +568,35 @@ void pollSerial() {
         if (strcasecmp(line, "INVERT") == 0) { g_consoleInvert = true; continue; }
         if (strcasecmp(line, "XYZZY") == 0)  { g_consoleXyzzy = true; continue; }
         if (strcasecmp(line, "LEGEND") == 0) { g_consoleLegend = true; continue; }
+#if defined(CARDPUTER_ADV)
+        if (strcasecmp(line, "EXT ON") == 0)  { g_consoleExt = 1; continue; }
+        if (strcasecmp(line, "EXT OFF") == 0) { g_consoleExt = 0; continue; }
+        if (strcasecmp(line, "EXT ROT") == 0) { g_consoleExt = 2; continue; }
+#endif
+        if (strcasecmp(line, "CLIPPY") == 0) { g_consoleClippy = true; continue; }
+        if (strcasecmp(line, "TOASTER") == 0) { g_consoleToaster = true; continue; }
+        if (strcasecmp(line, "BALL") == 0)    { g_consoleBall = true; continue; }
+        if (strcasecmp(line, "PET") == 0)     { g_consolePet = true; continue; }
+        if (strcasecmp(line, "JAIL") == 0)    { g_consoleJail = true; continue; }
+        if (strcasecmp(line, "FREE") == 0)    { g_consoleFree = true; continue; }
+        if (strncasecmp(line, "HEADSUP ", 8) == 0) { g_consoleHeadsUp = (uint8_t)atoi(line + 8); continue; }
         if (strcasecmp(line, "AURA") == 0)   { g_consoleAura = true; continue; }
         if (strncasecmp(line, "OUTFIT ", 7) == 0) { g_consoleOutfit = (int8_t)atoi(line + 7); g_consoleOutfitSet = true; continue; }
         if (strcasecmp(line, "WATCHTEST") == 0) { g_consoleWatchTest = true; continue; }
         if (strcasecmp(line, "ROT") == 0)    { g_consoleRotate = true; continue; }
         if (strcasecmp(line, "BATT") == 0)    { g_consoleBatt = true; continue; }
         if (strcasecmp(line, "BATTLOG") == 0) { g_consoleBattLog = true; continue; }
+        // SOUND 0..10 plays that sound on the Freenove S3 speaker (sound.h's
+        // order: new device, watch hit, low battery, message, visitor, throw,
+        // land, C1iPPY, toast pop, plug in, unplug); SOUND AMP HIGH / LOW
+        // flips the amplifier enable's polarity for the bench.
+        if (strcasecmp(line, "SOUND AMP HIGH") == 0) { g_consoleSound = 20; continue; }
+        if (strcasecmp(line, "SOUND AMP LOW") == 0)  { g_consoleSound = 21; continue; }
+        if (strncasecmp(line, "SOUND ", 6) == 0) { g_consoleSound = (int8_t)atoi(line + 6); continue; }
+        if (strcasecmp(line, "SCREEN") == 0) { g_consoleScreen = true; continue; }
+#if defined(FREENOVE_S3) || defined(FREENOVE_S3_35)
+        if (strcasecmp(line, "POWER OFF") == 0) { g_consolePowerOff = true; continue; }
+#endif
         if (strcasecmp(line, "RADIO TEST") == 0) { g_consoleRadioTest = !g_consoleRadioTest; Serial.printf("[radio] bench test %s\n", g_consoleRadioTest ? "ON: cycling on the cable, screen or not" : "OFF"); continue; }
         if (strcasecmp(line, "PMU") == 0)    { g_consolePmu = true; continue; }
         if (strcasecmp(line, "RTC") == 0)    { g_consoleRtc = true; continue; }
@@ -584,6 +625,19 @@ void pollSerial() {
             ESP.restart();
         }
         if (strncasecmp(line, "RADIO", 5) == 0) { radioReport(strcasestr(line, "SCAN") != nullptr); continue; }
+#if SQW_WIFI_5G
+        // BAND: which WiFi bands the sniffer sweeps. BAND 2 is 2.4 GHz only,
+        // as on every other board; BAND BOTH adds the 5 GHz slice. Saved.
+        if (strncasecmp(line, "BAND", 4) == 0) {
+            const char* arg = line + 4;
+            while (*arg == ' ') arg++;
+            if (strcasecmp(arg, "2") == 0 || strcasecmp(arg, "2.4") == 0) { Settings::setWifi5(false); setWifi5Enabled(false); }
+            else if (strcasecmp(arg, "BOTH") == 0 || strcasecmp(arg, "5") == 0) { Settings::setWifi5(true); setWifi5Enabled(true); }
+            else if (*arg) { Serial.println("[radio] BAND 2 (2.4 GHz only) or BAND BOTH"); continue; }
+            Serial.printf("[radio] band: %s\n", Settings::wifi5() ? "2.4 + 5 GHz" : "2.4 GHz only");
+            continue;
+        }
+#endif
 #endif
         if (strncasecmp(line, "ZONE ", 5) == 0) {
             // ZONE US EASTERN, or ZONE 4: the flasher sends the name it
@@ -738,6 +792,41 @@ void pollSerial() {
         } else if (strncasecmp(line, "UPDATE STOP", 11) == 0) {
             g_benchUpdateStop = true;
             Serial.println("[bench] cancelling the update");
+        } else if (strncasecmp(line, "REMOTE UPDATE", 13) == 0) {
+            // SECURITY > REMOTE UPDATE, for a squad update sent to a board nobody is at.
+            const char* a = line + 13;
+            while (*a == ' ') a++;
+            const bool want = strcasecmp(a, "OFF") != 0;
+            if (Settings::remoteUpdate() != want) Settings::toggleRemoteUpdate();
+            Serial.printf("[bench] remote update %s\n", Settings::remoteUpdate() ? "on" : "off");
+#if SQUACH_MESH
+        } else if (strncasecmp(line, "SQUAD JOIN ", 11) == 0) {
+            // Everything the SQUACHMESH pages would switch on, and a phrase,
+            // for a bench board nobody is standing at. The phrase is not echoed.
+            Settings::setMeshConsent(true);
+            if (!Settings::meshDetect())   Settings::cycleMeshDetect();
+            if (!Settings::meshTransmit()) Settings::cycleMeshTransmit();
+            if (!Settings::messagesOn())   Settings::toggleMessages();
+            if (!Settings::meshHeadsUp())  Settings::toggleMeshHeadsUp();
+            char ph[64]; size_t n = 0;
+            for (const char* a = line + 11; *a && n < sizeof ph - 1; a++) ph[n++] = (char)toupper((unsigned char)*a);
+            while (n && ph[n - 1] == ' ') n--;
+            ph[n] = 0;
+            const bool ok = MeshTalk::setPhrase(ph);
+            Serial.printf("[squad] bench join: phrase %s, detect %d transmit %d messages %d heads-up %d\n",
+                          ok ? "set" : "REFUSED", Settings::meshDetect(), Settings::meshTransmit(),
+                          Settings::messagesOn(), Settings::meshHeadsUp());
+        } else if (strncasecmp(line, "SAY ", 4) == 0) {
+            const int r = (int)MeshTalk::send((uint8_t)atoi(line + 4), millis());
+            Serial.printf("[squad] bench say %d -> %d (0 = sent)\n", atoi(line + 4), r);
+        } else if (strncasecmp(line, "TEXT ", 5) == 0) {
+            char t[52]; size_t n = 0;
+            for (const char* a = line + 5; *a && n < sizeof t - 1; a++) t[n++] = (char)toupper((unsigned char)*a);
+            t[n] = 0;
+            Serial.printf("[squad] bench text -> %d (0 = sent)\n", (int)MeshTalk::sendText(t, millis()));
+        } else if (strncasecmp(line, "EMOTE ", 6) == 0) {
+            Serial.printf("[squad] bench emote -> %d (0 = sent)\n", (int)MeshTalk::sendEmote((uint8_t)atoi(line + 6), 0, millis()));
+#endif
         } else if (strncasecmp(line, "CRASH ME", 8) == 0) {
             // Bench builds only (-DBENCH_TOOLS=1): a deliberate panic, to
             // prove the crash history catches one.

@@ -14,6 +14,6 @@ Run tools from the repository root unless their help says otherwise. End users c
 | `check_language_content.py`, `build_languages.py` | Validate and generate offline language content |
 | `sign_firmware.py`, `publish_release.py` | Signed firmware and checked release publication |
 | `size_audit.py` | Generate local resource reports; output is not committed |
-| `ttf2gfx.py`, `verify_remmy_asset.py`, `pack_installation_guide.py` | Asset generation and integrity utilities |
+| `ttf2gfx.py`, `pack_installation_guide.py` | Asset generation and integrity utilities |
 
 Start with [Build instructions](../docs/BUILD.md), [installation](../docs/user/INSTALLATION.md), or [research contributions](../CONTRIBUTING.md).

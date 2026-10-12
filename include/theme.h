@@ -135,7 +135,12 @@ namespace Theme {
     static const int TITLE_ICON_W      = 28;
     static const int TITLE_ICON_BAND_H = 20;
     static const int LIST_TOP       = 16;   // under the corner icons
-    static const int LIST_HEADING_H = 14;   // the Settings group header's height
+    // The Settings group header's height: 14, or 20 on the large panels,
+    // whose heading is set at size 2 (drawListHeading).
+    int listHeadingH();
+    // Where text in the current font sits to share the heading's line: a
+    // count or a status at the far end of it.
+    int listHeadingY(TFT_eSPI& t);
     static const int PINNED_BACK_H  = 26;
     // ...and how tall it actually is on THIS panel. The strip is the bottom
     // button on every menu screen, and those rows draw a size bigger on a
@@ -144,7 +149,45 @@ namespace Theme {
     // Takes a width rather than a display because two of its callers are hit
     // tests that are handed a screen size and nothing else.
     int pinnedBackH(int panelW);
+    // A screen under 200 rows (the StickS3's 240x135): lists keep their
+    // letters and give up the air round them -- a thinner BACK strip and
+    // tighter rows, so four fit where two did. Set by uiMenuTextSize() from
+    // the sprite it is handed, or outright by a board that knows.
+    // The Cardputer's EXT SCREEN: with the moving background on the big
+    // panel, a compact screen's backdrop is one still picture instead -- a
+    // menu that never changes is a menu that is never re-sent.
+    void setStillBackdrop(bool on);
+    // Draws it and says so, when it is on and `t` is a compact screen; the
+    // caller skips its own moving background then.
+    bool stillBackdrop(TFT_eSPI& t);
+    void setCompact(bool on);
+    bool compact();
+    // A panel 320 or more on its SHORT side: the 3.5" boards, 480x320 either
+    // way up. The chrome that was drawn for 320x240 -- the XP tiles, his
+    // bubble, the pets -- is drawn larger there, because at the same pixel
+    // size it reads as half the size on the bigger glass. Set once at boot.
+    void setLarge(bool on);
+    bool large();
+    int  listRowPad();          // added to the font height for a list row
     void drawListHeading(TFT_eSPI& t, const char* text, uint16_t color);
+
+    // The face for running text: paragraphs, captions, status lines. On the
+    // large panels the 6x8 system font at size 1 reads at half its size on
+    // the 2.8", so there it becomes font 2 -- the bubble's 16-row face, about
+    // as wide per letter, so a wrap fits nearly the same words to a line.
+    // Everywhere else it is the system font at size 1, exactly as before.
+    // Line heights must come from fontHeight() after this, never a literal.
+    void bodyFontOn(TFT_eSPI& t);
+    void bodyFontOff(TFT_eSPI& t);
+    // A vertical distance laid out for the system font's 12-pixel lines,
+    // stretched to the body font's 19 on the large panels; unchanged on the
+    // rest. For the screens that place their lines at y + 12, y + 24, ...
+    int bodyY(int px);
+    // A dialog button's height, one step taller on the large panels.
+    int dialogBtnH(int base);
+    // A headline's text size (digits, YOU'RE IN, a title), one step up on
+    // the large panels. Always with the system font, never font 2.
+    uint8_t upSize(uint8_t base);
 
     // The face speech bubbles are set in. Chosen at compile time by
     // BUBBLE_FONT: 2 is TFT_eSPI's built-in 16-row font, anything else is a
@@ -220,7 +263,8 @@ namespace Theme {
     // Keyed on the WIDTH a line actually has, not on which board it is: the
     // 3.5" in portrait is 320 wide, the same as the 2.8" in landscape, and
     // should read the same there. Every narrower panel gets `base` back and
-    // nothing about it changes.
+    // nothing about it changes. The large panels (Theme::large()) step up in
+    // portrait as well: 320 wide there, but the same 3.5" glass.
     uint8_t uiTextSize(TFT_eSPI& t, uint8_t base);
 
     // Menu and list rows. These are already drawn at size 2 everywhere, and
@@ -261,8 +305,16 @@ namespace Theme {
     // A keyboard key in the payphone's steel: the message board and the
     // WiFi password board share it. `lit` is the key under the finger.
     void drawSteelKey(TFT_eSPI& t, int x, int y, int w, int h, bool lit);
+    // bold: the label struck twice, a pixel apart (the alert's IGNORE).
     void drawWin95Button(TFT_eSPI& t, int x, int y, int w, int h,
-                         const char* label, bool sunken);
+                         const char* label, bool sunken, bool bold = false);
+
+    // A Win95 dialog window, as System Properties draws one: the raised
+    // frame, a navy title bar carrying `title` in font 2 with a close box at
+    // its end, and the grey face inside. Returns the first row under the
+    // title bar. Text inside goes black on W95_FACE. The close box is
+    // decoration: the dialog's own buttons are the way out.
+    int drawWin95Window(TFT_eSPI& t, int x, int y, int w, int h, const char* title);
 
     // Bottom [SCAN][LOG][DESK] button bar, laid out from the current
     // screen width/height so it adapts to any rotation (landscape or
@@ -490,6 +542,9 @@ namespace Theme {
     // TOASTERS background. Same consume-once contract as the werewolf
     // summon above; main.cpp turns it into an outfit unlock.
     bool consumeToasterCatch();
+    // ...and after the player has tapped the same ordinary chrome toaster
+    // three times in a row: it drops out of the flock and becomes the pet.
+    bool consumeToasterPetCatch();
 
     // The Aquarium shark, caught on the SECOND touch: the first one only
     // turns him round. True once per catch, and true again on a catch after
@@ -509,6 +564,18 @@ namespace Theme {
     // consume-once contract as the three above; main.cpp turns it into the
     // PARKA unlock.
     bool consumeLodgeKnock();
+    // True once, after the owl on the FIRE background was tapped while asking
+    // WHAT REEKS?! (every third time he speaks). main.cpp turns it into
+    // Squachy::unlockShambler().
+    bool consumeOwlReek();
+    // Whether the owl still asks WHAT REEKS?! at all: main.cpp passes false
+    // once the SHAMBLER is unlocked, and that slot becomes an ordinary quip.
+    void setOwlAsks(bool on);
+    // TH3 0N3: now and then one glyph in the DIGITAL rain falls red, and a
+    // tap on it sets this once. setRedGlyph(false) stops sending it, once
+    // the coat is earned.
+    bool consumeRedGlyph();
+    void setRedGlyph(bool on);
     // XYZZY, on the TERMINAL background: the terminal types the word now and
     // then, and each tap on it is reported here once -- 1, 2, then 3, which is
     // the YZZERD unlock, then round again. 0 when nothing new was tapped.
@@ -635,6 +702,7 @@ namespace Theme {
     // Long words split at UTF-8 boundaries; caller owns lines[][48].
     uint8_t wrapText(TFT_eSPI& t, const char* text, int maxW,
                      char lines[][48], uint8_t maxLines, const char** remaining = nullptr);
+    uint8_t wrapText(TFT_eSPI& t,const char* text,int maxW,char lines[][80],uint8_t maxLines);
 
     // Modal "MORE INFO" explanation panel -- shared by LOG's confirm
     // panel and ALERT's own MORE INFO button (the two screens are never

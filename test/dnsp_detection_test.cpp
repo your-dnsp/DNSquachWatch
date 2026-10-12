@@ -76,23 +76,32 @@ int main() {
     ck("deauth duration remains correct across millis rollover",strstr(why,"500ms"));
     ck("RSSI is not presented as distance",strstr(DetectionInfo::rssiConfidencePrimer(),"not distance"));
     suite("DNSP decoded-address convention and preservation");
-    uint8_t exact[]={0xAC,0x12,0x34,0,0,0};
-    ck("exact zero suffix matches independently of OUI",Simulation::marked(exact));
-    bool misses=true;for(unsigned i=3;i<6;i++){exact[i]=1;misses&=!Simulation::marked(exact);exact[i]=0;}
+    uint8_t exact[]={0xAC,0x12,0x34,0xDD,0xDD,0xDD};
+    ck("exact DD suffix matches independently of OUI",Simulation::marked(exact));
+    uint8_t prefixTests[][6]={{0,0,0,0xDD,0xDD,0xDD},{0xFF,0xFF,0xFF,0xDD,0xDD,0xDD},{0xB4,0x1E,0x52,0xDD,0xDD,0xDD}};
+    bool prefixes=true;for(auto& m:prefixTests)prefixes&=Simulation::marked(m);
+    ck("any prefix with exact DD suffix is marked",prefixes);
+    uint8_t zero[]={0xAC,0x12,0x34,0,0,0};
+    ck("former zero suffix is ordinary",!Simulation::marked(zero));
+    bool misses=true;for(unsigned i=3;i<6;i++){exact[i]=0;misses&=!Simulation::marked(exact);exact[i]=0xDD;}
     ck("each near miss stays ordinary",misses);
-    uint8_t vendorMac[]={0xB4,0x1E,0x52,1,2,3},testMac[]={0xB4,0x1E,0x52,0,0,0};Confidence aConf,bConf;
+    bool exhaustive=true;for(unsigned i=3;i<6;i++){for(unsigned v=0;v<256;v++){exact[i]=v;exhaustive&=Simulation::marked(exact)==(v==0xDD);}exact[i]=0xDD;}
+    ck("all three suffix positions require exactly DD",exhaustive);
+    char json[256]="{\"type\":\"test\"";
+    ck("zero suffix stays ordinary in exports",Simulation::finishJson(json,sizeof json,strlen(json),zero,AddressRole::TRANSMITTER)&&strstr(json,"\"simulated\":false"));
+    uint8_t vendorMac[]={0xB4,0x1E,0x52,1,2,3},testMac[]={0xB4,0x1E,0x52,0xDD,0xDD,0xDD};Confidence aConf,bConf;
     auto aType=lookupOui(vendorMac,&aConf),bType=lookupOui(testMac,&bConf);
     ck("simulation suffix cannot change OUI classification or confidence",aType==bType&&aConf==bConf);
-    uint8_t unknown[]={0x00,0x00,0x01,0,0,0};ck("marker alone cannot create an OUI match",Simulation::marked(unknown)&&lookupOui(unknown)==DetectionType::UNKNOWN);
+    uint8_t unknown[]={0x00,0x00,0x01,0xDD,0xDD,0xDD};ck("marker alone cannot create an OUI match",Simulation::marked(unknown)&&lookupOui(unknown)==DetectionType::UNKNOWN);
 
-    uint8_t payload[]={0xAC,0x12,0x34,1,2,3,0,0,0};
-    ck("unrelated payload zeros never mark the decoded address",!Simulation::marked(payload));
+    uint8_t payload[]={0xAC,0x12,0x34,1,2,3,0xDD,0xDD,0xDD};
+    ck("unrelated payload DD bytes never mark the decoded address",!Simulation::marked(payload));
     char sub[48];Simulation::subtags(sub,sizeof sub,"friend",exact);
     ck("automatic subtag preserves user text",!strcmp(sub,"friend / SIMULATED"));
     Simulation::subtags(sub,sizeof sub,"friend / SIMULATED",exact);
     ck("automatic subtag is not duplicated",!strcmp(sub,"friend / SIMULATED"));
     Simulation::subtags(sub,sizeof sub,"friend",payload);ck("ordinary subtag unchanged",!strcmp(sub,"friend"));
-    row=sample(0);row.addressRole=AddressRole::BSSID;seen=row;seen.conf=Confidence::HIGH_CONF;seen.signature=42;
+    row=sample(0);memcpy(row.mac,exact,6);row.addressRole=AddressRole::BSSID;seen=row;seen.conf=Confidence::HIGH_CONF;seen.signature=42;
     mergeObservation(row,seen,1800);q.clear();q.push(row);q.pop(out,1800);
     ck("merge and queued snapshot keep classification and provenance",Simulation::marked(out)&&out.type==DetectionType::FLOCK&&out.conf==Confidence::HIGH_CONF&&out.signature==42&&out.addressRole==AddressRole::BSSID);
     seen=row;seen.conf=Confidence::LOW_CONF;seen.evidence=MatchEvidence::OUI;seen.addressRole=AddressRole::TRANSMITTER;mergeObservation(row,seen,1900);

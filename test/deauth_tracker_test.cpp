@@ -90,9 +90,11 @@ int main() {
     ck("tracker has a fixed modest RAM bound",DeauthBurstTracker::TABLE_CAP==12&&DeauthBurstTracker::tableBytes()<1600);
     suite("Simulation follows the claimed transmitter only");
     DeauthBurstTracker ordinarySource, simulatedSource;DeauthBurstResult a{},s{};
-    for(unsigned i=0;i<6;i++){a=ordinarySource.note(frame(1,0,0),30000+100*i);s=simulatedSource.note(frame(0,1,9),30000+100*i);}
-    ck("zero-suffix receiver and BSSID cannot mark ordinary source",a.alert&&!Simulation::marked(a.source));
+    auto ordinary=frame(1);ordinary.destination[3]=ordinary.destination[4]=ordinary.destination[5]=0xDD;ordinary.bssid[3]=ordinary.bssid[4]=ordinary.bssid[5]=0xDD;
+    auto marked=frame(0);marked.source[3]=marked.source[4]=marked.source[5]=0xDD;
+    for(unsigned i=0;i<6;i++){a=ordinarySource.note(ordinary,30000+100*i);s=simulatedSource.note(marked,30000+100*i);}
+    ck("DD-suffix receiver and BSSID cannot mark ordinary source",a.alert&&!Simulation::marked(a.source));
     ck("marked transmitter still requires full ordinary six-frame burst",s.alert&&s.count==6&&Simulation::marked(s.source));
-    ck("marked source retains ordinary cooldown",!simulatedSource.note(frame(0),30600).alert);
+    ck("marked source retains ordinary cooldown",!simulatedSource.note(marked,30600).alert);
     return report();
 }

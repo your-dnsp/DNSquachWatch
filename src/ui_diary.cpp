@@ -29,14 +29,15 @@ static void formatDuration(uint32_t ms, char* buf, size_t n) {
 }
 
 static void drawStat(TFT_eSPI& t, int w, int y, int h, const char* label, const char* value) {
-    t.setTextSize(1);
+    Theme::bodyFontOn(t);
     t.setTextColor(Theme::CYAN, Theme::BG);
-    t.setCursor(8, y + (h - t.fontHeight(1)) / 2);
+    t.setCursor(8, y + (h - t.fontHeight()) / 2);
     t.print(label);
     t.setTextColor(Theme::WHITE, Theme::BG);
     int vw = t.textWidth(value);
-    t.setCursor(w - 8 - vw, y + (h - t.fontHeight(1)) / 2);
+    t.setCursor(w - 8 - vw, y + (h - t.fontHeight()) / 2);
     t.print(value);
+    Theme::bodyFontOff(t);
     t.drawFastHLine(4, y + h - 1, w - 8, Theme::PURPLE);
 }
 
@@ -50,7 +51,10 @@ void uiDiaryTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
     const int top  = 16;
     // 22 rather than 24: nine rows plus the hint is 226px, which fits a
     // 240px panel. At 24 the ninth row pushed the hint off the bottom.
-    const int rowH = 22;
+    // Thirteen rows a stat on a compact screen (240x135): all nine fit, with
+    // no room for the hint, which the cursor makes unneeded there.
+    // 30 on the large panels, whose rows are the 16-row body font.
+    const int rowH = Theme::compact() ? 13 : Theme::large() ? 30 : 22;
     char buf[24];
 
     snprintf(buf, sizeof(buf), "%lu", (unsigned long)eng.lifetimeTotal());
@@ -100,13 +104,15 @@ void uiDiaryTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
     // Hint, pulsing gently so it doesn't just look like inert label text.
     // Between 65% and 100% of CYAN: the old 10-70% of VAPOR_BLUE rounded to
     // nearly nothing in the frame buffer, in every theme.
+    if (Theme::compact()) return;
     float pulse = 0.825f + 0.175f * sinf((float)(now % 1600) / 1600.0f * 6.2831853f);
     uint16_t col = Theme::blend(Theme::BG, Theme::CYAN, (uint16_t)(pulse * 255.0f));
-    t.setTextSize(1);
+    Theme::bodyFontOn(t);
     t.setTextColor(col, Theme::BG);
     const char* hint = "tap anywhere to go back";
     int hw = t.textWidth(hint);
-    t.setCursor((w - hw) / 2, top + 9 * rowH + 8);
+    t.setCursor((w - hw) / 2, top + 9 * rowH + (Theme::large() ? 4 : 8));
     t.print(hint);
+    Theme::bodyFontOff(t);
 }
 

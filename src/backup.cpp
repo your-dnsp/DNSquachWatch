@@ -1,3 +1,8 @@
+#if defined(DNSP_SD_COMPAT)
+#include <stdint.h>
+extern "C" bool dnsp_sd_cached_space(uint64_t*,uint64_t*);
+namespace Backup { bool cachedCardSpace(uint64_t* total,uint64_t* used){return dnsp_sd_cached_space(total,used);} }
+#endif
 #include "firmware_version.h"
 #include "simulation.h"
 #include "care.h"
@@ -143,7 +148,13 @@ bool start(bool card,uint32_t now,const DetectionEngine* engine){
  if(!InstallationGuide::write([](void*,const uint8_t*,size_t){return true;},nullptr)){strcpy(message,"Install verified DNSP Content/v1.5 on microSD before backup.");return false;}
  part=esp_ota_get_running_partition();esp_app_desc_t desc;
  if(!part||esp_ota_get_partition_description(part,&desc)!=ESP_OK){strcpy(message,"Running application could not be identified.");return false;}
+#if defined(DNSP_SD_COMPAT)
+ uint64_t total=0,used=0;
+ extern bool cachedCardSpace(uint64_t*,uint64_t*);
+ if(cachedCardSpace(&total,&used) && total<used+part->size+32768){strcpy(message,"Not enough free space for a verified backup.");return false;}
+#else
  if(SD.totalBytes()<SD.usedBytes()+part->size+32768){strcpy(message,"Not enough free space for a verified backup.");return false;}
+#endif
  // Never overwrite any existing slot, including an interrupted attempt.
  bool freeSlot=false;for(unsigned i=0;i<10;i++){snprintf(dir,sizeof dir,"/dnsp-backup-%u",i);if(!SD.exists(dir)){selected=i;freeSlot=true;break;}}
  if(!freeSlot){strcpy(message,"All 10 slots used. Copy backups to a computer to free a slot.");return false;}
@@ -185,7 +196,7 @@ static __attribute__((noinline)) void copyTick(){
  // The app backup deliberately excludes bootloader, NVS, keys, history and
  // partition-table writes. Recovery uses the matching release kit on a PC.
  char manifest[1024];int n=snprintf(manifest,sizeof manifest,
-  "DNSP_BACKUP_V2\nfirmware=DNSquachWatch v" FIRMWARE_VERSION "\nbase=SquachWatch v1.28.0\nbuild=%s\napp_bytes=%lu\nsource_address=0x%lx\nsha256=%s\napp_only=true\npartition_sector_sha256=%s\npreferences=public-v3\noperational_state=operational-state.bin\nlocation_labels=location-labels.bin\nreadable_history=complete\ncurrent_log=current-log.csv\ncurrent_log_rows=%u\nUse the matching board release kit and DNSQUACHWATCH INSTALLATION.txt. Hash is integrity, not authenticity.\nPINs, Duress state and authentication secrets are never included. Device identifiers, manual location labels, associated Wi-Fi network names, user labels and active Watch/Hunt targets are included. Existing microSD research files are not duplicated. Historical logs are readable and are not replayed during restore.\n",
+  "DNSP_BACKUP_V2\nfirmware=DNSquachWatch v" FIRMWARE_VERSION "\nbase=SquachWatch v" DNSP_BASE_VERSION "\nbuild=%s\napp_bytes=%lu\nsource_address=0x%lx\nsha256=%s\napp_only=true\npartition_sector_sha256=%s\npreferences=public-v3\noperational_state=operational-state.bin\nlocation_labels=location-labels.bin\nreadable_history=complete\ncurrent_log=current-log.csv\ncurrent_log_rows=%u\nUse the matching board release kit and DNSQUACHWATCH INSTALLATION.txt. Hash is integrity, not authenticity.\nPINs, Duress state and authentication secrets are never included. Device identifiers, manual location labels, associated Wi-Fi network names, user labels and active Watch/Hunt targets are included. Existing microSD research files are not duplicated. Historical logs are readable and are not replayed during restore.\n",
   OtaCore::buildName(),(unsigned long)part->size,(unsigned long)part->address,hex,layoutHash,(unsigned)logRows);
  ok=ok&&writeInstallationGuide();
  ok=ok&&n>0&&size_t(n)<sizeof manifest&&writeFile("COMPLETE.txt",manifest,n);

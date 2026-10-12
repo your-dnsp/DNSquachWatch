@@ -129,18 +129,22 @@ void uiHuntTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool adva
     // and ui_watchalert.cpp already use -- his normal idle tick, just
     // given a small box instead of the whole screen. scanningFx ties
     // his little "ping" animation to the hunting theme.
-    const int sqH = 44;
-    Squachy::tick(t, w / 2, bodyTop, sqH, now, advance, 0.6f, true);
+    // A compact screen (240x135) puts him in a column on the left and the
+    // gauge in the rest, centred in it, instead of one above the other.
+    const bool tiny = Theme::compact();
+    const int colX = tiny ? 70 : 0, colW = w - colX;
+    const int sqH = tiny ? bodyBottom - bodyTop - 6 : 44;
+    Squachy::tick(t, tiny ? 36 : w / 2, bodyTop, sqH, now, advance, 0.6f, true);
 
-    t.setTextSize(1);
+    Theme::bodyFontOn(t);
     t.setTextWrap(false);
     t.setTextColor(Theme::CYAN, Theme::BG);
-    int labelY = bodyTop + sqH + 2;
+    int labelY = tiny ? bodyTop + 2 : bodyTop + sqH + 2;
     char pv[40];
     const char* label = Privacy::name(eng.huntLabel(), pv, sizeof pv);
     int lw = t.textWidth(label);
-    int maxLw = w - 16;
-    t.setCursor((w - (lw < maxLw ? lw : maxLw)) / 2, labelY);
+    int maxLw = colW - 16;
+    t.setCursor(colX + (colW - (lw < maxLw ? lw : maxLw)) / 2, labelY);
     t.print(label);
 
     uint8_t rssiN = eng.huntRssiCount();
@@ -160,14 +164,15 @@ void uiHuntTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool adva
         Squachy::huntReaction(Squachy::HuntMoment::STALLED);
     }
 
-    int textBlockH = 36;
-    int gaugeTop = labelY + 12;
+    // Taller on the large panels: a size-3 readout over a body-font trend.
+    int textBlockH = tiny ? 26 : Theme::large() ? 52 : 36;
+    int gaugeTop = labelY + t.fontHeight() + 4;
     int gaugeBottom = bodyBottom - textBlockH;
     int r = gaugeBottom - gaugeTop;
-    int maxRw = (w - 40) / 2;
+    int maxRw = (colW - 40) / 2;
     if (r > maxRw) r = maxRw;
     if (r < 30) r = 30;
-    int cx = w / 2, cy = gaugeBottom;
+    int cx = colX + colW / 2, cy = gaugeBottom;
 
     float frac = 0.0f;
     int8_t latestRssi = RSSI_LO;
@@ -210,10 +215,11 @@ void uiHuntTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool adva
     char rbuf[16];
     if (rssiN > 0) snprintf(rbuf, sizeof(rbuf), "%d dBm", (int)latestRssi);
     else           snprintf(rbuf, sizeof(rbuf), "-- dBm");
-    t.setTextSize(2);
+    t.setTextFont(1); t.setTextSize(Theme::upSize(2));
     int rw = t.textWidth(rbuf);
     t.setTextColor(Theme::WHITE, Theme::BG);
-    t.setCursor((w - rw) / 2, cy + 8);
+    const int readY = tiny ? cy + 4 : cy + 8;
+    t.setCursor(colX + (colW - rw) / 2, readY);
     if (!caught) t.print(rbuf);
     // fontHeight() no-arg reads back the size-2 metrics just set above
     // -- fontHeight(int) takes a FONT INDEX, not a size multiplier, and
@@ -242,7 +248,7 @@ void uiHuntTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool adva
     if (caught) {
         t.setTextSize(2);
         const int cw2 = t.textWidth("CAUGHT!") + 16, ch2 = t.fontHeight() + 4;
-        const int cx2 = (w - cw2) / 2, cy2 = cy + 6;
+        const int cx2 = colX + (colW - cw2) / 2, cy2 = readY - 2;
         t.fillRect(cx2, cy2, cw2, ch2, Theme::GREEN);
         t.setTextColor(Theme::BLACK, Theme::GREEN);
         t.setCursor(cx2 + 8, cy2 + 2);
@@ -250,11 +256,12 @@ void uiHuntTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool adva
         trend = rbuf;
         trendColor = Theme::GREEN;
     }
-    t.setTextSize(1);
+    Theme::bodyFontOn(t);
     int tw = t.textWidth(trend);
     t.setTextColor(trendColor, Theme::BG);
-    t.setCursor((w - tw) / 2, cy + 8 + readoutH + 2);
+    t.setCursor(colX + (colW - tw) / 2, readY + readoutH + (tiny ? 1 : 2));
     t.print(trend);
+    Theme::bodyFontOff(t);
 
     int bx, by, bw, bh;
     backButtonRect(w, h, bx, by, bw, bh);

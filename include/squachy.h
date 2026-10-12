@@ -62,8 +62,23 @@ namespace Squachy {
     void grabTo(int x, int y);
 
     // Let go. He falls back to where he was standing and lands in a
-    // squash. Safe to call when nothing was ever grabbed.
+    // squash -- or, when the finger was still moving fast as it let go, he
+    // is thrown: he flies off with its speed, bounces off the floor and the
+    // edges, sits there a moment and walks back. Safe to call when nothing
+    // was ever grabbed.
     void release();
+    // A throw with no finger to measure, for the boards with buttons: a
+    // press-and-hold on him, let go, sends him up and off to one side.
+    void toss(int8_t dir);
+    // In the air after a throw, or sitting dazed, or walking back from it.
+    bool thrown();
+    // Where his speech bubble rises to, when it rises: a screen row, or -1
+    // for the usual BUBBLE_RISE above his band. The main screen puts his
+    // band under the counter tiles and sends the bubble back up to row 1,
+    // above them, where it always sat.
+    void setBubbleRiseTo(int y);
+    // His own bubble as drawn last frame, if he had one up.
+    bool ownBubble(int& x, int& y, int& w, int& h);
 
     // A background telling him something is about to hit him, in screen
     // coordinates -- the reverse of lastFootprint(), which backgrounds
@@ -106,6 +121,9 @@ namespace Squachy {
     // about, so without this there is no way to see the set. Any tap
     // ends it; it also ends on its own after the last pose.
     void startShowOff();
+    // His wander, now, towards dir (+1 right, -1 left): edge to edge and back,
+    // as the idle roll starts it. For the emulator's motion checks.
+    void wanderNow(int8_t dir);
     // A percentage on every duration of his. See setTempo() in squachy.cpp.
     void setTempo(uint8_t pct);
     void stopShowOff();
@@ -206,10 +224,60 @@ namespace Squachy {
 
     // Which one. There are two now, so the Settings row cycles rather than
     // toggles: OFF, then each companion in turn.
-    enum class PetId : uint8_t { OFF = 0, SHAGGY, YETI, COUNT };
+    enum class PetId : uint8_t { OFF = 0, SHAGGY, YETI, CLIPPY, TOASTER, BALL, COUNT };
     PetId       petChoice();
     const char* petName();     // for the row's value column
     void        cyclePet();
+
+    // C1iPPY, the bent paperclip, unlocked on his own. Backspace ten times in
+    // a row on the name or message keyboard (or, on the boards with no
+    // keyboard, Settings opened five times in thirty seconds). He is put on
+    // as the pet the moment he is earned, and introduces himself on CLEAR.
+    bool clippyUnlocked();
+    void unlockClippy(const char* why);
+    bool anyPetUnlocked();               // the Settings PET row's test
+    void noteBackspace();
+    void noteTyped();
+    void noteSettingsOpened();
+    // His first line after the unlock, handed over once; nullptr otherwise.
+    const char* takeClippyIntro();
+
+    // T0@$TY, the brave little toaster, unlocked on his own: tap the same
+    // flying toaster three times on the TOASTERS background and he drops out
+    // of the flock. Put on the moment he is earned, like C1iPPY.
+    bool toasterUnlocked();
+    void unlockToaster(const char* why);
+    const char* takeToasterIntro();
+    // The ball and chain, as a pet: earned by serving a whole sentence. Out
+    // of custody he still sits chained to the ankle and still stops a throw
+    // short; he just has different things to say about it.
+    bool ballUnlocked();
+    void unlockBall();
+    bool ballPetOn();          // chosen, earned, and not already out as the jailer
+    // Where his mouth is this frame, for a slice of toast aimed at it; false
+    // before he has ever been drawn. And the bite: a hop and a word, a dance
+    // for the rare golden slice.
+    bool mouthPoint(int& x, int& y);
+    void eatToast(bool golden);
+
+    // Cell block. Throw a pet ten times inside a minute and it is taken into
+    // custody: Squachy does ten minutes in STRIPES, chained to a ball that
+    // talks (Pet draws the ball). Outfit and Pet are locked while he serves;
+    // the time left is saved, so a reboot does not let him out. When it is
+    // served the stripes are his for good.
+    bool     jailed();
+    uint32_t jailLeftMs();
+    void     jailStart();
+    void     jailFree();                 // console FREE, and the clock running out
+    bool     takeJailFreed();            // once, when he walks out: the ball says goodbye
+    // Where the chain hooks onto his ankle this frame; false while he is
+    // not wearing the cuff.
+    bool     chainPoint(int& x, int& y);
+    // The last time the chain stopped a throw short, 0 if never.
+    uint32_t yankedAt();
+    // A thrown pet has just hit the floor at screen x. Close to his feet and
+    // he flinches and says so; anywhere else, nothing.
+    void petLandedAt(int x);
 
     // True while a finger is carrying him, or he is dangling after being
     // dropped. The pet checks it: perching on a head that is itself flying
@@ -251,6 +319,24 @@ namespace Squachy {
     // times in a row XYZZY has been tapped on the TERMINAL background. One
     // and two get "nothing happens"; three unlocks the outfit.
     void magicWord(uint8_t said);
+    // SHAMBLER: main.cpp calls this when the owl on the FIRE background is
+    // tapped while it asks WHAT REEKS?! -- see Theme::consumeOwlReek(). Not a
+    // no-op once earned: he answers the owl either way.
+    void unlockShambler();
+    // Whether the SHAMBLER is wearable (earned, or the master unlock). The
+    // owl stops asking WHAT REEKS?! once it is -- see Theme::setOwlAsks().
+    bool shamblerUnlocked();
+    // TH3 0N3: main.cpp calls this when the one red glyph in the DIGITAL rain
+    // is tapped -- see Theme::consumeRedGlyph().
+    void unlockTh3();
+    // Whether TH3 0N3 is wearable. The rain stops sending its red glyph once
+    // it is -- see Theme::setRedGlyph().
+    bool th3Unlocked();
+    // Whether he is wearing it right now (the payphone rings for him).
+    bool th3Wearing();
+    // The main screen, every frame: whether something serious is nearby. His
+    // lenses run red while it is, when he is wearing TH3 0N3.
+    void setNearbyLit(bool on);
 
     // Unlock announcements. Any outfit that becomes available -- by
     // crossing its lifetime-detection threshold, or by the werewolf
@@ -276,6 +362,11 @@ namespace Squachy {
     // own colours. Without it a guest wears the host's shades, which reads
     // as a reflection rather than as somebody else. -1 clears it.
     void setShadesPreview(int8_t idx);
+
+    // And for the Legend's aura: a visitor who has it lit arrives in it, and
+    // one who does not never borrows the host's. 1 on, 0 off, -1 clears it
+    // (and our own Squachy goes back to his own rule).
+    void setAuraPreview(int8_t on);
 
     // A name sticker on the next body drawn, centred on the torso, moving
     // with him. Set it, draw, clear it with nullptr -- the same contract as
@@ -305,6 +396,13 @@ namespace Squachy {
     // Full-scene callers already erased last frame; don't erase over visitors
     // drawn earlier in this frame. Restore false on leaving the draw scope.
     void bubbleSceneRepainted(bool value);
+
+    // While on, a cameo (drawWaving) keeps its speech bubble instead of
+    // drawing it, and drawDeferredBubble() draws it later: the crowd draws the
+    // visitor, then our own Squachy in the middle seat, then the visitor's
+    // words on top, so ours never stands over them.
+    void deferBubble(bool on);
+    void drawDeferredBubble(TFT_eSPI& t, uint32_t now);
 
 #if SQUACH_MESH
     // Which beat of a visit a line is wanted for. The pools live in
@@ -342,6 +440,16 @@ namespace Squachy {
     // the top is the better trade than one Squachy -- and so all of them --
     // coming out smaller because of a hat.
     void setCompany(bool on);
+    // A multiplier on his size for the next tick() on a big panel, past the
+    // SIZE setting, held by the panel's width (half of it with company) and
+    // the height of the band he is handed. 1 is today's size. The main
+    // screen sets it for the 3.5" in portrait (ui_clear.cpp) and puts it
+    // back to 1 after; nothing else ever touches it.
+    void setSizeBoost(float k);
+    // How much of the panel's width each of them may take with company, for
+    // the boost's width limit. 0.5 by default: half each. The 3.5" in
+    // portrait asks for more and stands them closer, arms overlapping.
+    void setCompanyShare(float share);
 
     // True while the OTHER one is the one talking. It buys a slow nod, which
     // is the difference between a Squachy standing near a conversation and a

@@ -47,11 +47,30 @@ static const uint8_t VERSION = 1;
 // the settings row it lives in on its own device.
 static const size_t NAME_LEN = 12;
 
-// The two lengths a valid payload can have. Nothing in between is legal --
+// The lengths a valid payload can have. Nothing in between is legal --
 // a custom-name payload is all twelve name bytes or it is malformed.
 static const size_t LEN_INDEXED = 8;
 static const size_t LEN_NAMED   = LEN_INDEXED + NAME_LEN;   // 20
-static const size_t LEN_MAX     = LEN_NAMED;
+
+// A PHONE. The companion app visits boards exactly like a board does, with
+// one difference it cannot help: Android hides a phone's own Bluetooth
+// address from the app, and that address is what a message frame's nonce
+// is built from (meshmsg.h). So a phone carries an identity of its own --
+// four random bytes, picked once and kept -- in its presence advert, and a
+// board that sees it builds the frame nonce from phoneMac() instead of the
+// address it heard the frame from. The frames themselves are unchanged:
+// every kind a board sends, a phone sends the same way.
+//
+// The flag bit is what makes this safe for older boards: they refuse a
+// non-zero flags byte, so a phone is invisible to them rather than misread.
+static const uint8_t FLAG_PHONE = 0x01;
+static const size_t  PHONE_ID_LEN = 4;
+static const size_t  LEN_INDEXED_PHONE = LEN_INDEXED + PHONE_ID_LEN;  // 12
+static const size_t  LEN_NAMED_PHONE   = LEN_NAMED + PHONE_ID_LEN;    // 24
+static const size_t  LEN_MAX     = LEN_NAMED_PHONE;
+// The six bytes a phone's frames are sealed under: a locally-administered
+// prefix no ESP32 ever has, then the identity. Both ends build it this way.
+void phoneMac(const uint8_t id[PHONE_ID_LEN], uint8_t out[6]);
 
 // ---------------------------------------------------------------------
 // The appearance word. Field order matches the byte map in the plan doc.
@@ -61,7 +80,8 @@ static const size_t LEN_MAX     = LEN_NAMED;
 //   bits  6..7   shades index     (2)  --  4 in use
 //   bit      5   custom-name flag
 //   bit      4   outfit index, bit 4: OVER 9000 made seventeen
-//   bits  0..3   spare            (4)
+//   bit      3   the Legend's aura is lit
+//   bits  0..2   spare            (3)
 //
 // SIZE is deliberately NOT here. Both Squachys are drawn at SMALL while
 // they are meeting -- that is what makes two of them fit -- so the peer's
@@ -73,7 +93,7 @@ static const size_t LEN_MAX     = LEN_NAMED;
 // 14 when the shark suit made it 15, and every visiting shark was folded
 // back to index 0 -- NONE -- on arrival.
 static const uint8_t  NICK_N   = 10;
-static const uint8_t  OUTFIT_N = 17;
+static const uint8_t  OUTFIT_N = 20;
 static const uint8_t  SHADE_N  = 4;
 
 static const uint8_t  NICK_SHIFT   = 12, NICK_BITS   = 4;
@@ -84,6 +104,10 @@ static const uint16_t CUSTOM_BIT   = 1u << 5;
 // spare bits, so it reads outfit 16 as 0 and draws a visitor in OVER 9000 as
 // plain Squachy: the wrong hat, which is the failure this format chose.
 static const uint16_t OUTFIT_HI_BIT = 1u << 4;
+// The Legend's aura, lit: he earned it, so he gets to walk into somebody
+// else's screen wearing it. Another spare bit, and a board from before it
+// draws him without the fire, which is what it did anyway.
+static const uint16_t AURA_BIT = 1u << 3;
 
 struct Peer {
     uint8_t nick;              // index into the shared NICKNAMES table
@@ -91,6 +115,10 @@ struct Peer {
     uint8_t shade;             // index into the shared SHADE_NAMES table
     bool    custom;            // true when `name` was typed, not indexed
     char    name[NAME_LEN + 1];// NUL-terminated; empty unless custom
+    bool    aura;              // the Legend's aura is lit (last, so the
+                               // five-field initialisers leave it off)
+    bool    phone;             // the companion app, with an identity below
+    uint8_t id[PHONE_ID_LEN];
 };
 
 // Builds the advertised payload. Returns the number of bytes written, which

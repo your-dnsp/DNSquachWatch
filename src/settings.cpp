@@ -23,9 +23,11 @@ static bool        s_meshTransmit = false;
 static bool        s_meshConsent  = false;
 static bool        s_phoneQwerty  = false;
 static bool        s_messagesOn   = false;
+static bool        s_meshHeadsUp  = true;
 static bool        s_msgTutor     = false;
 #endif
 static bool        s_infoPrimerShown = false;
+static bool        s_pocketNoteShown = false;
 // Locked on the watch: a square screen with a crown has one way up, and a
 // corner button that spins it is a thing to hit by accident on a wrist.
 // Locked on the CrowPanel too, for a different reason: an RGB panel has no
@@ -38,6 +40,7 @@ static const bool DEFAULT_ROTATION_LOCK = true;
 #endif
 static bool        s_rotationLocked = DEFAULT_ROTATION_LOCK;
 static bool        s_aura = true;
+static bool        s_detXp = true;
 // Eight is the ceiling because the radio's own squad ring holds eight (see
 // SQUAD_N in mesh.cpp). A menu that offered thirty would be offering something
 // the hardware cannot hear: the ninth board in the room evicts the first, and
@@ -128,6 +131,9 @@ static const bool DEFAULT_POWER_SAVER = true;
 static const bool DEFAULT_POWER_SAVER = false;
 #endif
 static bool     s_powerSaver   = DEFAULT_POWER_SAVER;
+#if SQW_WIFI_5G
+static bool     s_wifi5        = true;
+#endif
 static uint8_t  s_scrTimeoutIx = 2;    // 30 s
 static uint8_t  s_dimLevel     = 16;   // ~6%, dim but not off
 static uint8_t  s_idleFpsIx    = 2;    // 12 fps
@@ -148,6 +154,7 @@ static bool     s_wakeOnAlert  = true;
 static bool     s_quietTrack   = true;
 static bool     s_privacy      = false;
 static bool s_autoHistory=true;
+static bool s_extScreen=false;
 struct __attribute__((packed)) RunEntry { uint16_t boot, minutes; };
 static const uint8_t RUNS_N = 8;
 static RunEntry  s_runs[RUNS_N] = {};
@@ -172,6 +179,9 @@ static uint8_t  s_radioDutyIx  = RADIO_DUTY_DEFAULT;
 // Opt in. The one setting here that can make a sound, so it starts off and
 // stays off until somebody finds the row. Only the CrowPanel 7 shows it.
 static bool     s_buzzer       = false;
+// The speaker (sound.h): off until somebody finds the row, MED when they do.
+static uint8_t  s_soundMode    = 0;    // 0 OFF, 1 ALERTS, 2 ALL
+static uint8_t  s_soundVol     = 25;   // percent: the speaker is loud, so it starts low
 
 // ---- LoRa -----------------------------------------------------------------
 // SURVEY by default: the detector posture, everything in the band. FOCUS is
@@ -250,6 +260,7 @@ bool     quietTrackers()    { return s_quietTrack; }
 bool autoHistory(){return s_autoHistory;}
 void toggleAutoHistory(){s_autoHistory=!s_autoHistory;s_prefs.putBool("autoHistory",s_autoHistory);}
 bool     privacyMode()      { return s_privacy; }
+bool     extScreen()        { return s_extScreen; }
 bool     watchPlus()        { return s_watchPlus; }
 bool     buzz()             { return s_buzzMode != 0; }
 // Only while POWER SAVER is on. Either RADIO DUTY row (the Power screen,
@@ -278,6 +289,10 @@ void cycleIdleCpu() {
     s_prefs.putUChar("idleCpu", s_idleCpuIx);
 }
 
+#if SQW_WIFI_5G
+bool wifi5()           { return s_wifi5; }
+void setWifi5(bool on) { s_wifi5 = on; s_prefs.putBool("wifi5", on); }
+#endif
 void togglePowerSaver() {
     s_powerSaver = !s_powerSaver;
     s_prefs.putBool("pwrOn", s_powerSaver);
@@ -333,6 +348,10 @@ uint8_t runHistory(uint16_t* boots, uint16_t* minutes, uint8_t cap) {
     }
     return n;
 }
+void toggleExtScreen() {
+    s_extScreen = !s_extScreen;
+    s_prefs.putBool("extscr", s_extScreen);
+}
 void togglePrivacyMode() {
     s_privacy = !s_privacy;
     s_prefs.putBool("privacy", s_privacy);
@@ -352,6 +371,20 @@ void toggleWakeOnAlert() {
 }
 bool buzzerOn()     { return s_buzzer; }
 void toggleBuzzer() { s_buzzer = !s_buzzer; s_prefs.putBool("buzzer", s_buzzer); }
+uint8_t soundMode() { return s_soundMode; }
+const char* soundModeName() {
+    static const char* const N[] = { "OFF", "ALERTS", "ALL" };
+    return N[s_soundMode < 3 ? s_soundMode : 0];
+}
+void cycleSoundMode() { s_soundMode = (uint8_t)((s_soundMode + 1) % 3); s_prefs.putUChar("sndMode", s_soundMode); }
+uint8_t soundVolume() { return s_soundVol; }
+void adjustSoundVolume(int8_t delta) {
+    int16_t v = (int16_t)s_soundVol + delta;
+    if (v < 0) v = 0;
+    if (v > 100) v = 100;
+    s_soundVol = (uint8_t)v;
+    s_prefs.putUChar("sndLvl", s_soundVol);
+}
 uint8_t loraMode()  { return s_loraMode; }
 void cycleLoraMode() { s_loraMode = (uint8_t)((s_loraMode + 1) % 3); s_prefs.putUChar("loraMode", s_loraMode); }
 uint8_t loraListen() { return s_loraListen; }
@@ -465,13 +498,16 @@ void load() {
     s_meshConsent  = s_prefs.getBool("meshok", false);
     s_phoneQwerty  = s_prefs.getBool("qwerty", false);
     s_messagesOn   = s_prefs.getBool("msgon", false);
+    s_meshHeadsUp  = s_prefs.getBool("headsup", true);
     s_msgTutor     = s_prefs.getBool("msgtut", false);
 #endif
     s_infoPrimerShown = s_prefs.getBool("infoprimer", false);
+    s_pocketNoteShown = s_prefs.getBool("pocketnote", false);
     s_rotationLocked = s_prefs.getBool("rotlock", DEFAULT_ROTATION_LOCK);
     // A new key, not the top hat's: somebody who took the hat off never said
     // anything about the aura, and should see it once before deciding.
     s_aura           = s_prefs.getBool("aura", true);
+    s_detXp          = s_prefs.getBool("detxp", true);
     s_rotation = s_prefs.getUChar("rot", DEFAULT_ROTATION);
     if (s_rotation > 3) s_rotation = DEFAULT_ROTATION;
     s_backgroundLocked = s_prefs.getBool("bglock", false);
@@ -510,6 +546,9 @@ void load() {
     // fresh device shows, and the two look nothing alike.
     if (s_background == Background::TUNNEL) s_background = Background::SYNTHWAVE;
     s_powerSaver   = s_prefs.getBool("pwrOn", DEFAULT_POWER_SAVER);
+#if SQW_WIFI_5G
+    s_wifi5        = s_prefs.getBool("wifi5", true);
+#endif
 #if defined(TWATCH_S3)
     // Once per watch: POWER SAVER on. The default only reaches a watch that
     // never saved the switch, and every watch that went through the bench
@@ -534,6 +573,7 @@ void load() {
     s_quietTrack   = s_prefs.getBool("qTrack", true);
     s_privacy      = s_prefs.getBool("privacy", false);
     s_autoHistory = s_prefs.getBool("autoHistory",true);
+    s_extScreen = s_prefs.getBool("extscr",false);
     if (s_prefs.getBytesLength("runs") == sizeof s_runs) s_prefs.getBytes("runs", s_runs, sizeof s_runs);
     s_watchPlus    = s_prefs.getBool("wPlus", false);
     // The old on/off switch carries over: a watch that had BUZZ off stays off.
@@ -544,6 +584,10 @@ void load() {
     // The T-Watch's BUZZ (haptics on an alert) already owns "buzz", and with
     // the opposite default, so the CrowPanel's buzzer keeps its own key.
     s_buzzer       = s_prefs.getBool("buzzer", false);
+    s_soundMode    = s_prefs.getUChar("sndMode", 0);
+    if (s_soundMode > 2) s_soundMode = 0;
+    s_soundVol     = s_prefs.getUChar("sndLvl", 25);
+    if (s_soundVol > 100) s_soundVol = 25;
     s_loraMode     = s_prefs.getUChar("loraMode", 2);
     if (s_loraMode > 2) s_loraMode = 2;
     s_loraFocus    = s_prefs.getUChar("loraFocus", 0);
@@ -733,7 +777,21 @@ void markInfoPrimerShown() {
     s_prefs.putBool("infoprimer", true);
 }
 
+bool pocketNoteShown() { return s_pocketNoteShown; }
+
+void markPocketNoteShown() {
+    s_pocketNoteShown = true;
+    s_prefs.putBool("pocketnote", true);
+}
+
 bool auraShown() { return s_aura; }
+
+bool detXp() { return s_detXp; }
+
+void toggleDetXp() {
+    s_detXp = !s_detXp;
+    s_prefs.putBool("detxp", s_detXp);
+}
 
 void toggleAura() {
     s_aura = !s_aura;
@@ -1008,6 +1066,11 @@ bool messagesOn() { return s_messagesOn; }
 void toggleMessages() {
     s_messagesOn = !s_messagesOn;
     s_prefs.putBool("msgon", s_messagesOn);
+}
+bool meshHeadsUp() { return s_meshHeadsUp; }
+void toggleMeshHeadsUp() {
+    s_meshHeadsUp = !s_meshHeadsUp;
+    s_prefs.putBool("headsup", s_meshHeadsUp);
 }
 bool meshTutorSeen()    { return s_msgTutor; }
 void setMeshTutorSeen() { s_msgTutor = true; s_prefs.putBool("msgtut", true); }

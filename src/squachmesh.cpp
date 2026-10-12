@@ -40,46 +40,60 @@ size_t encode(const Peer& p, uint8_t* out) {
     if (p.outfit & (1u << OUTFIT_BITS)) word |= OUTFIT_HI_BIT;
     word |= (uint16_t)((p.shade  & maskOf(SHADE_BITS))  << SHADE_SHIFT);
     if (custom) word |= CUSTOM_BIT;
+    if (p.aura) word |= AURA_BIT;
 
     memcpy(out, MAGIC, sizeof(MAGIC));
     out[4] = VERSION;
     out[5] = (uint8_t)(word & 0xFF);          // little-endian, as the rest
     out[6] = (uint8_t)((word >> 8) & 0xFF);   // of this project stores 16s
-    out[7] = 0;                                // flags: reserved, must be 0
+    out[7] = p.phone ? FLAG_PHONE : 0;         // flags: reserved, 0 but for a phone
 
-    if (!custom) return LEN_INDEXED;
-
-    // Fixed-width and NUL-padded rather than length-prefixed. A length byte
-    // is one more field that can lie, and at twelve bytes the padding costs
-    // less than the validation would.
-    memset(out + LEN_INDEXED, 0, NAME_LEN);
-    for (size_t i = 0; i < NAME_LEN && p.name[i]; i++) {
-        out[LEN_INDEXED + i] = (uint8_t)p.name[i];
+    size_t n = LEN_INDEXED;
+    if (custom) {
+        // Fixed-width and NUL-padded rather than length-prefixed. A length byte
+        // is one more field that can lie, and at twelve bytes the padding costs
+        // less than the validation would.
+        memset(out + LEN_INDEXED, 0, NAME_LEN);
+        for (size_t i = 0; i < NAME_LEN && p.name[i]; i++) {
+            out[LEN_INDEXED + i] = (uint8_t)p.name[i];
+        }
+        n = LEN_NAMED;
     }
-    return LEN_NAMED;
+    if (p.phone) {
+        memcpy(out + n, p.id, PHONE_ID_LEN);
+        n += PHONE_ID_LEN;
+    }
+    return n;
+}
+
+void phoneMac(const uint8_t id[PHONE_ID_LEN], uint8_t out[6]) {
+    out[0] = 0x02; out[1] = 'P';
+    memcpy(out + 2, id, PHONE_ID_LEN);
 }
 
 bool decode(const uint8_t* in, size_t len, Peer& out) {
     if (!in) return false;
     // Length is checked before anything is read, so a short buffer can
     // never reach the field accesses below.
-    if (len != LEN_INDEXED && len != LEN_NAMED) return false;
+    if (len != LEN_INDEXED && len != LEN_NAMED && len != LEN_INDEXED_PHONE && len != LEN_NAMED_PHONE) return false;
     if (memcmp(in, MAGIC, sizeof(MAGIC)) != 0) return false;
     if (in[4] != VERSION) return false;
-    // Reserved means reserved. Refusing a non-zero flags byte now is what
-    // makes it safe to give those bits a meaning later: a v1 device will
-    // decline a payload using them rather than misread it.
-    if (in[7] != 0) return false;
+    // Reserved means reserved. Refusing a flags byte with bits this build
+    // does not know is what makes it safe to give those bits a meaning
+    // later: a device from before will decline a payload using them rather
+    // than misread it. The phone bit is the first one spent.
+    if (in[7] != 0 && in[7] != FLAG_PHONE) return false;
+    const bool phone = in[7] == FLAG_PHONE;
 
     const uint16_t word = (uint16_t)(in[5] | ((uint16_t)in[6] << 8));
     const bool custom = (word & CUSTOM_BIT) != 0;
 
-    // The two must agree. A custom bit with no name bytes, or name bytes
+    // The three must agree. A custom bit with no name bytes, or name bytes
     // with no custom bit, is a malformed payload either way -- and catching
     // it here is what lets the caller trust `custom` without re-checking
-    // the length it was derived from.
-    if (custom && len != LEN_NAMED)   return false;
-    if (!custom && len != LEN_INDEXED) return false;
+    // the length it was derived from. A phone's four bytes come after.
+    const size_t want = (custom ? LEN_NAMED : LEN_INDEXED) + (phone ? PHONE_ID_LEN : 0);
+    if (len != want) return false;
 
     Peer p;
     p.nick   = (uint8_t)((word >> NICK_SHIFT)   & maskOf(NICK_BITS));
@@ -87,6 +101,10 @@ bool decode(const uint8_t* in, size_t len, Peer& out) {
     if (word & OUTFIT_HI_BIT) p.outfit |= (uint8_t)(1u << OUTFIT_BITS);
     p.shade  = (uint8_t)((word >> SHADE_SHIFT)  & maskOf(SHADE_BITS));
     p.custom = custom;
+    p.aura   = (word & AURA_BIT) != 0;
+    p.phone  = phone;
+    memset(p.id, 0, sizeof p.id);
+    if (phone) memcpy(p.id, in + len - PHONE_ID_LEN, PHONE_ID_LEN);
     p.name[0] = '\0';
 
     if (custom) {

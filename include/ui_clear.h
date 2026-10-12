@@ -34,6 +34,13 @@ uint32_t uiMascotStepMs();
 void uiClearTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng,
                   bool advance = true, bool scanMenu = false);
 
+// The battery gauge: a lava lamp under the menu icon, filled to the charge.
+// A board with a battery hands over a function that fills in the percent and
+// whether it is on the cable, and returns false while no cell is plugged in.
+// Boards without a battery never set one, and their screen does not change.
+typedef bool (*BatterySource)(uint8_t& pct, bool& charging);
+void uiClearSetBatterySource(BatterySource fn);
+
 #if SQUACH_MESH
 // SPIKE: the peer currently visiting, or nullptr. Owned by whatever discovers
 // peers -- for now that is only the emulator's --peer flag, so the CLEAR screen
@@ -52,8 +59,18 @@ bool uiClearSquadHit(int x, int y);
 // named and where REMOVE FROM WATCH LIST lives. Only ever true while a watch
 // or a hunt is actually set -- the pill is not drawn otherwise.
 bool uiClearWatchPillHit(int x, int y);
-// The NEARBY headline, which only exists while something is live. Long-pressing
-// it opens the closest device -- see main.cpp. False whenever it is not drawn.
+// The counter tiles under Squachy: one per kind of thing in range right now,
+// none when it is quiet. True if a tap landed on one, with the column's type
+// (AIRTAG for the trackers, CAMERA for cameras and doorbells, HACKER for
+// attack kit and evil twins); main.cpp opens the closest device in it.
+bool uiClearCounterHit(int x, int y, DetectionType& column);
+// Whether a device of type d is counted in that column.
+bool uiClearColumnHolds(DetectionType column, DetectionType d);
+// The tiles' centres, for the cursor on the boards with buttons.
+uint8_t uiClearCounterStops(int16_t* xs, int16_t* ys, uint8_t cap);
+// The NEARBY headline, drawn only with DETECTIONS set to CLASSIC and while
+// something is live. Long-pressing it opens the closest device -- see
+// main.cpp. False whenever it is not drawn.
 bool uiClearNearbyHit(int x, int y);
 // A tap on somebody in the CROWD, which puts his name over him for a few
 // seconds. True if it landed on one. Past four of them the nameplates come

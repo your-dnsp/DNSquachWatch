@@ -417,8 +417,11 @@ void uiMeshComposeTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bo
     // typed message and its sender's name run past one row, and the list
     // below cannot move down to make room.
     const MeshTalk::Message& m = MeshTalk::inbox();
-    const int bx = 4, by = 26, bw = w - 8, bh = 22;
-    t.setTextSize(1);
+    // On the large panels the strip is the body font, and tall enough for its
+    // two 16-row lines; the list below moves down with it (y0).
+    const int bx = 4, by = 26, bw = w - 8, bh = Theme::large() ? 38 : 22;
+    Theme::bodyFontOn(t);
+    const int sfh = t.fontHeight();
     if (m.have) {
         char line[80];
         snprintf(line, sizeof line, "%s: %s", m.from, MeshTalk::lineText(m));
@@ -429,15 +432,16 @@ void uiMeshComposeTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bo
         const uint8_t n = Theme::wrapText(t, line, maxW, rows, 2);
         t.setTextColor(Theme::WHITE, Theme::RED);
         for (uint8_t i = 0; i < n; i++) {
-            t.setCursor(bx + 6, n == 1 ? by + (bh - 8) / 2 : by + 2 + i * 10);
+            t.setCursor(bx + 6, n == 1 ? by + (bh - sfh) / 2 : by + 2 + i * (sfh + 2));
             t.print(rows[i]);
         }
     } else {
         t.drawRoundRect(bx, by, bw, bh, 4, Theme::W95_SHADOW);
         t.setTextColor(Theme::W95_SHADOW, Theme::BG);
-        t.setCursor(bx + 6, by + (bh - 8) / 2);
+        t.setCursor(bx + 6, by + (bh - sfh) / 2);
         t.print("No messages yet.");
     }
+    Theme::bodyFontOff(t);
 
     // ---- the lines you can send, or the one you typed ------------------------
     // Two columns in landscape, one in portrait -- the longest line is twenty
@@ -448,7 +452,8 @@ void uiMeshComposeTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bo
     const int cols = port ? 1 : 2;
     // The cell grows with the letters, or a size-2 line sits on the border.
     const int cw = (w - 8 - (cols - 1) * 6) / cols;
-    const int ch = port ? 18 : (Theme::uiTextSize(t, 1) == 1 ? 20 : 28);
+    const int ch = port ? (Theme::uiTextSize(t, 1) == 1 ? 18 : 24)
+                        : (Theme::uiTextSize(t, 1) == 1 ? 20 : 28);
     const int y0 = by + bh + 6;
     s_lineN = 0;
     if (s_typedOn) {
@@ -471,8 +476,9 @@ void uiMeshComposeTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bo
         t.setTextSize(1);
     } else if (s_emoteOn) {
         // A row of tabs, then the tab's six tiles where the lines were.
-        const int TH = 18;
+        const int TH = Theme::large() ? 24 : 18;
         const int tw = (w - 8 - (EmoteScript::TABS - 1) * 3) / EmoteScript::TABS;
+        Theme::bodyFontOn(t);
         for (uint8_t i = 0; i < EmoteScript::TABS; i++) {
             const int x = 4 + i * (tw + 3);
             const bool on = i == s_tab;
@@ -481,7 +487,7 @@ void uiMeshComposeTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bo
             t.drawRect(x, y0, tw, TH, on ? Theme::VAPOR_PINK : Theme::W95_SHADOW);
             const char* nm = EmoteScript::TAB_NAME[i];
             t.setTextColor(on ? Theme::labelOn(Theme::PURPLE) : Theme::W95_LIGHT, on ? Theme::PURPLE : Theme::BG);
-            t.setCursor(x + (tw - t.textWidth(nm)) / 2, y0 + (TH - 8) / 2);
+            t.setCursor(x + (tw - t.textWidth(nm)) / 2, y0 + (TH - t.fontHeight()) / 2);
             t.print(nm);
         }
         const int ty0 = y0 + TH + 5;
@@ -489,7 +495,7 @@ void uiMeshComposeTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bo
         const int ecols = port ? 2 : 3, erows = (n + ecols - 1) / ecols;
         const int ew = (w - 8 - (ecols - 1) * 6) / ecols;
         int eh = ((h - BHof(t) - 6 - 16) - ty0 - (erows - 1) * 5) / erows;
-        if (eh > 44) eh = 44;
+        if (eh > (Theme::large() ? 52 : 44)) eh = Theme::large() ? 52 : 44;
         for (uint8_t i = 0; i < n; i++) {
             const MeshMsg::Emote e = EmoteScript::atTab(s_tab, i);
             // An empty tile: nothing drawn, and a zero rectangle so a tap
@@ -503,13 +509,15 @@ void uiMeshComposeTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bo
             const char* sub = EmoteScript::sub(e);
             const bool two = sub[0] != '\0';
             t.setTextColor(Theme::WHITE, Theme::BG);
-            t.setCursor(x + 30, y + eh / 2 - (two ? 9 : 4));
+            const int efh = t.fontHeight();
+            t.setCursor(x + 30, y + eh / 2 - (two ? efh + 1 : efh / 2));
             t.print(EmoteScript::name(e));
             if (two) {
                 t.setCursor(x + 30, y + eh / 2 + 1);
                 t.print(sub);
             }
         }
+        Theme::bodyFontOff(t);
     } else if (s_fillOn) {
         const int LTH = Theme::uiTextSize(t, 1) == 1 ? 18 : 26;
         t.setTextSize(Theme::uiTextSize(t, 1));
@@ -537,6 +545,7 @@ void uiMeshComposeTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bo
         // pickers read as one control with two halves.
         const int LTH = Theme::uiTextSize(t, 1) == 1 ? 18 : 26;
         const int ltw = (w - 8 - (MeshMsg::CANNED_TABS - 1) * 3) / MeshMsg::CANNED_TABS;
+        Theme::bodyFontOn(t);   // the tab names
         for (uint8_t i = 0; i < MeshMsg::CANNED_TABS; i++) {
             const int x = 4 + i * (ltw + 3);
             const bool on = i == s_lineTab;
@@ -548,6 +557,7 @@ void uiMeshComposeTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bo
             t.setCursor(x + (ltw - t.textWidth(nm)) / 2, y0 + (LTH - t.fontHeight()) / 2);
             t.print(nm);
         }
+        Theme::bodyFontOff(t);
         const int ly0 = y0 + LTH + 5;
         for (int i = 0; i < MeshMsg::CANNED_PER_TAB; i++) {
             const uint8_t idx = MeshMsg::cannedAtTab(s_lineTab, (uint8_t)i);
@@ -595,9 +605,14 @@ void uiMeshComposeTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bo
         if (!st && MeshTalk::sending(now)) { st = SENDING; sc = Theme::GREEN; }
     }
     if (st) {
+        // Too long for the line at the list's size (the 3.5" in portrait),
+        // it drops to the body font rather than running off the edge.
+        const bool drop = t.textWidth(st) > w - 16;
+        if (drop) Theme::bodyFontOn(t);
         t.setTextColor(sc, Theme::BG);
         t.setCursor(8, h - BHof(t) - 6 - 12);
         t.print(st);
+        if (drop) Theme::bodyFontOff(t);
     }
 
     // ---- chrome -------------------------------------------------------------

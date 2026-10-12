@@ -162,6 +162,22 @@ static void confirmRects(int screenW, int screenH,
                           int& cnX, int& cnY, int& cnW, int& cnH) {
     pw = screenW - 40;
     if (pw > 240) pw = 240;
+    if (Theme::compact()) {
+        // 135 rows: no question line, the name in the built-in face, and
+        // shorter buttons closer together. Same five, same places.
+        pw = screenW - 16;
+        ph = 104;
+        px = (screenW - pw) / 2;
+        py = (screenH - ph) / 2;
+        const int margin = 6, gap = 4, btnH = 20;
+        const int btnW = (pw - 2 * margin - gap) / 2;
+        cnY = py + ph - btnH - margin; cnH = btnH; cnX = px + margin; cnW = pw - 2 * margin;
+        igY = infY = cnY - gap - btnH; igH = infH = btnH;
+        igX = px + margin; igW = btnW; infX = igX + btnW + gap; infW = btnW;
+        wY = huY = igY - gap - btnH; wH = huH = btnH;
+        wX = px + margin; wW = btnW; huX = wX + btnW + gap; huW = btnW;
+        return;
+    }
     // Was 132 for a 2x2 grid. IGNORE makes it three rows: WATCH/HUNT,
     // IGNORE/MORE INFO, then CANCEL alone across the bottom. CANCEL gets
     // the full width because it is the one button you hit by reflex and
@@ -211,6 +227,23 @@ static void drawConfirmPanel(TFT_eSPI& t, int w, int h, const char* label, bool 
     t.fillRoundRect(px, py, pw, ph, 6, Theme::BG);
     t.drawRoundRect(px, py, pw, ph, 6, Theme::PURPLE);
 
+    if (Theme::compact()) {
+        t.setTextWrap(false);
+        t.setTextSize(2);
+        char nm[24];
+        snprintf(nm, sizeof nm, "%s", label);
+        while (nm[0] && t.textWidth(nm) > pw - 12) nm[strlen(nm) - 1] = '\0';
+        t.setTextColor(Theme::RED, Theme::BG);
+        t.setCursor(px + (pw - t.textWidth(nm)) / 2, py + 6);
+        t.print(nm);
+        Theme::drawButton(t, wX, wY, wW, wH, watched ? "UNWATCH" : "WATCH", watched, 1);
+        Theme::drawButton(t, huX, huY, huW, huH, hunted ? "STOP HUNT" : "HUNT", hunted, 1);
+        Theme::drawButton(t, igX, igY, igW, igH, ignored ? "UN-IGNORE" : "IGNORE", ignored, 1);
+        Theme::drawButton(t, infX, infY, infW, infH, "MORE INFO", false, 1);
+        Theme::drawButton(t, cnX, cnY, cnW, cnH, "CANCEL", false, 1);
+        return;
+    }
+
     t.setTextWrap(false);
     t.setTextSize(1);
     t.setTextColor(Theme::CYAN, Theme::BG);
@@ -253,6 +286,16 @@ static void drawConfirmPanel(TFT_eSPI& t, int w, int h, const char* label, bool 
 // ui_rawscan.cpp's rowLayout(): rowH depends on live font metrics, not
 // a compile-time constant.
 static void rowLayout(TFT_eSPI& t, int bodyTop, int& detailY, int& rowH) {
+    if (Theme::compact()) {
+        // One line a row on a 135-row screen: type, name or address,
+        // signal, time. The address and the count are a press away, on
+        // MORE INFO.
+        t.setTextSize(1);
+        detailY = 3;
+        rowH = t.fontHeight() + 7;
+        (void)bodyTop;
+        return;
+    }
     t.setTextSize(2);
     int nameH = t.fontHeight();
     t.setTextSize(1);
@@ -307,7 +350,7 @@ void uiLogTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, int scroll
     // Only the BACKGROUND moves. Everything else on this screen still
     // begins where it did, so no content shifts.
     const int bgTop = 0;
-switch (Settings::background()) {
+if (!Theme::stillBackdrop(t)) switch (Settings::background()) {
         case Settings::Background::STARFIELD: Theme::drawStarfield(t, now, bgTop, bodyBottom); break;
         case Settings::Background::TOASTERS:   Theme::drawFlyingToasters(t, now, bgTop, bodyBottom); break;
         case Settings::Background::AQUARIUM:   Theme::drawAquarium(t, now, bgTop, bodyBottom); break;
@@ -383,6 +426,43 @@ switch (Settings::background()) {
         // It also puts a solid ground under the text, which the synthwave
         // sun used to shine through.
         Theme::drawListRowPanel(t, w, y, rowH);
+        if (Theme::compact()) {
+            const bool kept = d->restored;
+            const uint16_t dim = Theme::W95_SHADOW;
+            t.setTextSize(1);
+            const int ty = y + detailY;
+            t.setTextColor(kept ? dim : Theme::colorFor(d->type), Theme::BG);
+            t.setCursor(6, ty);
+            t.print(detectionTypeName(d->type));
+            char ts[12];
+            if (d->restored) Clock::formatEpochStamp(d->firstSeen, ts, sizeof(ts));
+            else             Clock::formatStamp(d->firstSeen, ts, sizeof(ts));
+            const int tsX = w - 10 - t.textWidth(ts);
+            t.setTextColor(kept ? dim : Theme::VAPOR_PINK, Theme::BG);
+            t.setCursor(tsX, ty);
+            t.print(ts);
+            char rs[8];
+            snprintf(rs, sizeof rs, "%d", d->rssi);
+            const int rsX = tsX - 6 - t.textWidth("-100");
+            t.setTextColor(kept ? dim : Theme::CYAN, Theme::BG);
+            t.setCursor(rsX + t.textWidth("-100") - t.textWidth(rs), ty);
+            t.print(rs);
+            // The name, or the regulars' name for it, or the address's tail.
+            char nm[40], pv[40];
+            const char* reg = Regulars::nameFor(d->mac);
+            if (reg)             snprintf(nm, sizeof nm, "%s", reg);
+            else if (d->name[0]) snprintf(nm, sizeof nm, "%s", Privacy::name(d->name, pv, sizeof pv));
+            else { char mac[24]; Privacy::mac(mac, sizeof mac, d->mac); const size_t ml = strlen(mac);
+                   snprintf(nm, sizeof nm, "%s", ml > 8 ? mac + ml - 8 : mac); }
+            if (IgnoreList::contains(d->mac)) { char tmp[40]; snprintf(tmp, sizeof tmp, "(IGN) %s", nm); snprintf(nm, sizeof nm, "%s", tmp); }
+            const int nx = 6 + t.textWidth("EVIL TWIN") + 6, nmax = rsX - 6 - nx;
+            while (nm[0] && t.textWidth(nm) > nmax) nm[strlen(nm) - 1] = '\0';
+            t.setTextColor(kept ? dim : (reg ? Theme::VAPOR_PINK : Theme::WHITE), Theme::BG);
+            t.setCursor(nx, ty);
+            t.print(nm);
+            y += rowH;
+            continue;
+        }
 
         // A row the black box kept from an earlier boot is drawn faded: it
         // is history, and it sat beside live rows looking exactly like one.

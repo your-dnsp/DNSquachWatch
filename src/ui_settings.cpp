@@ -95,7 +95,7 @@ static const uint8_t ALL_ROWS_N = sizeof(ALL_ROWS) / sizeof(ALL_ROWS[0]);
 // to put out.
 static const SettingsRow APPEARANCE_ROWS[] = {
     SettingsRow::THEME, SettingsRow::BACKGROUND, SettingsRow::BACKGROUND_LOCK, SettingsRow::BRIGHTNESS, SettingsRow::AMBIENT_LIGHT,
-    SettingsRow::GLITCH_EFFECTS, SettingsRow::INVERT, SettingsRow::RGB_SWAP, SettingsRow::ROTATION_LOCK,
+    SettingsRow::GLITCH_EFFECTS, SettingsRow::DET_STYLE, SettingsRow::INVERT, SettingsRow::RGB_SWAP, SettingsRow::ROTATION_LOCK,
     // And the one light that is not on the screen at all.
     SettingsRow::STATUS_LIGHT,
 };
@@ -221,6 +221,7 @@ static RowGroupId groupFor(SettingsRow r) {
         case SettingsRow::OUTFIT:
         case SettingsRow::PET:
         case SettingsRow::BANTER:
+        case SettingsRow::DET_STYLE:
             return RowGroupId::APPEARANCE;
         case SettingsRow::BORING_MODE:
         case SettingsRow::SNOOZE_ALL:
@@ -309,11 +310,16 @@ static uint8_t buildDisplayList(DisplayItem* out) {
         // mode. Showing a permanently-off row for something you have never
         // seen would give the secret away -- and a switch for an aura he
         // does not have yet would be a switch that does nothing.
-        if (r == SettingsRow::PET && !Squachy::petUnlocked()) continue;
+        if (r == SettingsRow::PET && !Squachy::anyPetUnlocked()) continue;
         if (r == SettingsRow::AURA && !Squachy::hasAura()) continue;
         // Not a secret, just impossible: a board without a second app slot or
         // a Bluetooth server has nothing to update into.
         if ((r == SettingsRow::UPDATE_FIRMWARE || r == SettingsRow::UPDATE_CHECK) && !OtaCore::available()) continue;
+#if SQW_SOUND_ROWS && !defined(ESP32)
+        // The emulator has no speaker: the rows are there for the release
+        // clip to show, and only when it asks.
+        if ((r == SettingsRow::SOUND || r == SettingsRow::SOUND_VOLUME) && !getenv("SQUACHSIM_SPEAKER")) continue;
+#endif
         rows[n++] = r;
     }
 
@@ -412,11 +418,11 @@ static void computeGeom(TFT_eSPI& t, int screenH, int& top, int& bodyBottom,
     // fit above the BACK strip in landscape. A wide panel draws the row a
     // size bigger, and this carries it: taller letters, taller row, bigger
     // thumb target, all off the one number.
-    rowH = t.fontHeight() + 10;
+    rowH = t.fontHeight() + Theme::listRowPad();
     const int big = t.fontHeight();
     t.setTextSize(Theme::uiTextSize(t, 1));
     headerH = t.fontHeight() + 6;
-    t.setTextSize(1);
+    Theme::bodyFontOn(t);   // a two-line row's label line (drawTwoLineRow)
     tallH   = t.fontHeight() + big + 7;
     if(Field::config.large || Field::config.language){rowH=42; tallH=46;headerH=22;}
 }
@@ -495,12 +501,14 @@ static void settingsConfirmRects(int screenW, int screenH,
                                  int& px, int& py, int& pw, int& ph,
                                  int& okX, int& okY, int& okW, int& okH,
                                  int& cnX, int& cnY, int& cnW, int& cnH) {
+    // A size up on the large panels, for the body font and taller buttons.
+    const bool big = Theme::large();
     pw = screenW - 40;
-    if (pw > 240) pw = 240;
-    ph = 128;
+    if (pw > (big ? 320 : 240)) pw = big ? 320 : 240;
+    ph = big ? 168 : 128;
     px = (screenW - pw) / 2;
     py = (screenH - ph) / 2;
-    const int margin = 10, gap = 8, btnH = 24;
+    const int margin = 10, gap = 8, btnH = big ? 32 : 24;
     cnH = okH = btnH;
     cnY = py + ph - btnH - margin;
     cnX = px + margin;
@@ -543,14 +551,15 @@ static void drawSettingsConfirm(TFT_eSPI& t, int w, int h) {
     Theme::drawBangersText(t, px + (pw - tw) / 2, py + 8, ct->title, Theme::RED, Theme::BangersSize::MD);
 
     t.setTextWrap(false);
-    t.setTextSize(1);
+    Theme::bodyFontOn(t);
     t.setTextColor(Theme::WHITE, Theme::BG);
     const char* lines[2] = { ct->line1, ct->line2 };
     for (uint8_t i = 0; i < 2; i++) {
         int lw = t.textWidth(lines[i]);
-        t.setCursor(px + (pw - lw) / 2, py + 34 + i * 11);
+        t.setCursor(px + (pw - lw) / 2, py + 34 + i * (t.fontHeight() + 3));
         t.print(lines[i]);
     }
+    Theme::bodyFontOff(t);
 
     Theme::drawButton(t, okX, okY, okW, okH, ct->verb, false);
     Theme::drawButton(t, cnX, cnY, cnW, cnH, "CANCEL", false);
@@ -596,7 +605,7 @@ static void drawPinnedBack(TFT_eSPI& t, int screenW, int screenH) {
     t.fillRect(x, y, w, h, Theme::BG);
     t.drawFastHLine(x, y, w, Theme::PURPLE);
     t.setTextFont(1);
-    t.setTextSize(Theme::uiMenuTextSize(t));
+    t.setTextSize(Theme::compact() ? 1 : Theme::uiMenuTextSize(t));
     t.setTextColor(Theme::CYAN, Theme::BG);
     // The DESK MODE page splits the strip: OK on the left goes straight out
     // to wherever Settings was opened from, the desk or the main screen; UP
@@ -701,6 +710,7 @@ static void drawTwoLineRow(TFT_eSPI& t, int w, int y, int hgt, const char* label
     t.setCursor(8, y + 2);
     t.print(label);
     const int lineY = y + 2 + t.fontHeight() + 1;
+    Theme::bodyFontOff(t);
 
     t.setTextSize(2);
     const int chev = t.textWidth(">");
@@ -749,6 +759,63 @@ static void drawRow(TFT_eSPI& t, int w, int y, int hgt, const char* label,
         t.setCursor(w - 18 - vw, y + (hgt - t.fontHeight()) / 2);
         t.print(value);
     }
+    if (compact) Theme::bodyFontOff(t);
+}
+
+// ---- the stepper rows ---------------------------------------------------------
+// BRIGHT and VOLUME: a percent between a real - and a real + button, at the
+// row's right-hand end where a value sits. BRIGHT used to be "BRIGHT -  +"
+// in the label with the row split down the middle, which meant a thumb
+// landing anywhere on it moved the value; now only the buttons do. The draw
+// and the hit test both go through stepperLayout(), so the buttons are
+// exactly where they look.
+static bool isStepperRow(SettingsRow r) {
+    return r == SettingsRow::BRIGHTNESS
+#if SQW_SOUND_ROWS
+        || r == SettingsRow::SOUND_VOLUME
+#endif
+        ;
+}
+bool uiSettingsIsStepper(SettingsRow r) { return isStepperRow(r); }
+static const char* stepperValue(SettingsRow r, char* buf, size_t n) {
+    unsigned pct = 0;
+    if (r == SettingsRow::BRIGHTNESS) pct = (unsigned)(Settings::brightness() * 100 / 255);
+#if SQW_SOUND_ROWS
+    else if (r == SettingsRow::SOUND_VOLUME) pct = Settings::soundVolume();
+#endif
+    snprintf(buf, n, "%u%%", pct);
+    return buf;
+}
+// Where the pieces go: the + against the right margin, the value before it,
+// the - before that. Buttons are nearly the row's height, finger-sized on
+// every panel; the value's width is measured in the row's own font.
+static void stepperLayout(TFT_eSPI& t, int w, int y, int hgt, bool compact, const char* value,
+                          int& minusX, int& plusX, int& valX, int& bw, int& bh, int& by) {
+    if (compact) Theme::bodyFontOn(t);
+    else         t.setTextSize(Theme::uiMenuTextSize(t));
+    const int vw = t.textWidth(value);
+    if (compact) Theme::bodyFontOff(t);
+    bh = hgt - 4;
+    bw = bh + 10;
+    by = y + (hgt - bh) / 2;
+    plusX  = w - 18 - bw;
+    valX   = plusX - 8 - vw;
+    minusX = valX - 8 - bw;
+}
+static void drawStepperRow(TFT_eSPI& t, int w, int y, int hgt, const char* label, const char* value,
+                           uint16_t labelColor, bool compact) {
+    drawRow(t, w, y, hgt, label, nullptr, false, labelColor, compact);
+    int mx, px, vx, bw, bh, by;
+    stepperLayout(t, w, y, hgt, compact, value, mx, px, vx, bw, bh, by);
+    if (compact) Theme::bodyFontOn(t);
+    else         t.setTextSize(Theme::uiMenuTextSize(t));
+    t.setTextColor(Theme::WHITE, Theme::BG);
+    t.setCursor(vx, y + (hgt - t.fontHeight()) / 2);
+    t.print(value);
+    if (compact) Theme::bodyFontOff(t);
+    Theme::drawWin95Button(t, mx, by, bw, bh, "-", false, true);
+    Theme::drawWin95Button(t, px, by, bw, bh, "+", false, true);
+    t.setTextSize(1);
 }
 
 // Fills in what a row actually shows. valBuf is scratch space for
@@ -851,7 +918,7 @@ static void rowContent(SettingsRow r, const DetectionEngine& eng, char* valBuf, 
         case SettingsRow::DEVICE_HELP: label="TROUBLESHOOTING"; value=">"; break;
         case SettingsRow::CRASH_REPORTS: label="CRASH REPORTS"; value=">"; break;
         case SettingsRow::BRIGHTNESS:
-            label = "BRIGHT MAX -  +";
+            label = "BRIGHT MAX";
             snprintf(valBuf, valBufN, "%u%%", (unsigned)(Settings::brightness() * 100 / 255));
             value = valBuf;
             break;
@@ -927,6 +994,9 @@ static void rowContent(SettingsRow r, const DetectionEngine& eng, char* valBuf, 
             label = "BUZZ"; value = Settings::buzz() ? "ON" : "OFF";
             break;
 #endif
+        case SettingsRow::EXT_SCREEN:
+            label = "EXT SCREEN"; value = Settings::extScreen() ? "ON" : "OFF";
+            break;
         case SettingsRow::PRIVACY:
             label = "MASKED MODE"; value = Settings::privacyMode() ? "ON" : "OFF";
             break;
@@ -1015,18 +1085,28 @@ static void rowContent(SettingsRow r, const DetectionEngine& eng, char* valBuf, 
             break;
 #endif
         case SettingsRow::OUTFIT:
-            label = "OUTFIT";
-            snprintf(valBuf, valBufN, "%s (%u/%u)", Squachy::outfitName(),
-                     (unsigned)Squachy::unlockedOutfitCount(), (unsigned)Squachy::outfitCount());
-            value = valBuf;
-            break;
         case SettingsRow::PET:
-            label = "PET";
-            value = Squachy::petName();
+            label = r == SettingsRow::OUTFIT ? "OUTFIT" : "PET";
+            if (Squachy::jailed()) {
+                // Serving time: both rows say how long, and neither moves.
+                const uint32_t left = (Squachy::jailLeftMs() + 999) / 1000;
+                snprintf(valBuf, valBufN, "SERVING %u:%02u", (unsigned)(left / 60), (unsigned)(left % 60));
+                value = valBuf;
+            } else if (r == SettingsRow::OUTFIT) {
+                snprintf(valBuf, valBufN, "%s (%u/%u)", Squachy::outfitName(),
+                         (unsigned)Squachy::unlockedOutfitCount(), (unsigned)Squachy::outfitCount());
+                value = valBuf;
+            } else {
+                value = Squachy::petName();
+            }
             break;
         case SettingsRow::BANTER:
             label = "BANTER";
             value = Settings::banterName();
+            break;
+        case SettingsRow::DET_STYLE:
+            label = "DETECTIONS";
+            value = Settings::detXp() ? "XP" : "CLASSIC";
             break;
         case SettingsRow::VIEW_DIARY:
             label = "SQUACHY'S DIARY";
@@ -1156,6 +1236,8 @@ switch (Field::config.reduced ? Settings::Background::BLACK : Settings::backgrou
                                items[idx].row == SettingsRow::BACKGROUND ||
                                items[idx].row == SettingsRow::DESK_BACKGROUND ||
                                items[idx].row == SettingsRow::DISPLAY_SPEED);
+            } else if (isStepperRow(items[idx].row)) {
+                drawStepperRow(t,w,y,itemH,label,value,groupColor(items[idx].group),h>w);
             } else {
                 drawRow(t, w, y, itemH, label, value, danger, groupColor(items[idx].group),
                         h > w);
@@ -1201,4 +1283,34 @@ SettingsRow uiSettingsHitTest(TFT_eSPI& t, int x, int y, int screenW, int screen
         idx++;
     }
     return SettingsRow::NONE;
+}
+
+int uiSettingsStepHit(TFT_eSPI& t, int x, int y, int screenW, int screenH) {
+    int top, bodyBottom, rowH, headerH, tallH;
+    computeGeom(t, screenH, top, bodyBottom, rowH, headerH, tallH);
+    DisplayItem items[LIST_MAX_N + 7];
+    uint8_t n = buildDisplayList(items);
+    { const int m = maxScroll(items, n, top, bodyBottom, rowH, headerH, tallH);
+      if (g_scroll > m) g_scroll = m; }
+    int cy = top;
+    int idx = g_scroll;
+    while (idx < n) {
+        const int itemH = itemHeight(items[idx], rowH, headerH, tallH);
+        if (cy + itemH > bodyBottom) break;
+        if (y >= cy && y < cy + itemH) {
+            if (items[idx].isHeader || !isStepperRow(items[idx].row)) return 0;
+            char valBuf[24];
+            const char* value = stepperValue(items[idx].row, valBuf, sizeof valBuf);
+            int mx, px, vx, bw, bh, by;
+            stepperLayout(t, screenW, cy, itemH, screenH > screenW, value, mx, px, vx, bw, bh, by);
+            // A few pixels of slack either side: the buttons are the row's
+            // height already, and a near miss should count, not do nothing.
+            if (x >= mx - 4 && x < mx + bw + 4) return -1;
+            if (x >= px - 4 && x < px + bw + 4) return 1;
+            return 0;
+        }
+        cy += itemH;
+        idx++;
+    }
+    return 0;
 }

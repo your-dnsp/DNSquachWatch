@@ -312,7 +312,8 @@ void tick(uint32_t now) {
             SquachMesh::Peer o = look;
             o.custom = false;
             o.name[0] = '\0';
-            o.nick = (uint8_t)((look.nick + i) % nickCount());
+            o.aura = false;             // one Legend in the room is plenty
+            o.nick =(uint8_t)((look.nick + i) % nickCount());
             // Dressed differently, so the SQUAD screen's carousel shows three
             // Squachys rather than one in three names.
             o.outfit = (uint8_t)((look.outfit + i * 3) % Squachy::outfitCount());
@@ -351,6 +352,11 @@ bool command(const char* line) {
     if (!strcmp(verb, "outfit")) return pickIndex("outfit", arg, Squachy::outfitCount(), look.outfit);
     if (!strcmp(verb, "shade"))  return pickIndex("shade", arg, 4, look.shade);
     if (!strcmp(verb, "nick"))   return pickIndex("nick", arg, nickCount(), look.nick);
+    if (!strcmp(verb, "aura")) {
+        if (onOff(arg, look.aura, "lit", "out")) { advDue = true; return true; }
+        fprintf(stderr, "[meshsim] aura on|off\n");
+        return false;
+    }
     if (!strcmp(verb, "name")) {
         size_t i = 0;
         for (; *arg && i < SquachMesh::NAME_LEN; arg++) {
@@ -422,7 +428,7 @@ bool command(const char* line) {
     }
     if (!strcmp(verb, "status")) { fprintf(stderr, "[meshsim] %s\n", status()); return true; }
     if (!strcmp(verb, "help") || !verb[0]) {
-        fprintf(stderr, "[meshsim] on|off, outfit N, shade N, nick N, name TEXT, phrase same|other, "
+        fprintf(stderr, "[meshsim] on|off, outfit N, shade N, nick N, aura on|off, name TEXT, phrase same|other, "
                         "reply on|off, say N, text MESSAGE, emote N [SETUP], squad N, setup, status\n");
         return true;
     }

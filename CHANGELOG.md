@@ -1,5 +1,37 @@
 # DNSquachWatch changelog
 
+## v1.8.1 (ST7789)
+
+- Integrate applicable upstream v1.34/v1.35 classic-CYD pet-movement, placement and brightness-button improvements.
+- Adapt Pocket Mode to DNSP: touch cannot wake a manually darkened screen; later alerts borrow it for the configured duration without cancelling it. Keep Charge Mode, PIN and storage coordination.
+- Preserve DNSP Wi-Fi connection-only screens, startup Safe Mode, signed GitHub OTA, manual labels, history names and formats, detection/simulation and accessibility behavior.
+- Defer GPS relay, coordinate-over-name history encoding and WiGLE/wardriving additions. Clarify classic 2.8-inch CYD support and GPS data-quality rationale in README.
+- No microSD content, partition or SD transport changes. Hardware verification remains pending.
+
+## v1.8.0 (ST7789)
+
+- Integrate upstream v1.31–v1.33 classic-CYD pets, throw interactions, jail costume, counter buttons and squad heads-up messages.
+- Preserve DNSP per-source DEAUTH, simulation, labels, backups, recovery, built-in artwork, accessibility and menu organization. Ignore/Snooze remain effective in the new counters; simulated findings do not broadcast squad warnings.
+- New jail flashing honors Glitch Effects and Reduced Motion.
+- Keep DNSP signed GitHub OTA and the v1.5 card-content contract. Upstream website OTA and unrelated board targets are not substituted.
+- Retain current ST7789 microSD experiments without further changes; intermittent initialization/reset failures are unresolved. Hardware validation is pending.
+
+## v1.7.4
+
+- Match the exact decoded DD:DD:DD address suffix for receiver simulation, compatible with DNSP tester v0.1.2. Remove zero-suffix automatic marking.
+- Preserve detection confidence, signatures, user subtags, address provenance, mixed incidents and export layouts. Update regression fixtures and convention wording.
+- Build both 80 MHz CYD displays with the updated simulation convention.
+
+## v1.7.0
+
+- Integrate upstream v1.29/v1.30: SHAMBLER, TH3 0N3, outfit unlocks, visitor aura and SQUAD SEND.
+- Keep DNSP per-transmitter DEAUTH logic, simulation evidence, menu organization, recovery and backups.
+- Make new lens/cat glitches honor Glitch Effects; Reduced Motion stops involuntary TH3 animation and payphone ringing. First touch ends ringing immediately.
+- NEARBY respects explicit per-source Ignore and Snooze for DEAUTH as for other findings; unignored DEAUTH remains visible.
+- Reject malformed or overflowing backup version numbers when archiving.
+- Keep both application images smaller than v1.6.5 by using the integer scanner for a hash-verified SDK version parser; installed SDK files remain unchanged.
+- Keep existing partitions and `/DNSP Content/v1.5/`; no flash erase or new card files required.
+
 ## v1.6.5
 
 - Repair MicroSD Recovery text pagination, landscape result layout and Back navigation while tools are busy. Show a working frame before running an action and display its result.
@@ -34,7 +66,7 @@
 
 - Wi-Fi connection has its own screen, returns to saved networks, and preserves connection-only mode across password entry. Startup joins saved networks for time and location recall; firmware checks require the explicit update action.
 - Location-label persistence stores only populated entries. Existing saved labels load and migrate after a successful save; failed saves preserve the previous label/mapping. Success/failure is shown explicitly.
-- Integrates compatible SquachWatch v1.28.0 changes: Over 9000, leaner aquarium/character rendering and five-bit squad outfit sharing. DNSP menus, research signatures, per-source DEAUTH, security/duress, Remington and v1.5.1 backup fixes remain in place. The new ESP32-C5 hardware target is outside this classic-CYD release.
+- Integrates compatible SquachWatch v1.28.0 changes: Over 9000, leaner aquarium/character rendering and five-bit squad outfit sharing. DNSP menus, research signatures, per-source DEAUTH, security/duress, built-in artwork and v1.5.1 backup fixes remain in place. The new ESP32-C5 hardware target is outside this classic-CYD release.
 - Splash, System Info and new backup metadata display v1.5.2 / base v1.28.0.
 
 Both ST7789 and ILI9341 80MHz kits include all four flashing binaries. **Keep DNSP Content/v1.5 unchanged.** Normal flashing retains settings, PIN/duress state and history; no erase or card format is needed. Diagnostic serial is 115200 baud.
@@ -78,7 +110,6 @@ The following notes preserve the former README release history. They describe ch
 
 ### Included from v1.4
 
-- **Remington stays built in:** neither his photograph nor shooting-star sprite is loaded from the card. Card content cannot replace them.
 - **Complete card walkthrough:** larger-text pages cover location labels and research submissions early, followed by all major menus, security and recovery. Missing or corrupt content shows an installation message instead of breaking boot.
 - **Automatic readable history:** enabled by default, adjustable under Storage & Recovery. It uses the existing interruption-safe journal and small background steps, without creating full firmware backups automatically.
 - **Reliable storage feedback:** bounded finding-log retries, counted queue losses and visible storage warnings. Session filenames distinguish reboots/outings without needing Wi-Fi or a clock; rows include trusted epoch time when available and explicitly say when time is unset.
@@ -90,7 +121,6 @@ The following notes preserve the former README release history. They describe ch
 
 ## Retained from v1.2.1
 
-Remington's Flying Toasters pass now lasts **seven seconds**. Three quick taps on the background summon him (each gap within 600 ms and all three within 1.2 seconds). Existing menu buttons keep their actions; use an open part of the background. Automatic appearances keep their varied 15–30-second gaps.
 
 Backups now copy and read back each history file in **1 KiB steps**, keeping screen updates and cancellation responsive between storage calls. Progress shows elapsed time and file/firmware byte counts. A healthy backup may take more than five minutes; cancellation occurs after **two minutes without progress**, rather than five minutes total.
 
@@ -103,6 +133,5 @@ Readable history saves a checked cursor after each complete record and journals 
 - **Alerts & Detections → Set Location** provides a manual 24-character label, Home/Work/Driving/Con presets and Clear. Each stored detection retains its original label; unset events say `no-label-set`.
 - A label assigned while connected to authenticated Wi-Fi is remembered for that network. **Remember for verified Wi-Fi** also lets you associate a label after a successful connection earlier in the current boot. Scanning an SSID is insufficient. Clear forgets the relevant association. Manually selected labels survive disconnect for that session; automatically recalled labels survive the intentional boot radio release and remain visibly marked as recalled. A fresh boot starts unlabeled until a network recalls a label.
 - Location metadata appears in detection history, research and Remote ID capture, readable exports, rule incidents and backups. Backups include the label dictionary and remembered network names, without Wi-Fi passwords. Location labels remain visible in research's redacted mode: avoid sensitive names when sharing files.
-- **DNSP Tools → Remington**, the final item, shows the supplied dog photograph. Double-tap to return. Remington's approved pixel head also appears as a sparkling shooting star in Flying Toasters at varied 15–30-second intervals between passes; triple-tap an open area to summon him.
 
 Location storage is deliberately bounded: 64 unique labels and six Wi-Fi associations. Existing labels remain reusable at capacity; new entries fail visibly instead of evicting historical label text. Allowed characters are letters, numbers, spaces, hyphens, dots and underscores; a label cannot begin with a hyphen. Old records without location metadata remain unlabeled.

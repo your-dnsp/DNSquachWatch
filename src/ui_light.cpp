@@ -15,13 +15,13 @@ static uint8_t rowCount() { return (uint8_t)LightRow::COUNT; }
 static LightRow rowAt(uint8_t i) { return (LightRow)i; }
 
 static void computeGeom(TFT_eSPI& t, int screenH, int& top, int& bodyBottom, int& rowH) {
-    top = TOP_MARGIN + Theme::LIST_HEADING_H;
+    top = TOP_MARGIN + Theme::listHeadingH();
     bodyBottom = screenH - Theme::pinnedBackH(t.width()) - 2;
     t.setTextSize(Theme::uiMenuTextSize(t));
     // Two pixels taller than the text strictly needs on each side: a 24 px
     // row was a near miss for a thumb, 26 is not, and seven of them still
     // fit above the BACK strip in landscape.
-    rowH = t.fontHeight() + 10;
+    rowH = t.fontHeight() + Theme::listRowPad();
 }
 
 void uiLightInit(TFT_eSPI& t) {
@@ -103,7 +103,7 @@ void uiLightTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
 
     Theme::Palette saved = Theme::dimPaletteForOverlay(179);
     const int bgTop = 0;
-    switch (Settings::background()) {
+    if (!Theme::stillBackdrop(t)) switch (Settings::background()) {
         case Settings::Background::STARFIELD: Theme::drawStarfield(t, now, bgTop, bodyBottom); break;
         case Settings::Background::TOASTERS:  Theme::drawFlyingToasters(t, now, bgTop, bodyBottom); break;
         case Settings::Background::AQUARIUM:  Theme::drawAquarium(t, now, bgTop, bodyBottom); break;
@@ -140,12 +140,21 @@ void uiLightTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
     // real and travel with the owner's preferences -- but it says so, in the
     // space under the last row, rather than letting somebody tap TEST and
     // wonder what they missed.
-    if (!StatusLight::available() && y + 12 <= bodyBottom) {
-        t.setTextSize(1);
+    // Where the rows leave no room under them (the large panels' taller
+    // heading, in landscape), it goes at the far end of the heading's line.
+    Theme::bodyFontOn(t);
+    if (!StatusLight::available()) {
+        const char* note = "No LED known on this board yet.";
         t.setTextColor(Theme::blend(Theme::BG, Theme::WHITE, 150), Theme::BG);
-        t.setCursor(8, y + 4);
-        t.print("No LED known on this board yet.");
+        if (y + t.fontHeight() + 4 <= bodyBottom) {
+            t.setCursor(8, y + 4);
+            t.print(note);
+        } else if (Theme::large()) {
+            t.setCursor(w - 8 - t.textWidth(note), Theme::listHeadingY(t));
+            t.print(note);
+        }
     }
+    Theme::bodyFontOff(t);
 
     Theme::drawScrollbar(t, w - 4, top, bodyBottom - top, n, visibleCount, g_scroll);
     Theme::drawPinnedBack(t, "[ BACK ]");

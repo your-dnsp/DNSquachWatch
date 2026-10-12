@@ -46,23 +46,64 @@ uint8_t  s_wordN = 0;
 uint8_t  s_letterWords[26];
 bool     s_lettersCounted = false;
 
-const int BW = 68, BH = 26;
+// The corner buttons, a size up on the large panels so their labels can be.
+int16_t btnW() { return Theme::large() ? 96 : 68; }
+int16_t btnH() { return Theme::large() ? 34 : 26; }
 Rect s_showRow = { 0, 0, 0, 0 };   // the SHOW PHRASE row, when drawn
 
+// On the large panels the phrase's own pages (SHOW and ROLLED) are a Win95
+// dialog window: black on grey, the buttons inside it. s_win is set for the
+// page being drawn, and everything below draws for whichever it is.
+bool s_win = false;
+const int WIN_M = 8;
+const uint16_t NAVY = 0x0010, DARK_RED = 0xA000, DARK_GREEN = 0x0400;
+int textX()   { return s_win ? WIN_M + 12 : 8; }
+uint16_t ground() { return s_win ? Theme::W95_FACE : Theme::BG; }
+// The screen's colours, as they read on the window's light grey.
+uint16_t ink(uint16_t c) {
+    if (!s_win) return c;
+    if (c == Theme::RED)   return DARK_RED;
+    if (c == Theme::GREEN) return DARK_GREEN;
+    if (c == Theme::VAPOR_YELLOW) return NAVY;
+    if (c == Theme::W95_SHADOW)   return Theme::W95_SHADOW;
+    return Theme::BLACK;
+}
+
 // BACK's row and BACK's size, the same as every other screen here, with two
-// more beside it on the right.
+// more beside it on the right. In the window they sit inside its bottom edge
+// as system buttons, their labels without the brackets.
 void chrome(TFT_eSPI& t, const char* l, const char* m, const char* r) {
     const int w = t.width(), h = t.height();
-    const int y = h - BH - 6;
-    s_btn[0] = { 4, (int16_t)y, BW, BH };
-    s_btn[1] = { (int16_t)(w - 4 - 2 * BW - 6), (int16_t)y, BW, BH };
-    s_btn[2] = { (int16_t)(w - 4 - BW), (int16_t)y, BW, BH };
+    const int y  = s_win ? h - btnH() - WIN_M - 10 : h - btnH() - 6;
+    const int x0 = s_win ? WIN_M + 10 : 4;
+    const int x1 = s_win ? w - WIN_M - 10 : w - 4;
+    // Narrower in the window in portrait, where three full-width ones overlap.
+    int16_t bw = btnW();
+    if (s_win && 3 * bw + 12 > x1 - x0) bw = (int16_t)((x1 - x0 - 12) / 3);
+    s_btn[0] = { (int16_t)x0, (int16_t)y, bw, btnH() };
+    s_btn[1] = { (int16_t)(x1 - 2 * bw - 6), (int16_t)y, bw, btnH() };
+    s_btn[2] = { (int16_t)(x1 - bw), (int16_t)y, bw, btnH() };
     const char* labels[3] = { l, m, r };
     for (int i = 0; i < 3; i++) {
         s_btnOn[i] = labels[i] != nullptr;
-        if (s_btnOn[i])
+        if (!s_btnOn[i]) continue;
+        if (s_win) {
+            char bare[16];
+            const char* b = labels[i];
+            if (b[0] == '[' && b[1] == ' ') b += 2;
+            snprintf(bare, sizeof bare, "%s", b);
+            const size_t n = strlen(bare);
+            if (n >= 2 && bare[n - 1] == ']' && bare[n - 2] == ' ') bare[n - 2] = 0;
+            Theme::drawWin95Button(t, s_btn[i].x, s_btn[i].y, s_btn[i].w, s_btn[i].h, bare, false);
+        } else {
             Theme::drawButton(t, s_btn[i].x, s_btn[i].y, s_btn[i].w, s_btn[i].h, labels[i], false);
+        }
     }
+}
+
+// The window, titled, and the first row under its title bar.
+int window(TFT_eSPI& t, const char* name) {
+    return Theme::drawWin95Window(t, WIN_M, WIN_M, t.width() - 2 * WIN_M, t.height() - 2 * WIN_M, name);
 }
 
 void title(TFT_eSPI& t, const char* s) {
@@ -74,19 +115,20 @@ void title(TFT_eSPI& t, const char* s) {
 }
 
 int para(TFT_eSPI& t, int y, const char* text, uint16_t col) {
-    t.setTextSize(1);
-    t.setTextColor(col, Theme::BG);
+    Theme::bodyFontOn(t);
+    t.setTextColor(ink(col), ground());
     // Theme::wrapText fills 48-character rows; cap the width at 47 of them.
     const int charW = t.textWidth("M");
-    int maxW = t.width() - 16;
+    int maxW = t.width() - 2 * textX();
     if (maxW > 47 * charW) maxW = 47 * charW;
     char lines[6][48];
     const uint8_t n = Theme::wrapText(t, text, maxW, lines, 6);
     for (uint8_t i = 0; i < n; i++) {
-        t.setCursor(8, y);
+        t.setCursor(textX(), y);
         t.print(lines[i]);
         y += t.fontHeight() + 1;
     }
+    Theme::bodyFontOff(t);
     return y;
 }
 
@@ -97,11 +139,11 @@ int bigWords(TFT_eSPI& t, int y, const char* const words[MeshMsg::PHRASE_WORDS],
     for (int i = 0; i < MeshMsg::PHRASE_WORDS; i++) {
         char nb[4];
         snprintf(nb, sizeof nb, "%d", i + 1);
-        t.setTextColor(Theme::W95_SHADOW, Theme::BG);
-        t.setCursor(8, y);
+        t.setTextColor(Theme::W95_SHADOW, ground());
+        t.setCursor(textX(), y);
         t.print(nb);
-        t.setTextColor(col, Theme::BG);
-        t.setCursor(34, y);
+        t.setTextColor(ink(col), ground());
+        t.setCursor(textX() + 26, y);
         t.print(words[i]);
         y += 20;
     }
@@ -110,15 +152,17 @@ int bigWords(TFT_eSPI& t, int y, const char* const words[MeshMsg::PHRASE_WORDS],
 
 void status(TFT_eSPI& t) {
     if (!s_status) return;
-    t.setTextSize(1);
-    t.setTextColor(s_statusCol, Theme::BG);
-    t.setCursor(8, t.height() - BH - 6 - 12);
+    Theme::bodyFontOn(t);
+    t.setTextColor(ink(s_statusCol), ground());
+    t.setCursor(textX(), t.height() - btnH() - (s_win ? WIN_M + 10 : 6) - t.fontHeight() - 4);
     t.print(s_status);
+    Theme::bodyFontOff(t);
 }
 
 void drawShow(TFT_eSPI& t) {
-    title(t, "PHRASE");
     int y = 30;
+    if (s_win) y = window(t, "Phrase") + 2;
+    else       title(t, "PHRASE");
     if (MeshTalk::havePhrase()) {
         char buf[MeshMsg::PHRASE_TEXT_MAX];
         snprintf(buf, sizeof buf, "%s", MeshTalk::phrase());
@@ -139,7 +183,13 @@ void drawShow(TFT_eSPI& t) {
                                  : "Hidden. This board never says its phrase; members join "
                                    "by ADD TO SQUAD, in person.", Theme::W95_LIGHT);
         // The switch, drawn as a settings row.
-        {
+        if (s_win) {
+            // In the window it is a system button that says what it does.
+            const int rh = 30, rx = textX() - 4, rw = t.width() - 2 * rx;
+            s_showRow = { (int16_t)rx, (int16_t)(y + 6), (int16_t)rw, rh };
+            Theme::drawWin95Button(t, rx, s_showRow.y, rw, rh,
+                                   shown ? "SHOW PHRASE: ON" : "SHOW PHRASE: OFF", false);
+        } else {
             const int rh = 22;
             s_showRow = { 3, (int16_t)(y + 4), (int16_t)(t.width() - 10), rh };
             Theme::drawListRowPanel(t, t.width(), s_showRow.y, rh + 2);
@@ -155,8 +205,8 @@ void drawShow(TFT_eSPI& t) {
     } else {
         s_showRow = { 0, 0, 0, 0 };
         t.setTextSize(2);
-        t.setTextColor(Theme::WHITE, Theme::BG);
-        t.setCursor(8, y);
+        t.setTextColor(ink(Theme::WHITE), ground());
+        t.setCursor(textX(), y);
         t.print("No phrase yet.");
         y = para(t, y + 24, "A phrase is five words you share with a friend. ROLL makes "
                             "a new one to read out; ENTER takes theirs.", Theme::W95_LIGHT);
@@ -171,10 +221,12 @@ void drawShow(TFT_eSPI& t) {
 }
 
 void drawRolled(TFT_eSPI& t) {
-    title(t, "NEW PHRASE");
+    int top = 30;
+    if (s_win) top = window(t, "New phrase") + 2;
+    else       title(t, "NEW PHRASE");
     const char* words[MeshMsg::PHRASE_WORDS];
     for (int i = 0; i < MeshMsg::PHRASE_WORDS; i++) words[i] = MeshMsg::WORDS[s_rolled[i]];
-    const int y = bigWords(t, 30, words, Theme::VAPOR_YELLOW);
+    const int y = bigWords(t, top, words, Theme::VAPOR_YELLOW);
     para(t, y + 4, "Read these to your friend. On theirs: PHRASE, ENTER, and the "
                    "same five in the same order.", Theme::W95_LIGHT);
     chrome(t, "[ CANCEL ]", "[ AGAIN ]", "[ USE ]");
@@ -225,7 +277,7 @@ void drawPick(TFT_eSPI& t) {
     title(t, tb);
     progress(t, 28);
 
-    const int top = 42, bottom = h - BH - 6 - 6, gridH = bottom - top;
+    const int top = 42, bottom = h - btnH() - 6 - 6, gridH = bottom - top;
     s_wordN = 0;
     for (bool& on : s_letterOn) on = false;
 
@@ -351,6 +403,7 @@ void uiMeshPhraseTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, boo
     Theme::dimRegion(t, 0, 0, w, h, 110);
 
     for (bool& b : s_btnOn) b = false;
+    s_win = Theme::large() && (s_mode == Mode::SHOW || s_mode == Mode::ROLLED);
     switch (s_mode) {
         case Mode::SHOW:    drawShow(t); break;
         case Mode::ROLLED:  drawRolled(t); break;

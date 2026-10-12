@@ -11,6 +11,7 @@ public:
     void describe(char* out, size_t cap);
     void logPressure(uint32_t alerts, uint32_t ble);
     bool begin();              // returns true if card mounted
+    void scheduleBoot(uint32_t now);
     bool ready() const { return _ready; }
     bool logEvent(const Detection& d);
     uint32_t writeErrors() const { return _writeErrors; }
@@ -25,6 +26,8 @@ public:
     // wipe must also erase is here. A no-op when no card is mounted.
     void wipe();
 private:
+    bool _bootPending = false;
+    uint32_t _bootStart = 0;
     uint32_t _pressureAt = 0, _loggedAlerts = 0, _loggedBle = 0;
     uint8_t  _drive = 255;
     uint32_t _writeErrors = 0;

@@ -27,8 +27,8 @@ int main(){
     DetectionEngine old;
     old.postBle(make(DetectionType::ALPR,5,400000));old.postBle(make(DetectionType::DEAUTH,6,491000));SketchyRule::tick(old,491000);
     ck("more than 90 seconds does not alert",!SketchyRule::takeAlert(in));
-    DetectionEngine sim;auto alpr=make(DetectionType::FLOCK,0,600000);alpr.addressRole=AddressRole::BLE_ADVERTISER;
-    auto deauth=make(DetectionType::DEAUTH,0,600500);deauth.mac[0]=0x20;deauth.addressRole=AddressRole::TRANSMITTER;
+    DetectionEngine sim;auto alpr=make(DetectionType::FLOCK,0,600000);alpr.mac[3]=alpr.mac[4]=alpr.mac[5]=0xDD;alpr.addressRole=AddressRole::BLE_ADVERTISER;
+    auto deauth=make(DetectionType::DEAUTH,0,600500);deauth.mac[3]=deauth.mac[4]=deauth.mac[5]=0xDD;deauth.mac[0]=0x20;deauth.addressRole=AddressRole::TRANSMITTER;
     sim.postBle(alpr);sim.postBle(deauth);SketchyRule::tick(sim,600500);
     ck("both simulated endpoints produce SIMULATED incident",SketchyRule::takeAlert(in)&&!strcmp(SketchyRule::simulationLabel(in),"SIMULATED"));
     SketchyRule::begin();SketchyRule::Incident saved{};

@@ -313,7 +313,9 @@ static void drawPolaroid(TFT_eSPI& t, int top, float p, uint32_t now) {
         const bool known = Mesh::peerLook(m.mac, look);
         Squachy::setOutfitPreview(known ? (int8_t)look.outfit : 0);
         Squachy::setShadesPreview(known ? (int8_t)look.shade  : 0);
+        Squachy::setAuraPreview(known && look.aura ? 1 : 0);
         Squachy::drawWaving(t, px + pw / 2, py + ph - 2, now, 0.5f, nullptr, false, 0, true, 34);
+        Squachy::setAuraPreview(-1);
         Squachy::setShadesPreview(-1);
         Squachy::setOutfitPreview(-1);
     }
@@ -484,8 +486,27 @@ void uiDeskTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool adva
     // The plate sits high -- 3 px under the top edge, digits from 26 -- so
     // the room under it is Squachy's, with a little air between his bubble
     // and the clock's foot rather than the overlap the first cut had.
-    const int plateTop = 3;
-    const int y = 26 + pad;
+    //
+    // Past 8:5 tall -- the phone app, upright; no board is that shape -- the
+    // main screen's rule applies: Squachy stands a fifth of the way up at a
+    // board's size, and the clock is centred in the sky above his bubble
+    // instead of pinned to the top edge, where his band used to reach up
+    // into the plate.
+    // He is three quarters of the width tall here, a little under the main
+    // screen's size, because on the desk the clock is the point. The plate is
+    // centred in the sky above him less two fifths of the width, the room a
+    // lit aura's flames take above his crest (they are allowed past his band).
+    const bool tall    = h * 5 > w * 8;
+    const int  tallFeet = h * 4 / 5;
+    const int  tallTop  = tallFeet - w * 3 / 4;
+    int yBase = 26;
+    if (tall) {
+        const int skyBottom = tallTop - w * 2 / 5;
+        const int c = (16 + skyBottom) / 2 - (dh - 18) / 2;
+        if (c > yBase) yBase = c;
+    }
+    const int y = yBase + pad;
+    const int plateTop = y - 23 - pad;
     const uint16_t on  = set ? Theme::VAPOR_PINK : Theme::W95_SHADOW;
 
     // The message box, first, so the plate drawn over it hides whatever
@@ -627,9 +648,10 @@ void uiDeskTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool adva
     const bool side  = msgOn && (w - (XP_LEFT + XP_W)) >= 80;
     // 25 under the plate's foot: his bubble rises 16 above his top, which
     // leaves 4 px of air between bubble and plate.
-    const int  top   = (msgOn && !side) ? plateBottom + 4 + boxH + 18 : y + dh + 25;
+    int        top   = (msgOn && !side) ? plateBottom + 4 + boxH + 18 : y + dh + 25;
+    if (tall && tallTop > top) top = tallTop;
     const int  cx    = side ? XP_LEFT + XP_W + (w - XP_LEFT - XP_W) / 2 : w / 2;
-    const int  feet  = bar.y - 2;
+    const int  feet  = tall ? tallFeet : bar.y - 2;
     // Beside the box his bubble would lie across it, so it waits.
     Squachy::holdBubble(side);
 #if SQUACH_MESH
@@ -752,6 +774,24 @@ bool uiDeskHitSettings(int x, int y, int screenW, int screenH) {
     int gx, gy, gs;
     gearRect(screenW, screenH, gx, gy, gs);
     return x >= gx && x <= gx + gs && y >= gy && y <= gy + gs;
+}
+
+uint8_t uiDeskStops(int screenW, int screenH, uint32_t now, int16_t* xs, int16_t* ys, uint8_t cap) {
+    uint8_t n = 0;
+    auto add = [&](int x, int y) { if (n < cap) { xs[n] = (int16_t)x; ys[n] = (int16_t)y; n++; } };
+#if SQUACH_MESH
+    if (s_msgX1 > s_msgX0) add((s_msgX0 + s_msgX1) / 2, (s_msgY0 + s_msgY1) / 2);
+#endif
+    if (uiDeskAlertUp(now)) add(s_cardX + s_cardW / 2, s_cardY + CARD_H / 2);
+    int tx, ty, tw, th, bx, bw;
+    timerRects(screenW, screenH, tx, ty, tw, th, bx, bw);
+    add(tx + tw / 2, ty + th / 2);                 // FOCUS
+    add(bx + bw / 2, ty + th / 2);                 // BACK
+    int gx, gy, gs;
+    gearRect(screenW, screenH, gx, gy, gs);
+    add(gx + gs / 2, gy + gs / 2);                 // the gear: settings
+    if (s_plateW > 0) add(s_plateX + s_plateW - s_plateW / 10, s_plateY + s_plateH / 2);   // the clock's look
+    return n;
 }
 
 bool uiDeskHitBack(int x, int y, int screenW, int screenH) {

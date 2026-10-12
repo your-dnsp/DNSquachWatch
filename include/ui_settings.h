@@ -4,6 +4,15 @@
 #include <TFT_eSPI.h>
 #include "detection.h"
 
+// The speaker's two rows: on the boards with one, and in the emulator, where
+// they are listed only with SQUACHSIM_SPEAKER set (for the release clip) so
+// the web emulator never offers a sound it cannot make.
+#if defined(FREENOVE_S3) || defined(FREENOVE_S3_35)
+#define SQW_SOUND_ROWS 1
+#else
+#define SQW_SOUND_ROWS 0
+#endif
+
 enum class SettingsRow : uint8_t {
     THEME = 0,
     BACKGROUND,
@@ -84,6 +93,7 @@ enum class SettingsRow : uint8_t {
     GLITCH_EFFECTS,
     SCREEN_LIGHT, RANDOMIZER, TIMER_COUNTER, POCKET_READER, RADIO_ACTIVITY,
     READABLE_LOGS, SET_LOCATION, REMINGTON, AUTO_HISTORY, DEVICE_RESEARCH,
+    DET_STYLE, EXT_SCREEN,
     COUNT,
     NONE = 255
 };
@@ -128,6 +138,12 @@ bool uiSettingsTapPinnedOk(int x, int y, int screenW, int screenH);
 // just the screen dimensions) since row height now depends on actual
 // font metrics -- same reasoning as ui_rawscan.cpp's uiRawScanRowAt().
 SettingsRow uiSettingsHitTest(TFT_eSPI& t, int x, int y, int screenW, int screenH);
+// The stepper rows (BRIGHT, VOLUME) carry a real - and + button each. For a
+// tap that uiSettingsHitTest put on one of those rows: -1 on the minus, +1
+// on the plus, 0 anywhere else on the row -- which does nothing, so a thumb
+// resting on the label never nudges the value.
+int uiSettingsStepHit(TFT_eSPI& t, int x, int y, int screenW, int screenH);
+bool uiSettingsIsStepper(SettingsRow r);
 
 // ---- confirmation panel ---------------------------------------------------
 // Two rows here cannot be taken back by tapping them again: CALIBRATE TOUCH

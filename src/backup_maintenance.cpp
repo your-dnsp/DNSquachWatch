@@ -11,7 +11,26 @@ static bool running=false,archive=false;static unsigned slot=0,moved=0,skipped=0
 const char* status(){return msg;}bool busy(){return running;}
 #if defined(ARDUINO_ARCH_ESP32) || defined(BACKUP_MAINTENANCE_TEST)
 static File folder;static unsigned leaves=0,archiveIndex=0;static bool deleting=false;
-static bool older(const char* version){unsigned a=0,b=0,c=0,x=0,y=0,z=0;if(sscanf(version,"v%u.%u.%u",&a,&b,&c)<2||sscanf(FIRMWARE_VERSION+(FIRMWARE_VERSION[0]=='v'),"%u.%u.%u",&x,&y,&z)<2)return false;return a<x||(a==x&&(b<y||(b==y&&c<z)));}
+// Read only the release numbers we need. scanf pulls the general-purpose
+// floating-point scanner into an otherwise integer-only archive decision.
+// Reject overflow and malformed versions so uncertain backups stay put.
+static bool versionParts(const char* s, unsigned (&v)[3]) {
+ if (*s=='v') ++s;
+ for (unsigned i=0;i<3;++i) {
+  if (*s<'0'||*s>'9') return false;
+  unsigned n=0;
+  do { const unsigned digit=*s++-'0'; if(n>6553||(n==6553&&digit>5))return false;n=n*10+digit; } while(*s>='0'&&*s<='9');
+  v[i]=n;
+  if(i<2) { if(*s=='.'){++s;continue;} if(i==1&&(*s=='\n'||*s=='\r'||!*s)){v[2]=0;return true;} return false; }
+ }
+ return !*s||*s=='\n'||*s=='\r';
+}
+static bool older(const char* version){
+ unsigned a[3]{},b[3]{};
+ if(!versionParts(version,a)||!versionParts(FIRMWARE_VERSION,b))return false;
+ for(unsigned i=0;i<3;++i){if(a[i]!=b[i])return a[i]<b[i];}return false;
+}
+
 static char root[32];
 bool start(bool old,bool mounted){if(running||!mounted)return false;running=true;archive=old;slot=moved=skipped=0;leaves=archiveIndex=0;deleting=false;snprintf(msg,sizeof msg,"%s... Keep power connected.",old?"Archiving older backups":"Removing incomplete backups");return true;}
 void tick(){

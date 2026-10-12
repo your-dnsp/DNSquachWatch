@@ -278,6 +278,25 @@ int main() {
         // more; its opener is exercised by the length branch above.
     }
 
+    suite("A phone's position round-trips, south and west included");
+    {
+        TOY.setKey(key);
+        uint8_t f[FRAME_MAX];
+        const size_t n = sealFix(TOY, me, 12, 414391000, -1236958000, 5, f, sizeof f);
+        ck("a position is 23 bytes", n == FIX_FRAME_LEN);
+        uint32_t c = 0; int32_t la = 0, lo = 0; uint8_t acc = 0;
+        ck("it opens", openFix(TOY, me, f, n, c, la, lo, acc) == Open::OK);
+        ck("the latitude survives", la == 414391000);
+        ck("the longitude survives, negative", lo == -1236958000);
+        ck("the accuracy survives", acc == 5 && c == 12);
+        const size_t s = sealFix(TOY, me, 13, -338688000, 1512093000, 12, f, sizeof f);
+        ck("the southern hemisphere opens", openFix(TOY, me, f, s, c, la, lo, acc) == Open::OK && la == -338688000 && lo == 1512093000);
+        const size_t bad = sealFix(TOY, me, 14, 950000000, 0, 1, f, sizeof f);
+        ck("a latitude past the pole is refused", openFix(TOY, me, f, bad, c, la, lo, acc) == Open::BAD_FORMAT);
+        uint8_t v[3]; uint32_t ep; uint8_t z;
+        ck("it is not a hello", openHello(TOY, me, f, n, c, v, ep, z) != Open::OK);
+    }
+
     suite("Anything tampered with is refused, not misread");
     {
         TOY.setKey(key);

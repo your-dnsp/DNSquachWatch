@@ -25,6 +25,9 @@ env.Append(BUILD_FLAGS=['-DFIRMWARE_VERSION=\\"%s\\"' % get_version()])
 # build and the board checks the signature against its own name, so an image
 # for a different board -- a different display driver, say -- is refused
 # rather than installed as a white screen. See include/ota_ble.h.
+# No firmware exception handlers: avoid unused C++ unwind tables.
+env.Append(BUILD_FLAGS=['-fno-exceptions'])
+
 env.Append(BUILD_FLAGS=['-DSQW_ENV=\\"%s\\"' % env["PIOENV"]])
 
 
@@ -68,6 +71,20 @@ if env['PIOENV'] in ('cyd', 'cyd-fast', 'cyd-ili9341', 'cyd-ili9341-fast'):
             destination.write_text(result)
         return env.File(str(destination))
     env.AddBuildMiddleware(runtime_ble, '*NimBLEScan.cpp')
+
+# Local ST7789 compatibility experiment; installed Arduino files are untouched.
+if env['PIOENV'] == 'cyd-fast':
+    env.Append(BUILD_FLAGS=['-DDNSP_SD_COMPAT=1'])
+    def runtime_sd(env, node):
+        source = Path(node.srcnode().get_abspath())
+        transform = runpy.run_path(str(_project/'tools/runtime_sd.py'))['patch']
+        result = transform(source.read_text())
+        destination = Path(env.subst('$BUILD_DIR'))/'dnsp-runtime'/'sd_diskio.cpp'
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if not destination.exists() or destination.read_text() != result:
+            destination.write_text(result)
+        return env.File(str(destination))
+    env.AddBuildMiddleware(runtime_sd, '*sd_diskio.cpp')
 
 # Emit compile-time stack estimates alongside objects for the resource audit.
 env.Append(CCFLAGS=["-fstack-usage"])

@@ -12,7 +12,7 @@
 namespace Settings{bool autoHistory(){return true;}}
 namespace Clock{bool trusted(){return false;}uint32_t nowEpoch(){return 0;}}
 namespace SketchyRule{uint8_t count(){return 0;}bool recent(uint8_t,Incident&){return false;}}
-static Detection event(unsigned n){Detection d;d.type=DetectionType::AIRTAG;d.vendor="test";d.name[0]=0;if(n==0){strcpy(d.name,"=bad,name\r");d.vendor="t,est";}d.mac[0]=2;d.mac[4]=n>>8;d.mac[5]=n;d.hits=1;d.rssi=-45;return d;}
+static Detection event(unsigned n){Detection d;d.type=DetectionType::AIRTAG;d.vendor="test";d.name[0]=0;if(n==0){strcpy(d.name,"=bad,name\r");d.vendor="t,est";}d.mac[0]=2;d.mac[4]=n>>8;d.mac[5]=n;if(n==0)d.mac[3]=d.mac[4]=d.mac[5]=0xDD;d.hits=1;d.rssi=-45;return d;}
 static std::string read(const char* leaf){std::ifstream f(TestSD::root+"/DNSP Readable Logs/Current/"+leaf);std::stringstream b;b<<f.rdbuf();return b.str();}
 static unsigned lines(const std::string& s){return std::count(s.begin(),s.end(),'\n');}
 static bool finish(){unsigned ticks=0;while(ReadableLogs::busy()&&ticks++<400000)ReadableLogs::tick();if(!ReadableLogs::succeeded())fprintf(stderr,"Refresh failed: %s | open=%u peak=%u\n",ReadableLogs::status(),TestSD::openHandles,TestSD::peakHandles);return ReadableLogs::succeeded();}

@@ -600,6 +600,24 @@ bool DetectionEngine::init() {
     }
     Serial.printf("[boot] heap with WiFi started: %lu free, %lu largest\n", (unsigned long)heap_caps_get_free_size(MALLOC_CAP_8BIT), (unsigned long)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
     esp_wifi_set_promiscuous(true);
+#if SQW_WIFI_5G
+    {
+        // Both bands, then ask the radio which 5 GHz channels it will tune
+        // to. Receive only: nothing here transmits, but the driver still
+        // applies the country's channel list, so its answer is the list.
+        const esp_err_t be = esp_wifi_set_band_mode(WIFI_BAND_MODE_AUTO);
+        s5Count = 0;
+        for (uint8_t b = 1; b <= 28; b++) {
+            const uint8_t ch = (uint8_t)BIT_NUMBER_TO_CHANNEL(b, WIFI_BAND_5G);
+            s5Chan[b] = (be == ESP_OK && esp_wifi_set_channel(ch, WIFI_SECOND_CHAN_NONE) == ESP_OK) ? ch : 0;
+            if (s5Chan[b]) s5Count++;
+        }
+        esp_wifi_set_channel(1, WIFI_SECOND_CHAN_NONE);
+        s5On = Settings::wifi5();
+        Serial.printf("[boot] 5 GHz: band mode err %d, %u of 28 channels accepted, %s\n",
+                      (int)be, (unsigned)s5Count, s5On ? "on" : "off (BAND 2)");
+    }
+#endif
     wifi_promiscuous_filter_t filter;
     filter.filter_mask = WIFI_PROMIS_FILTER_MASK_MGMT | WIFI_PROMIS_FILTER_MASK_DATA;
     esp_wifi_set_promiscuous_filter(&filter);
@@ -765,7 +783,7 @@ bool DetectionEngine::init() {
     }
 
     // 5. SD card (best-effort), now that the radios have what they need.
-    _sd.begin();
+    _sd.scheduleBoot(millis());
 
     return true;
 }
@@ -1304,6 +1322,70 @@ void DetectionEngine::hopChannel() {
     DroneWatch::channelResult(_wifiChannel, ok);
 }
 
+#if SQW_WIFI_5G
+// The 5 GHz slice, between one 2.4 GHz sweep and the next. The busy 5 GHz
+// channels are where the access points and their clients are, so each gets a
+// look every sweep. A silent channel gets one every few sweeps, two at a time
+// in rotation, which is how a new one is found. A slice never runs past
+// 1.5 s, so 2.4 GHz keeps about three quarters of the radio's time.
+//
+// 150 ms is the shortest look: an access point beacons about every 102 ms,
+// so any access point on the channel is heard at least once.
+static const uint16_t SLICE5_MS = 1500, LOOK5_BUSY = 250, LOOK5_QUIET = 150;
+
+bool DetectionEngine::start5(uint32_t now) {
+    if (!s5On || !s5Count) return false;
+    s5Len = 0;
+    uint16_t budget = SLICE5_MS;
+    for (uint8_t b = 1; b <= 28 && budget >= LOOK5_BUSY; b++)
+        if (s5Chan[b] && s5Rate[b]) { s5Slice[s5Len++] = b; budget -= LOOK5_BUSY; }
+    for (uint8_t k = 0, tried = 0; k < 2 && tried < 28 && budget >= LOOK5_QUIET; tried++) {
+        const uint8_t b = s5Next;
+        s5Next = (uint8_t)(s5Next % 28 + 1);
+        if (!s5Chan[b] || s5Rate[b]) continue;
+        s5Slice[s5Len++] = b; budget -= LOOK5_QUIET; k++;
+    }
+    if (!s5Len) return false;
+    s5Pos = 0;
+    const uint8_t b = s5Slice[0];
+    s5Frames[b] = 0;
+    _dwellMs = s5Rate[b] ? LOOK5_BUSY : LOOK5_QUIET;
+    _lastHopMs = now;
+    esp_wifi_set_channel(s5Chan[b], WIFI_SECOND_CHAN_NONE);
+    return true;
+}
+
+// True while the slice still owns the radio. After the last channel it
+// returns false and hopChannel() carries on to channel 1. It leaves
+// _wifiChannel at 0 for that: hopChannel() then scores "channel 0", which
+// nothing counts and nothing reads (every busyness loop runs 1-13), instead
+// of scoring 13 as silent for a visit it never had. 13 was scored when the
+// slice began, and 0 wraps to 1 without starting another slice.
+bool DetectionEngine::hop5(uint32_t now) {
+    if (s5Pos >= s5Len) return false;
+    {
+        const uint8_t b = s5Slice[s5Pos];
+        const uint32_t spent = now - _lastHopMs, f = s5Frames[b];
+        s5Frames[b] = 0;
+        if (spent <= 2u * _dwellMs + 200u) {
+            uint32_t rate = f * 16000u / (spent ? spent : 1);
+            if (rate > 0xFFFFu) rate = 0xFFFFu;
+            // A busy channel that goes quiet decays to silent within a few
+            // looks, and then goes back into the rotation.
+            s5Rate[b] = (uint16_t)(((uint32_t)s5Rate[b] * 3u + rate) / 4u);
+            if (s5Rate[b] < 4) s5Rate[b] = 0;
+        }
+    }
+    if (++s5Pos >= s5Len) { s5Len = 0; s5Pos = 0; _wifiChannel = 0; return false; }
+    const uint8_t b = s5Slice[s5Pos];
+    s5Frames[b] = 0;
+    _dwellMs = s5Rate[b] ? LOOK5_BUSY : LOOK5_QUIET;
+    _lastHopMs = now;
+    esp_wifi_set_channel(s5Chan[b], WIFI_SECOND_CHAN_NONE);
+    return true;
+}
+#endif
+
 void DetectionEngine::clearLog() {
     alerts.clear();
     _blePending.clear();
@@ -1691,6 +1773,10 @@ void DetectionEngine::wakeRadios() {
     g_rawMode = RawScanMode::NONE;
     esp_wifi_start();
     esp_wifi_set_promiscuous(true);
+#if SQW_WIFI_5G
+    s5Len = s5Pos = 0;                           // a slice cut short by the rest is dropped, not scored
+    if (!_wifiChannel) _wifiChannel = 1;
+#endif
     esp_wifi_set_channel(_wifiChannel, WIFI_SECOND_CHAN_NONE);
     if (g_restBle && s_updEvReady) ble_npl_eventq_put(nimble_port_get_dflt_eventq(), &s_updStartEv);
     g_restBle = false;

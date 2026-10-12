@@ -28,6 +28,7 @@
 
 #include "theme.h"
 #include "settings.h"
+#include "field_tools.h"
 #include "squachy.h"
 #include "qwerty.h"
 #include "meshmsg.h"
@@ -156,12 +157,13 @@ void saveAndClose() {
     }
     s_done = true;
 }
-void deleteLast() { commitPending(); if (s_len) s_buf[--s_len] = '\0'; }
+void deleteLast() { commitPending(); if (s_len) s_buf[--s_len] = '\0'; Squachy::noteBackspace(); }
 // The name board's SHUFFLE: whatever was typed goes, and the curated name
 // steps to the next one. OK from here keeps it -- an empty board means
 // "the curated one", which is what the readout shows.
 void shuffleName() { commitPending(); s_len = 0; s_buf[0] = '\0'; Squachy::cycleNickname(); }
 void appendChar(char c) {
+    Squachy::noteTyped();
     commitPending();
     if (s_len < s_max) { s_buf[s_len++] = c; s_buf[s_len] = '\0'; }
 }
@@ -179,7 +181,14 @@ inline void steel(TFT_eSPI& t, int x, int y, int w, int h, bool sunk = false) {
     Theme::drawSteelPanel(t, x, y, w, h, sunk);
 }
 
+// TH3 0N3: in the coat, the payphone rings as it opens and the readout says
+// who is on the line. 0 = not rung yet this opening.
+static uint32_t s_ringFrom = 0;
+static bool s_ringDismissed = false;
+
 void start(const char* text) {
+    s_ringFrom = 0;
+    s_ringDismissed = false;
     s_len = 0;
     s_buf[0] = '\0';
     if (text) {
@@ -468,6 +477,7 @@ static void drawPinPad(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bo
 }
 
 void uiPhoneTouch(int x, int y, uint32_t now, PhoneTouch phase) {
+    if (phase == PhoneTouch::DOWN) s_ringDismissed = true;
     if (pin()) { if (phase == PhoneTouch::DOWN) pinTouch(x, y, now); return; }
     // Only a QWERTY press that landed on a key has any use for the rest of a
     // gesture. The keypad never sets s_sliding, so for it these are the no-ops
@@ -513,6 +523,7 @@ void uiPhoneTouch(int x, int y, uint32_t now, PhoneTouch phase) {
         if (i == 9) {                                   // DEL
             commitPending();
             if (s_len) s_buf[--s_len] = '\0';
+            Squachy::noteBackspace();
             return;
         }
         if (i == 11) {                                  // OK
@@ -542,6 +553,7 @@ void uiPhoneTouch(int x, int y, uint32_t now, PhoneTouch phase) {
             // is what lets you type two letters off one key by waiting, and
             // two off different keys without waiting at all.
             if (s_len >= s_max) return;
+            Squachy::noteTyped();
             s_tapIx = 0;
             s_buf[s_len++] = letters[0];
             s_buf[s_len] = '\0';
@@ -594,6 +606,23 @@ void uiPhoneTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool adv
     t.setTextSize(2);
     t.setTextWrap(false);
     t.setTextColor(Theme::GREEN);
+    if (!s_ringFrom) s_ringFrom = now ? now : 1;
+    const uint32_t ring = now - s_ringFrom;
+    if (Squachy::th3Wearing() && !s_ringDismissed && !Field::config.reduced && ring < 2800u) {
+        // RING RING, then OPERATOR. -- the case's bells shaking while it
+        // rings. The first press ends the animation immediately, so
+        // typed input is always visible. Reduced Motion skips the ring.
+        const bool on = ring < 1800u && ((ring / 300u) % 2u) == 0;
+        const char* say = ring < 1800u ? (on ? "RING RING" : "") : "OPERATOR.";
+        t.setCursor(dX + (dW - t.textWidth(say)) / 2, dY + (dH - 14) / 2);
+        t.print(say);
+        if (on) {
+            for (int k = 0; k < 2; k++) {
+                t.drawCircle(ux + 8, uy + 8, 6 + k * 4, Theme::VAPOR_YELLOW);
+                t.drawCircle(ux + uw - 9, uy + 8, 6 + k * 4, Theme::VAPOR_YELLOW);
+            }
+        }
+    } else {
     // Right-aligned once it outgrows the window, so the END of the text --
     // the part being typed -- is always the part you can see.
     // An empty name board shows the curated name he has now, dimmed: that
@@ -613,6 +642,7 @@ void uiPhoneTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool adv
         t.setTextColor(s_liveKey >= 0 ? Theme::VAPOR_YELLOW : Theme::GREEN);
         t.print("_");
     }
+    }   // end of the readout (TH3 0N3's call takes it first)
     // A message has a limit worth seeing coming; a name's twelve is its own
     // readout.
     char rem[8];

@@ -1,8 +1,10 @@
 // SquachWatch-CYD — Squachy implementation
 #include "squachy.h"
+#include "sound.h"
 #include "theme.h"
 #include "signatures.h"
 #include "settings.h"
+#include "field_tools.h"
 
 // ---- tempo ----
 // Squachy's behaviour is scheduled in milliseconds: how long a mood lasts,
@@ -21,6 +23,8 @@ static inline uint32_t tempo(uint32_t ms) { return ms * s_tempoPct / 100; }
 #include "void_eye.h"
 #if SQUACH_MESH
 #include "emote_script.h"   // spokenName, for the banter
+#include "draw_band.h"
+#include "fast_sprite.h"
 #include "squachmesh.h"     // OUTFIT_N, checked against OutfitId::COUNT below
 #endif
 #include <Arduino.h>
@@ -37,6 +41,7 @@ static inline uint32_t tempo(uint32_t ms) { return ms * s_tempoPct / 100; }
 #else
 #define SQ_LAP(x) ((void)0)
 #endif
+
 
 namespace Squachy {
 
@@ -554,6 +559,7 @@ static const uint8_t  WALK_CYCLES     = 5;
 static uint32_t       WALK_DURATION_MS = WALK_CYCLE_MS_BASE * WALK_CYCLES;
 static uint32_t       s_walkStart = 0;
 static int8_t         s_walkDir   = 1;
+static bool           s_walkYanked = false;     // this wander already reached the end of the chain
 static const char*   bubbleText      = nullptr;
 static uint32_t      bubbleUntil     = 0;
 // When the current line started, for the bubble's pop-in (see
@@ -644,8 +650,27 @@ static bool     s_voidEyeUnlocked    = false;  // earned by catching two Starfie
 static bool     s_parkaUnlocked      = false;  // earned by knocking five times on the Snowfall lodge
 static bool     s_yzzerdUnlocked     = false;  // earned by tapping XYZZY three times on the TERMINAL background
 static bool     s_over9000Unlocked   = false;  // earned by tapping his shades while the aura is lit
+static bool     s_shamblerUnlocked   = false;  // earned by tapping the owl while it asks WHAT REEKS?!
+static bool     s_th3Unlocked        = false;  // earned by tapping the red glyph in the DIGITAL rain
+static bool     s_stripesUnlocked    = false;  // earned by serving ten minutes for throwing a pet
+// The sentence: how much of it is left, and when that was last brought up to
+// date. Saved to NVS every quarter minute and at both ends, so pulling the
+// plug costs at most fifteen seconds of time served.
+static uint32_t s_jailLeft    = 0;
+static uint32_t s_jailLast    = 0;
+static uint32_t s_jailSaved   = 0;
+static bool     s_jailFreed   = false;
+static uint32_t s_yankAt      = 0;
+static bool     s_thYanked    = false;         // this throw was stopped by the chain
+static int      s_chainX = 0, s_chainY = 0;
+static uint32_t s_chainAt = 0;
 static bool     s_sharkUnlocked      = false;  // earned by catching the Aquarium shark on his return pass
 static bool     s_petUnlocked        = false;  // earned by tapping the lil guy on the toasters
+static bool     s_clippyUnlocked     = false;  // earned by backspacing ten times in a row
+static const char* s_clippyIntro     = nullptr;
+static bool     s_toasterUnlocked    = false;  // earned by tapping the same flying toaster three times
+static bool     s_ballUnlocked    = false;      // the ball and chain, earned by serving a sentence
+static const char* s_toasterIntro    = nullptr;
 // Whether the card has been shown for him. Kept separately from the unlock
 // itself, and for the same reason the outfits keep an "announced" bitmask:
 // the pet survives a reboot, so without this the celebration would play
@@ -666,6 +691,7 @@ static uint32_t s_outfitAnnounced    = 0;
 
 // Runtime-only — reset every boot, not persisted.
 static uint32_t s_cachedLifetimeTotal = 0;  // from the last DETECTION trigger (or BOOTED)
+static const uint32_t CLIPPY_CATCHES = 10;   // C1iPPY's unlock, see trigger()
 static uint32_t s_sessionDetections   = 0;  // this boot's count, vs. s_bestSessionCount
 static uint32_t s_lastDetectionAt     = 0;  // millis() of the last catch, for the live streak
 // Outfits unlocked but not yet shown to the player. A queue rather than a
@@ -807,6 +833,27 @@ static int      s_grabX = 0, s_grabY = 0;
 static uint32_t s_dropStart = 0;
 static int      s_dropX = 0, s_dropY = 0;
 
+// ---- throw ------------------------------------------------------------
+// The finger's speed while it carries him, smoothed over the last few
+// frames, in px/ms; release() turns a fast one into a throw. From there it
+// is plain physics -- gravity, a bounce off the floor and the screen's
+// edges that loses most of its speed each time -- until he comes to rest,
+// sits a moment (longer and wobblier after a hard one) and walks back.
+enum class Throw : uint8_t { NONE, AIR, SIT, WALK };
+static Throw    s_thPhase = Throw::NONE;
+static float    s_thX = 0, s_thY = 0, s_thVX = 0, s_thVY = 0;  // body cx, head top
+static uint32_t s_thLast = 0, s_thAt = 0, s_thPhaseAt = 0;
+static uint32_t s_thSqAt = 0;            // the last floor bounce, for the squash
+static float    s_thSqK = 0, s_thHard = 0;
+static uint8_t  s_thBounces = 0;
+static float    s_gvX = 0, s_gvY = 0;    // the carrying finger's speed
+static int      s_gpX = 0, s_gpY = 0;
+static uint32_t s_gpT = 0;
+static const float    TH_G       = 0.0028f;  // px/ms^2
+static const float    TH_MIN_V   = 0.32f;    // slower than this is a drop, not a throw
+static const float    TH_MAX_V   = 1.7f;
+static const uint32_t TH_SIT_MS  = 500, TH_DAZE_MS = 1400;
+
 // ---- ducking --------------------------------------------------------
 // Set by toasterNear() when something is genuinely on a collision
 // course. The cooldown is his, not the caller's: backgrounds fire the
@@ -868,6 +915,10 @@ static const uint32_t SCOUT_MS      = 3100;    // the climb and the bang
 static uint32_t s_scoutStart = 0;
 static bool     s_scoutPending = false;
 static bool     s_tapShades = false;
+// TH3 0N3: a tap his costume answered (a dodge, a pill) rather than a pet.
+// See t3Tap() in th3_0n3.inc.
+static bool     s_tapT3     = false;
+static bool t3Tap(int x, int y, uint32_t now);
 static int16_t  s_shadeX = -10000, s_shadeY = 0, s_shadeW = 0, s_shadeH = 0;
 
 static bool scouterOn(uint32_t now) { return s_scoutStart && now - s_scoutStart < SCOUT_MS; }
@@ -992,6 +1043,24 @@ static const char* const TICKLE_FEET_LINES[] = {
     "HEY. Feet are private.",
     "I will kick. I have kicked before.",
 };
+static const char* const THROW_LINES[] = {
+    "WHEEEEEE!",
+    "Not like THIS!",
+    "I'm a cryptid, not a frisbee!",
+    "Tell my fans I-",
+    "I CAN SEE MY CAVE FROM HERE!",
+};
+static const char* const LAND_LINES[] = {
+    "Stuck it.",
+    "Ten. From the judges? Four.",
+    "I meant to do that.",
+};
+static const char* const DIZZY_LINES[] = {
+    "Which way is the forest?",
+    "I can hear colours.",
+    "Do that again. No. Wait. Don't.",
+    "I have seen the backlight. From the inside.",
+};
 static const char* const FLICK_LINES[] = {
     "HEY!",
     "Rude.",
@@ -1048,6 +1117,9 @@ enum class OutfitId : uint8_t {
     SHARK,
     YZZERD,
     OVER9000,
+    SHAMBLER,
+    TH3_0N3,
+    STRIPES,
     COUNT
 };
 
@@ -1092,6 +1164,15 @@ static const OutfitDef OUTFITS[] = {
     { "YZZERD",         OUTFIT_BY_EVENT },
     // Earned by a scouter: tap his shades while the Legend's aura is lit.
     { "OVER 9000",      OUTFIT_BY_EVENT },
+    // Earned by tapping the FIRE background's owl while it asks WHAT
+    // REEKS?! -- see Theme::consumeOwlReek().
+    { "SHAMBLER",       OUTFIT_BY_EVENT },
+    // Earned by tapping the one red glyph that now and then falls in the
+    // DIGITAL rain -- see Theme::consumeRedGlyph().
+    { "TH3 0N3",        OUTFIT_BY_EVENT },
+    // Earned by serving ten minutes in them -- the sentence for throwing a
+    // pet ten times inside a minute. See jailStart().
+    { "STRIPES",        OUTFIT_BY_EVENT },
 };
 static const uint8_t OUTFITS_N = sizeof(OUTFITS) / sizeof(OUTFITS[0]);
 static_assert(OUTFITS_N == (uint8_t)OutfitId::COUNT, "OUTFITS must match OutfitId");
@@ -1123,6 +1204,9 @@ static bool outfitUnlocked(uint8_t i) {
             case OutfitId::SHARK:      return s_sharkUnlocked;
             case OutfitId::YZZERD:     return s_yzzerdUnlocked;
             case OutfitId::OVER9000:   return s_over9000Unlocked;
+            case OutfitId::SHAMBLER:   return s_shamblerUnlocked;
+            case OutfitId::TH3_0N3:    return s_th3Unlocked;
+            case OutfitId::STRIPES:    return s_stripesUnlocked;
             default:                   return false;
         }
     }
@@ -1194,6 +1278,9 @@ static void refreshOutfitUnlocks() {
 // that path would leave two versions to keep in step.
 static int8_t s_outfitOverride = -1;
 static int8_t s_shadeOverride  = -1;
+// A visitor's aura: -1 is nobody's business (our own rule applies), 0 and 1
+// are what his advert said. See setAuraPreview().
+static int8_t s_auraOverride   = -1;
 
 // Every read of the shade tint goes through this so an override cannot be
 // half-applied -- the lens and the frame are drawn in different places and
@@ -1209,9 +1296,11 @@ static uint8_t activeShadeIdx() {
 static int8_t s_benchOutfit = -1;
 void wearForBench(int8_t idx) { s_benchOutfit = (idx >= 0 && idx < (int8_t)OUTFITS_N) ? idx : -1; }
 
+bool jailed();
 static OutfitId currentOutfit() {
     if (s_outfitOverride >= 0 && s_outfitOverride < (int8_t)OUTFITS_N)
         return (OutfitId)s_outfitOverride;
+    if (jailed()) return OutfitId::STRIPES;
     if (s_benchOutfit >= 0) return (OutfitId)s_benchOutfit;
     if (s_outfitIdx >= OUTFITS_N || !outfitUnlocked(s_outfitIdx)) s_outfitIdx = 0;
     return (OutfitId)s_outfitIdx;
@@ -1309,7 +1398,7 @@ static_assert(sizeof(BG_LINES) / sizeof(BG_LINES[0]) == Settings::BACKGROUND_COU
 // brings one up it is a nudge, the second is clearer, and from then on he just
 // tells you what to do. Counted in RAM, so a reboot starts the nudges over,
 // which is right for somebody who has not been paying attention.
-enum Egg : uint8_t { EGG_WOLF, EGG_CHROME, EGG_PET, EGG_EYE, EGG_PARKA, EGG_YZZERD, EGG_O9K, EGG_N };
+enum Egg : uint8_t { EGG_WOLF, EGG_CHROME, EGG_PET, EGG_EYE, EGG_PARKA, EGG_YZZERD, EGG_O9K, EGG_REEK, EGG_GLYPH, EGG_TOASTY, EGG_N };
 static const char* const HINTS[EGG_N][3] = {
     /* FIRE: five taps on the moon */
     { "That moon's got a werewolf look to it.",
@@ -1339,6 +1428,18 @@ static const char* const HINTS[EGG_N][3] = {
     { "These shades read more than light.",
       "My shades can read a power level.",
       "Tap my shades while I'm glowing!" },
+    /* FIRE: tap the owl while it asks WHAT REEKS?! */
+    { "That owl's got a nose on him.",
+      "The owl smells something. Ask him.",
+      "When the owl says WHAT REEKS, tap him!" },
+    /* DIGITAL: tap the one red glyph in the rain */
+    { "Ever see a glyph that didn't belong?",
+      "One glyph in the rain falls red. Watch for it.",
+      "When a red glyph falls, tap it!" },
+    /* TOASTERS: the same chrome toaster, three taps */
+    { "One of those toasters looks lonely.",
+      "Keep tapping the same toaster. It wants down.",
+      "Tap one toaster three times, quick!" },
 };
 static uint8_t s_hintSaid[EGG_N] = {};
 
@@ -1354,20 +1455,24 @@ static bool eggLocked(uint8_t e) {
         case EGG_PARKA:  return !outfitUnlocked((uint8_t)OutfitId::PARKA);
         case EGG_YZZERD: return !outfitUnlocked((uint8_t)OutfitId::YZZERD);
         case EGG_O9K:    return !outfitUnlocked((uint8_t)OutfitId::OVER9000);
+        case EGG_REEK:   return !outfitUnlocked((uint8_t)OutfitId::SHAMBLER);
+        case EGG_GLYPH:  return !outfitUnlocked((uint8_t)OutfitId::TH3_0N3);
+        case EGG_TOASTY: return !s_toasterUnlocked;
         default:         return false;
     }
 }
 
-// The locked unlocks this background holds, at most two.
-static uint8_t eggsHere(uint8_t out[2]) {
+// The locked unlocks this background holds, at most three (TOASTERS).
+static uint8_t eggsHere(uint8_t out[3]) {
     uint8_t n = 0;
-    auto add = [&](uint8_t e) { if (n < 2 && eggLocked(e)) out[n++] = e; };
+    auto add = [&](uint8_t e) { if (n < 3 && eggLocked(e)) out[n++] = e; };
     switch (Settings::background()) {
-        case Settings::Background::FIRE:      add(EGG_WOLF); break;
-        case Settings::Background::TOASTERS:  add(EGG_CHROME); add(EGG_PET); break;
+        case Settings::Background::FIRE:      add(EGG_WOLF); add(EGG_REEK); break;
+        case Settings::Background::TOASTERS:  add(EGG_CHROME); add(EGG_PET); add(EGG_TOASTY); break;
         case Settings::Background::STARFIELD: add(EGG_EYE); break;
         case Settings::Background::SNOWFALL:  add(EGG_PARKA); break;
         case Settings::Background::TERMINAL:  add(EGG_YZZERD); break;
+        case Settings::Background::DIGITAL:   add(EGG_GLYPH); break;
         default: break;
     }
     // The one that lives in no background: the aura is the place.
@@ -1376,7 +1481,7 @@ static uint8_t eggsHere(uint8_t out[2]) {
 }
 
 static bool hintAvailable() {
-    uint8_t e[2];
+    uint8_t e[3];
     return eggsHere(e) > 0;
 }
 
@@ -1384,7 +1489,7 @@ static const char* pickBackgroundLine() {
     uint8_t idx = (uint8_t)Settings::background();
     if (idx >= Settings::BACKGROUND_COUNT) idx = 0;
     // Two times in three, if there is something to find here, a hint instead.
-    uint8_t eggs[2];
+    uint8_t eggs[3];
     const uint8_t n = eggsHere(eggs);
     if (n && random(0, 3) != 0) {
         const uint8_t e = eggs[random(0, n)];
@@ -1418,6 +1523,17 @@ static void ensurePrefsLoaded() {
     s_allOutfitsUnlocked = s_petPrefs.getBool("allOutfits", false);
     s_petUnlocked        = s_petPrefs.getBool("petUnlk", false);
     s_petAnnounced       = s_petPrefs.getBool("petSeen", false);
+    s_clippyUnlocked     = s_petPrefs.getBool("clippy", false);
+    s_toasterUnlocked    = s_petPrefs.getBool("toaster", false);
+    s_ballUnlocked       = s_petPrefs.getBool("ball", false);
+    // The master unlock means every pet too, including ones that did not
+    // exist when it was entered: a board that has it catches up at boot.
+    if (s_allOutfitsUnlocked) {
+        if (!s_petUnlocked)     { s_petUnlocked = true;     s_petPrefs.putBool("petUnlk", true); }
+        if (!s_clippyUnlocked)  { s_clippyUnlocked = true;  s_petPrefs.putBool("clippy", true); }
+        if (!s_toasterUnlocked) { s_toasterUnlocked = true; s_petPrefs.putBool("toaster", true); }
+        if (!s_ballUnlocked)    { s_ballUnlocked = true;    s_petPrefs.putBool("ball", true); }
+    }
     // Defaults ON once earned: somebody who just unlocked a pet wants to
     // see it, not to go and find a switch.
     // "petSel" is the one to read; a board from before there were two
@@ -1432,6 +1548,12 @@ static void ensurePrefsLoaded() {
     s_sharkUnlocked      = s_petPrefs.getBool("shark", false);
     s_yzzerdUnlocked     = s_petPrefs.getBool("yzzerd", false);
     s_over9000Unlocked   = s_petPrefs.getBool("over9000", false);
+    s_shamblerUnlocked   = s_petPrefs.getBool("shambler", false);
+    s_th3Unlocked        = s_petPrefs.getBool("th3", false);
+    s_stripesUnlocked    = s_petPrefs.getBool("stripes", false);
+    s_jailLeft           = s_petPrefs.getUInt("jailMs", 0);
+    if (s_jailLeft > 10u * 60u * 1000u) s_jailLeft = 10u * 60u * 1000u;
+    s_jailLast           = millis();
     s_outfitAnnounced    = s_petPrefs.getUInt("outfitSeen", 0xFFFFFFFFu);
     s_petPrefsLoaded  = true;
 }
@@ -1496,6 +1618,10 @@ void trigger(Event evt, DetectionType dt, uint32_t lifetimeTotal, uint32_t hitCo
             ensurePrefsLoaded();
             s_cachedLifetimeTotal = lifetimeTotal;
             refreshOutfitUnlocks();
+            // C1iPPY is the second thing anybody earns: ten catches, between
+            // TINFOIL at five and SHADOW at fifteen.
+            if (lifetimeTotal >= CLIPPY_CATCHES)
+                unlockClippy("It looks like you caught ten things. Want help?");
 
             // Streak/session/heat bookkeeping for the Diary screen and
             // the activity-biased idle chatter below — none of this
@@ -1625,6 +1751,8 @@ void trigger(Event evt, DetectionType dt, uint32_t lifetimeTotal, uint32_t hitCo
             ensurePrefsLoaded();
             s_cachedLifetimeTotal = lifetimeTotal;
             refreshOutfitUnlocks();
+            // A board that passed ten catches before he existed meets him now.
+            if (lifetimeTotal >= CLIPPY_CATCHES) unlockClippy("It looks like you've been busy. Need help?");
             s_bootCount++;
             s_petPrefs.putUInt("boots", s_bootCount);
             if (!s_petPrefs.getBool("onboarded", false)) {
@@ -1635,6 +1763,7 @@ void trigger(Event evt, DetectionType dt, uint32_t lifetimeTotal, uint32_t hitCo
             break;
         case Event::PETTED: {
             s_lastTouchAt = now; s_ignoredSaid = false;
+            if (s_tapT3) { s_tapT3 = false; break; }
             if (s_tapShades) {
                 // The scouter. A second tap while it is reading is ignored
                 // rather than starting it over.
@@ -1690,7 +1819,7 @@ void trigger(Event evt, DetectionType dt, uint32_t lifetimeTotal, uint32_t hitCo
             moodUntil = now + tempo(1500);
             s_petFxStart = now;
             s_petFxUntil = now + 2600;
-            say(pick(HELD_LINES, 6), MIN_BUBBLE_MS);
+            say(th3Wearing() ? "There is no spoon." : pick(HELD_LINES, 6), MIN_BUBBLE_MS);
             break;
         }
         case Event::PETTING: {
@@ -1742,16 +1871,67 @@ bool lastFootprint(int& cx, int& halfW, int& top, int& bot) {
 static uint32_t s_grabAt = 0;   // the last time a finger said where he is
 
 void grabTo(int x, int y) {
+    const uint32_t now = millis();
+    // How fast the finger is going, half from this frame and half from the
+    // ones before, so one jittery sample on a resistive panel cannot throw
+    // him on its own. A gap of more than a few frames starts it over.
+    if (s_grabbed && s_gpT && now - s_gpT > 0 && now - s_gpT < 150) {
+        const float dt = (float)(now - s_gpT);
+        s_gvX = 0.5f * s_gvX + 0.5f * (float)(x - s_gpX) / dt;
+        s_gvY = 0.5f * s_gvY + 0.5f * (float)(y - s_gpY) / dt;
+    } else if (!s_grabbed || now - s_gpT >= 150) {
+        s_gvX = s_gvY = 0;
+    }
+    if (now != s_gpT) { s_gpX = x; s_gpY = y; s_gpT = now; }
     s_grabbed   = true;
     s_dropStart = 0;
+    s_thPhase   = Throw::NONE;     // caught in mid-air
     s_grabX = x;
     s_grabY = y;
-    s_grabAt = millis();
+    s_grabAt = now;
     lastInteraction = s_grabAt;
+}
+
+static void launch(float vx, float vy, uint32_t now) {
+    const float lim = TH_MAX_V;
+    if (vx > lim) vx = lim;
+    if (vx < -lim) vx = -lim;
+    if (vy > lim) vy = lim;
+    if (vy < -lim) vy = -lim;
+    s_grabbed   = false;
+    s_dropStart = 0;
+    s_flickStart = 0;
+    s_thPhase = Throw::AIR;
+    s_thX = (float)s_lastCx;
+    s_thY = (float)s_lastHeadTopY;
+    s_thVX = vx; s_thVY = vy;
+    s_thAt = s_thLast = now;
+    s_thSqAt = 0; s_thHard = 0; s_thBounces = 0;
+    s_gpT = 0;
+    lastInteraction = now;
+    mood = Mood::SHOCKED;
+    moodUntil = now + 1600;
+    say(pick(THROW_LINES, 5), MIN_BUBBLE_MS);
+    Sound::play(Sound::Id::THROW);
+}
+
+bool thrown() { return s_thPhase != Throw::NONE; }
+
+void toss(int8_t dir) {
+    if (s_onboardActive || s_lastCx <= -9999) return;
+    launch(dir >= 0 ? 0.55f : -0.55f, -1.05f, millis());
 }
 
 void release() {
     if (!s_grabbed) return;
+    const uint32_t now = millis();
+    // Only a finger that was still moving when it let go: one that stopped
+    // and then lifted has a stale speed, and drops him.
+    if (now - s_gpT < 120 && s_gvX * s_gvX + s_gvY * s_gvY > TH_MIN_V * TH_MIN_V && s_lastCx > -9999) {
+        launch(s_gvX, s_gvY, now);
+        return;
+    }
+    s_gpT = 0;
     s_grabbed   = false;
     s_dropStart = millis();
     // Fall from exactly where he was let go rather than from the
@@ -1806,6 +1986,15 @@ void startShowOff() {
     s_showWB    = -1;
 }
 
+void wanderNow(int8_t dir) {
+    const uint32_t now = millis();
+    mood = Mood::WALK;
+    moodUntil = now + WALK_DURATION_MS;
+    s_walkStart = now;
+    s_walkDir = dir < 0 ? -1 : 1;
+    s_walkYanked = false;
+}
+
 void stopShowOff() {
     if (!s_showOff) return;
     s_showOff   = false;
@@ -1841,6 +2030,7 @@ void noteTapAt(int x, int y) {
     s_tapShades = hasAura() && Settings::auraShown() &&
                   x >= s_shadeX - m && x < s_shadeX + s_shadeW + m &&
                   y >= s_shadeY - m && y < s_shadeY + s_shadeH + m;
+    s_tapT3 = t3Tap(x, y, millis());
     if (s_lastCx < -5000) return;
     const int top = s_lastHeadTopY - (int)(20 * s_lastScale);
     const int bot = footBottom();
@@ -1869,6 +2059,12 @@ void flick(int8_t dir) {
 // isn't actively saying something.
 static int  lastBubbleX = 0, lastBubbleY = 0, lastBubbleW = 0, lastBubbleH = 0;
 static bool hadBubble   = false;
+static int16_t s_ownBX = 0, s_ownBY = 0, s_ownBW = 0, s_ownBH = 0;   // see tick()'s erase
+bool ownBubble(int& x, int& y, int& w, int& h) {
+    if (s_ownBW <= 0 || s_ownBH <= 0) return false;
+    x = s_ownBX; y = s_ownBY; w = s_ownBW; h = s_ownBH;
+    return true;
+}
 
 // Everyday speech bubble stays single-line and text-hugging (its
 // original compact look) whenever the line actually fits — most
@@ -1876,6 +2072,7 @@ static bool hadBubble   = false;
 // narrow portrait screen does it grow into a fixed-width, centered
 // multi-line box instead of letting the single-line version run off
 // (or past) both screen edges, which is what happened before this.
+static const int CORNER_W = 30; // keep speech clear of the corner icons
 static const uint8_t BUBBLE_MAX_LINES = 3;
 static char s_renderSpeech[192];
 // Select a two-line reading page, leaving one line for a continuation label.
@@ -1984,6 +2181,8 @@ static bool bubblePop(TFT_eSPI& t, int bx, int topY, int bw, int bh, uint32_t no
     return true;
 }
 
+static int s_riseTo = -1;
+void setBubbleRiseTo(int y) { s_riseTo = y; }
 // Keep dialogue below the persistent navigation/status strip.
 static int risenBubbleTop(int topY, int bx, int bw, int screenW) {
     // Header icons and their touch targets occupy the top 32 pixels.
@@ -2036,6 +2235,11 @@ static bool s_sceneRepainted = false;
 void bubbleSceneRepainted(bool value) { s_sceneRepainted=value; }
 void holdBubble(bool held) { s_bubbleHeld = held; }
 
+// A cameo's bubble, held back to be drawn on top of whoever comes after it.
+static bool        s_bubbleDefer = false;
+static const char* s_deferLine   = nullptr;
+static int         s_deferCx = 0, s_deferY = 0, s_deferTail = 0;
+
 static void drawBubble(TFT_eSPI& t, int cx, int topY, const char* text,
                        uint32_t now, bool mayRise = false, int tailX = NO_TAIL) {
     if (s_bubbleHeld || !text) return;
@@ -2045,22 +2249,32 @@ static void drawBubble(TFT_eSPI& t, int cx, int topY, const char* text,
     Theme::bubbleFontOn(t);
     drawBubbleIn(t, cx, topY, text, now, mayRise, tailX);
     Theme::bubbleFontOff(t);
+    t.setTextSize(1);
 }
 
 
 static void drawBubbleIn(TFT_eSPI& t, int cx, int topY, const char* text,
                          uint32_t now, bool mayRise, int tailX) {
-    t.setTextSize(1);
+    // Twice the size on the 3.5" boards, where the 2.8"'s 16 rows read as
+    // small print. Only his own bubble: the other screens that share the
+    // font are laid out around 16 rows.
+    const int k = Theme::large() ? 2 : 1;
+    t.setTextSize(k);
     t.setTextWrap(false);
     if (topY < 32) topY = 32; // Also applies to visitor bubbles that do not rise.
     int screenW = t.width();
     int maxW = screenW - 16;   // widest a wrapped bubble is allowed to get
+    // On the large panels a wrapped bubble keeps between the corner icons, so
+    // it can rise over the tiles like a one-liner does (risenBubbleTop) --
+    // full width, it stayed under them, and at double size that put it
+    // across the top of his head.
+    if (k > 1 && maxW > screenW - 2 * CORNER_W - 2) maxW = screenW - 2 * CORNER_W - 2;
     int tw = t.textWidth(text);
 
     if (!strchr(text, '\n') && tw <= maxW - 10) {
         // Fits on one line -- the original compact box.
         int bw = tw + 10;
-        int bh = Theme::bubbleTextH() + 6;
+        int bh = Theme::bubbleTextH() * k + 6;
         int bx = cx - bw / 2;
         if (bx + bw > screenW - 2) bx = screenW - 2 - bw;
         if (bx < 2) bx = 2;
@@ -2089,11 +2303,15 @@ static void drawBubbleIn(TFT_eSPI& t, int cx, int topY, const char* text,
     int bx = cx - bw / 2;
     if (bx < 2) bx = 2;
     if (bx + bw > screenW - 2) bx = screenW - 2 - bw;
+    if (k > 1) {   // between the corner icons wherever he stands, so it still rises
+        if (bx < CORNER_W + 1) bx = CORNER_W + 1;
+        if (bx + bw > screenW - CORNER_W - 1) bx = screenW - CORNER_W - 1 - bw;
+    }
 
     char lines[BUBBLE_MAX_LINES][48];
-    uint8_t n = Theme::wrapText(t, text, bw - 10, lines, BUBBLE_MAX_LINES);
+    uint8_t n = Theme::wrapText(t, text, bw - 10, lines, k > 1 ? BUBBLE_MAX_LINES : 2);
 
-    const int lineH = Theme::bubbleTextH() + 1;
+    const int lineH = Theme::bubbleTextH() * k + 1;
     int bh = 3 + (int)n * lineH + 3;
 
     // Asked the same question, and the width answers it: a wrapped box is
@@ -2290,12 +2508,14 @@ const char* outfitName() {
 
 void cycleOutfit() {
     ensurePrefsLoaded();
+    if (jailed()) return;
     s_outfitIdx = stepOutfit(s_outfitIdx, +1);
     s_petPrefs.putUChar("outfitIdx", s_outfitIdx);
 }
 
 void cyclePrevOutfit() {
     ensurePrefsLoaded();
+    if (jailed()) return;
     s_outfitIdx = stepOutfit(s_outfitIdx, -1);
     s_petPrefs.putUChar("outfitIdx", s_outfitIdx);
 }
@@ -2345,6 +2565,10 @@ void setOutfitPreview(int8_t idx) {
 
 void setShadesPreview(int8_t idx) {
     s_shadeOverride = idx;
+}
+
+void setAuraPreview(int8_t on) {
+    s_auraOverride = on;
 }
 
 static const char* s_nameTag = nullptr;
@@ -2508,6 +2732,119 @@ bool consumePetUnlockCard() {
 }
 
 bool petUnlocked() { ensurePrefsLoaded(); return s_petUnlocked; }
+bool clippyUnlocked() { ensurePrefsLoaded(); return s_clippyUnlocked; }
+bool toasterUnlocked() { ensurePrefsLoaded(); return s_toasterUnlocked; }
+bool anyPetUnlocked() { ensurePrefsLoaded(); return s_petUnlocked || s_clippyUnlocked || s_toasterUnlocked || s_ballUnlocked; }
+bool ballUnlocked() { ensurePrefsLoaded(); return s_ballUnlocked; }
+bool ballPetOn() { ensurePrefsLoaded(); return s_ballUnlocked && (PetId)s_petSel == PetId::BALL && !s_jailLeft; }
+void unlockBall() {
+    ensurePrefsLoaded();
+    if (s_ballUnlocked) return;
+    s_ballUnlocked = true;
+    s_petPrefs.putBool("ball", true);
+    Theme::showToast("BALL & CHAIN", "new pet. Settings > Pet", Theme::AMBER, 3500);
+}
+
+// Whether a pet somebody chose is actually out: petSel defaults to SHAGGY
+// before he is ever earned, so "out" means chosen AND unlocked.
+static bool petOutNow() {
+    const PetId p = (PetId)s_petSel;
+    if (p == PetId::SHAGGY || p == PetId::YETI) return s_petUnlocked;
+    if (p == PetId::CLIPPY)  return s_clippyUnlocked;
+    if (p == PetId::TOASTER) return s_toasterUnlocked;
+    if (p == PetId::BALL)    return s_ballUnlocked;
+    return false;
+}
+
+void unlockClippy(const char* why) {
+    ensurePrefsLoaded();
+    if (s_clippyUnlocked) return;
+    s_clippyUnlocked = true;
+    s_petPrefs.putBool("clippy", true);
+    // On at once when no pet is out: he is the kind of help that does not
+    // wait to be asked. Somebody walking VAPOR SHAGGY or the yeti keeps
+    // them, and is told where he is instead.
+    if (!petOutNow()) {
+        s_petSel = (uint8_t)PetId::CLIPPY;
+        s_petPrefs.putUChar("petSel", s_petSel);
+        s_clippyIntro = why;
+    } else {
+        Theme::showToast("C1iPPY", "new pet. Settings > Pet", Theme::CYAN, 3500);
+    }
+}
+
+const char* takeClippyIntro() { const char* w = s_clippyIntro; s_clippyIntro = nullptr; return w; }
+
+void unlockToaster(const char* why) {
+    ensurePrefsLoaded();
+    if (s_toasterUnlocked) return;
+    s_toasterUnlocked = true;
+    s_petPrefs.putBool("toaster", true);
+    // The same manners as C1iPPY: on at once when nobody else is out,
+    // otherwise a toast saying where he went.
+    if (!petOutNow()) {
+        s_petSel = (uint8_t)PetId::TOASTER;
+        s_petPrefs.putUChar("petSel", s_petSel);
+        s_toasterIntro = why;
+    } else {
+        Theme::showToast("T0@$TY", "new pet. Settings > Pet", Theme::AMBER, 3500);
+    }
+}
+
+const char* takeToasterIntro() { const char* w = s_toasterIntro; s_toasterIntro = nullptr; return w; }
+
+bool mouthPoint(int& x, int& y) {
+    if (s_lastCx <= -9999) return false;
+    // drawBody() puts the mouth S(19) under the head's top line.
+    x = s_lastCx;
+    y = s_lastHeadTopY + (int)(19.0f * s_lastScale);
+    return true;
+}
+
+void petLandedAt(int x) {
+    static const char* const NEAR_MISS[7] = {
+        "Hey! Watch the feet.", "Incoming!", "That nearly took a toe.",
+        "We don't throw friends. Okay, we do.", "Not at ME.",
+        "I felt that through the floor.", "Nice shot. Terrible aim.",
+    };
+    if (s_lastCx <= -9999 || s_grabbed || s_thPhase != Throw::NONE) return;
+    if (abs(x - s_lastCx) > (int)(26.0f * s_lastScale)) return;   // his feet, not the spot beside them
+    const uint32_t now = millis();
+    mood      = Mood::SHOCKED;
+    moodUntil = now + tempo(900);
+    say(NEAR_MISS[random(0, 7)], 2600);
+}
+
+void eatToast(bool golden) {
+    static const char* const BITES[4] = { "Nom.", "Toast! Thanks, buddy.", "Mmf. Still warm.", "Crunchy. Good." };
+    const uint32_t now = millis();
+    if (golden) {
+        mood      = Mood::DANCE;
+        moodUntil = now + tempo(2600);
+        say("GOLDEN TOAST!", 3000);
+    } else {
+        mood      = Mood::BOUNCE;
+        moodUntil = now + tempo(1200);
+        say(BITES[random(0, 4)], 2200);
+    }
+}
+
+// Ten in a row, and anything typed in between starts the count again.
+static uint8_t s_backspaces = 0;
+void noteBackspace() {
+    if (++s_backspaces >= 10) { s_backspaces = 0; unlockClippy("It looks like you're having trouble typing."); }
+}
+void noteTyped() { s_backspaces = 0; }
+
+// The boards with no keyboard: Settings opened from the main screen five
+// times inside thirty seconds.
+void noteSettingsOpened() {
+    static uint32_t first = 0;
+    static uint8_t  n = 0;
+    const uint32_t now = millis();
+    if (!n || now - first > 30000) { first = now; n = 0; }
+    if (++n >= 5) { n = 0; unlockClippy("It looks like you're lost."); }
+}
 bool petEnabled()  { ensurePrefsLoaded(); return s_petSel != 0;  }
 
 PetId petChoice() {
@@ -2519,13 +2856,22 @@ const char* petName() {
     switch (petChoice()) {
         case PetId::SHAGGY: return "VAPOR SHAGGY";
         case PetId::YETI:   return "THE YETI";
+        case PetId::CLIPPY: return "C1iPPY";
+        case PetId::TOASTER: return "T0@$TY";
+        case PetId::BALL:   return "BALL & CHAIN";
         default:            return "OFF";
     }
 }
 
 void cyclePet() {
     ensurePrefsLoaded();
-    s_petSel = (uint8_t)((s_petSel + 1) % (uint8_t)PetId::COUNT);
+    if (jailed()) return;
+    // Round to the next one that is earned: SHAGGY and the yeti come together,
+    // C1iPPY and T0@$TY each on their own.
+    for (uint8_t k = 0; k < (uint8_t)PetId::COUNT; k++) {
+        s_petSel = (uint8_t)((s_petSel + 1) % (uint8_t)PetId::COUNT);
+        if ((PetId)s_petSel == PetId::OFF || petOutNow()) break;
+    }
     s_petPrefs.putUChar("petSel", s_petSel);
 }
 
@@ -2536,6 +2882,119 @@ void togglePet() {
 }
 
 bool isHeld() { return s_grabbed || s_dangle; }
+
+// The owl on the FIRE background asked WHAT REEKS?! and got tapped for it.
+// Like the shark, not silent the second time: the owl is always right.
+bool shamblerUnlocked() {
+    ensurePrefsLoaded();
+    return outfitUnlocked((uint8_t)OutfitId::SHAMBLER);
+}
+
+bool th3Unlocked() {
+    ensurePrefsLoaded();
+    return outfitUnlocked((uint8_t)OutfitId::TH3_0N3);
+}
+
+// ---- the cell block --------------------------------------------------------
+// Brought up to date lazily, from jailed(), which everything that cares asks
+// often: the outfit, the Settings rows, the pet. Time served is real time on
+// any screen, not frames drawn on this one.
+static const uint32_t JAIL_MS = 10u * 60u * 1000u;
+static void jailSave() { s_petPrefs.putUInt("jailMs", s_jailLeft); s_jailSaved = millis(); }
+// How far the chain lets him go, in units of his scale: up on a throw, and
+// either way on a wander. Chained as the jailer's prisoner or as the ball's
+// owner, it is the same chain.
+static const float CHAIN_PX = 13.0f;
+static bool chained() { return s_jailLeft || ballPetOn(); }
+static uint32_t s_ballToastAt = 0;        // the "new pet" toast, due after the ball has said goodbye
+
+bool jailed() {
+    if (s_ballToastAt && (int32_t)(millis() - s_ballToastAt) >= 0) {
+        s_ballToastAt = 0;
+        Theme::showToast("BALL & CHAIN", "new pet. Settings > Pet", Theme::AMBER, 3500);
+    }
+    if (!s_jailLeft) return false;
+    const uint32_t now = millis();
+    const uint32_t el = now - s_jailLast;
+    s_jailLast = now;
+    if (el >= s_jailLeft) { jailFree(); return false; }
+    s_jailLeft -= el;
+    if (now - s_jailSaved > 15000) jailSave();
+    return true;
+}
+
+uint32_t jailLeftMs() { return jailed() ? s_jailLeft : 0; }
+
+void jailStart() {
+    ensurePrefsLoaded();
+    if (s_jailLeft) return;
+    s_jailLeft  = JAIL_MS;
+    s_jailLast  = millis();
+    s_jailFreed = false;
+    jailSave();
+    mood      = Mood::SHOCKED;
+    moodUntil = millis() + tempo(1600);
+}
+
+void jailFree() {
+    ensurePrefsLoaded();
+    if (!s_jailLeft) return;
+    s_jailLeft = 0;
+    jailSave();
+    s_jailFreed = true;
+    if (!s_stripesUnlocked) {
+        s_stripesUnlocked = true;
+        s_petPrefs.putBool("stripes", true);
+        refreshOutfitUnlocks();
+    }
+    mood      = Mood::BOUNCE;
+    moodUntil = millis() + tempo(2000);
+    say("Free! I'm keeping the stripes.", 3600);
+    // And the ball, as it turns out: he can be chosen as a pet from now on.
+    // The toast waits for the ball's own goodbye (see jailTick) to clear.
+    if (!s_ballUnlocked) { s_ballUnlocked = true; s_petPrefs.putBool("ball", true); s_ballToastAt = millis() + 5000; }
+}
+
+bool takeJailFreed() { const bool f = s_jailFreed; s_jailFreed = false; return f; }
+
+bool chainPoint(int& x, int& y) {
+    if (!s_chainAt || millis() - s_chainAt > 300) return false;
+    x = s_chainX; y = s_chainY;
+    return true;
+}
+
+uint32_t yankedAt() { return s_yankAt; }
+
+// The one red glyph in the DIGITAL rain, tapped. The rain stops sending it
+// once the coat is his (main.cpp: Theme::setRedGlyph), so a second answer
+// only comes from a glyph already falling.
+void unlockTh3() {
+    ensurePrefsLoaded();
+    mood      = Mood::BOUNCE;
+    moodUntil = millis() + tempo(2000);
+    if (s_th3Unlocked) {
+        say("Whoa. Deja vu.", 3000);
+        return;
+    }
+    s_th3Unlocked = true;
+    s_petPrefs.putBool("th3", true);
+    refreshOutfitUnlocks();
+    say("Whoa. I know kung fu.", 4000);
+}
+
+void unlockShambler() {
+    ensurePrefsLoaded();
+    mood      = Mood::BOUNCE;
+    moodUntil = millis() + tempo(2000);
+    if (s_shamblerUnlocked) {
+        say("...okay, it's me. it's always me.", 3600);
+        return;
+    }
+    s_shamblerUnlocked = true;
+    s_petPrefs.putBool("shambler", true);
+    refreshOutfitUnlocks();
+    say("hey! I showered last month!", 4000);
+}
 
 void unlockParka() {
     ensurePrefsLoaded();
@@ -2625,6 +3084,9 @@ void unlockAllOutfits() {
     // costume set that stops short of the one companion would be a strange
     // place to draw the line.
     if (!s_petUnlocked) { s_petUnlocked = true; s_petPrefs.putBool("petUnlk", true); }
+    if (!s_clippyUnlocked) { s_clippyUnlocked = true; s_petPrefs.putBool("clippy", true); }
+    if (!s_toasterUnlocked) { s_toasterUnlocked = true; s_petPrefs.putBool("toaster", true); }
+    if (!s_ballUnlocked) { s_ballUnlocked = true; s_petPrefs.putBool("ball", true); }
     // No popups for the cheat: it already has its own rainbow-and-confetti
     // tell below, and eleven modals in a row would bury it. Mark the lot as
     // seen so nothing queues now or on the next boot.
@@ -2734,6 +3196,10 @@ static const char* const WINK_LINES[] = {
 void setVisiting(bool v) { s_visiting = v; }
 static bool s_company = false;
 void setCompany(bool on) { s_company = on; }
+static float s_sizeBoost = 1.0f;
+void setSizeBoost(float k) { s_sizeBoost = k > 0.0f ? k : 1.0f; }
+static float s_companyShare = 0.5f;
+void setCompanyShare(float share) { s_companyShare = share > 0.0f ? share : 0.5f; }
 bool visiting() { return s_visiting; }
 void setListening(bool v) { s_listening = v; }
 
@@ -3281,7 +3747,8 @@ uint32_t visitReaction(VisitMoment m) {
 }
 
 uint8_t nicknameIndex() { ensurePrefsLoaded(); return s_nickIdx; }
-uint8_t outfitIndex()   { ensurePrefsLoaded(); return s_outfitIdx; }
+// What the squad sees: the stripes, while he serves.
+uint8_t outfitIndex()   { ensurePrefsLoaded(); return jailed() ? (uint8_t)OutfitId::STRIPES : s_outfitIdx; }
 uint8_t shadesIndex()   { ensurePrefsLoaded(); return s_shadeIdx; }
 
 const char* customName() {
@@ -4213,6 +4680,9 @@ static void scouterTick(uint32_t now) {
     say("IT'S OVER 9000!", 4000);
 }
 
+#include "shambler.inc"
+#include "th3_0n3.inc"
+
 static void drawOutfit(TFT_eSPI& t, int cx2, int hy, uint32_t now, Mood m, float scale, OutfitId outfit) {
     if (outfit == OutfitId::NONE) return;
     auto S = [scale](int v) { return (int)(v * scale); };
@@ -4220,6 +4690,22 @@ static void drawOutfit(TFT_eSPI& t, int cx2, int hy, uint32_t now, Mood m, float
     using namespace Theme;
 
     switch (outfit) {
+        case OutfitId::STRIPES: {
+            // The striped pillbox cap, sat on his crown with his crest poking
+            // out of the top, and a short brim under it.
+            const int w = S(19), h = S(5) > 4 ? S(5) : 4;
+            const int x = cx2 - w / 2, y = hy - S(1) / 2 - 1;
+            int band = (int)lroundf(1.1f * scale);
+            if (band < 2) band = 2;
+            t.fillRect(x - 1, y - 1, w + 2, h + 2, BLACK);
+            for (int r = 0; r < h; r++)
+                t.drawFastHLine(x, y + r, w, (r / band) & 1 ? (uint16_t)0x18E3 : (uint16_t)0xF79D);
+            t.drawFastHLine(x, y, w, (uint16_t)0xFFFF);
+            const int bh = S(1) > 1 ? S(1) : 2;
+            t.fillRect(x - 3, y + h, w + 6, bh + 1, BLACK);
+            t.fillRect(x - 2, y + h, w + 4, bh, (uint16_t)0xF79D);
+            break;
+        }
         case OutfitId::TANOOKI: {
             // A tanooki SUIT, the one-piece in the reference, not a raccoon
             // mask: his fur is recoloured to the suit's orange-brown up in
@@ -4238,10 +4724,10 @@ static void drawOutfit(TFT_eSPI& t, int cx2, int hy, uint32_t now, Mood m, float
             break;
         }
         case OutfitId::PARKA: {
-            const uint16_t ink   = t.color565(18, 10, 4);
-            const uint16_t org   = t.color565(255, 138, 26);
-            const uint16_t seam  = t.color565(138, 68, 8);
-            const uint16_t fur   = t.color565(107, 64, 40);
+            const uint16_t ink   = (uint16_t)0x1040;
+            const uint16_t org   = (uint16_t)0xFC43;
+            const uint16_t seam  = (uint16_t)0x8A21;
+            const uint16_t fur   = (uint16_t)0x6A05;
 
             const int oy = hy + S(8);
             const int ow = (S(17) * 102) / 100, oh = (S(16) * 102) / 100;
@@ -4380,14 +4866,14 @@ static void drawOutfit(TFT_eSPI& t, int cx2, int hy, uint32_t now, Mood m, float
             // A faint glow ring round the socket, breathing slowly.
             const bool glow = ((now / 1400) % 3u) != 0;
             t.fillEllipse(cx2, ey + S(5), er + S(7), (er * 92) / 100 + S(1),
-                          glow ? t.color565(73, 36, 170) : t.color565(36, 36, 85));
-            t.fillEllipse(cx2, ey + S(5), er + S(6), (er * 92) / 100, t.color565(70, 60, 130));
-            t.fillEllipse(cx2, ey + S(6), er + S(3), (er * 82) / 100, t.color565(20, 14, 48));
+                          glow ? (uint16_t)0x4935 : (uint16_t)0x212A);
+            t.fillEllipse(cx2, ey + S(5), er + S(6), (er * 92) / 100, (uint16_t)0x41F0);
+            t.fillEllipse(cx2, ey + S(6), er + S(3), (er * 82) / 100, (uint16_t)0x1066);
             // The sphere. That outer circle is a RIM, not the black underlay
             // every flying junk object gets: this is worn against a black sky
             // full of stars, and a black outline against that is nothing at all.
-            t.fillCircle(cx2, ey, er + 1, t.color565(130, 100, 190));
-            t.fillCircle(cx2, ey, er,     t.color565( 44,  30,  92));
+            t.fillCircle(cx2, ey, er + 1, (uint16_t)0x8337);
+            t.fillCircle(cx2, ey, er,     (uint16_t)0x28EB);
             // The sky inside him, running the same warp the Starfield does --
             // which is where he took the eye from. See void_eye.h for why none
             // of this computes a sine.
@@ -4408,9 +4894,9 @@ static void drawOutfit(TFT_eSPI& t, int cx2, int hy, uint32_t now, Mood m, float
             int gx = 0, gy = 0;
             voidGaze(now, er, gx, gy);
             const int ix = cx2 + (er * 16) / 100 + gx, iy = ey + gy;
-            t.fillCircle(ix, iy, (er * 58) / 100, t.color565( 56,  10,  96));
-            t.fillCircle(ix, iy, (er * 50) / 100, t.color565(150,  60, 220));
-            const uint16_t spokeCol = t.color565(96, 36, 170);
+            t.fillCircle(ix, iy, (er * 58) / 100, (uint16_t)0x384C);
+            t.fillCircle(ix, iy, (er * 50) / 100, (uint16_t)0x91FB);
+            const uint16_t spokeCol = (uint16_t)0x6135;
             for (uint8_t sp = 0; sp < VOID_SPOKE_N; sp++) {
                 t.drawLine(ix + (VOID_SPOKE[sp][0] * er) / 64,
                            iy + (VOID_SPOKE[sp][1] * er) / 64,
@@ -4419,8 +4905,8 @@ static void drawOutfit(TFT_eSPI& t, int cx2, int hy, uint32_t now, Mood m, float
             }
             t.fillCircle(ix, iy, (er * 24) / 100, BLACK);
             t.fillCircle(cx2 - (er * 8) / 100, ey - (er * 36) / 100,
-                         (er * 17) / 100, t.color565(150, 140, 210));
-            voidLid(t, cx2, ey, er, voidBlink(now), t.color565(70, 60, 130), BLACK);
+                         (er * 17) / 100, (uint16_t)0x947A);
+            voidLid(t, cx2, ey, er, voidBlink(now), (uint16_t)0x41F0, BLACK);
             break;
         }
         case OutfitId::WOLFPELT: {
@@ -4616,7 +5102,7 @@ static void drawOutfit(TFT_eSPI& t, int cx2, int hy, uint32_t now, Mood m, float
                            cx2 + Sf(11.0f), earTip, peltDark);
             // Inner ear, shorter, and pink: grey inside grey was one more
             // shade of the same mask.
-            const uint16_t earPink = t.color565(219, 109, 146);
+            const uint16_t earPink = (uint16_t)0xDB72;
             t.fillTriangle(cx2 - Sf(11.0f), mhy - Sf(6.5f), cx2 - Sf(6.0f), mhy - Sf(8.5f),
                            cx2 - Sf(10.0f), earTip + Sf(4.0f), earPink);
             t.fillTriangle(cx2 + Sf(11.0f), mhy - Sf(6.5f), cx2 + Sf(6.0f), mhy - Sf(8.5f),
@@ -4722,11 +5208,11 @@ static void drawOutfit(TFT_eSPI& t, int cx2, int hy, uint32_t now, Mood m, float
             // available range. The obvious deep silver, (109,109,85), renders
             // OLIVE -- red and green sit two steps above a blue that cannot
             // follow them. (73,73,85) is the only cool dark there is.
-            const uint16_t silvDk = t.color565( 73,  73,  85);
-            const uint16_t silv   = t.color565(146, 146, 170);
-            const uint16_t silvHi = t.color565(219, 219, 255);
-            const uint16_t gum    = t.color565(219,  36,  85);
-            const uint16_t eyeBk  = t.color565(0, 0, 0);
+            const uint16_t silvDk = (uint16_t)0x4A4A;
+            const uint16_t silv   = (uint16_t)0x9495;
+            const uint16_t silvHi = (uint16_t)0xDEDF;
+            const uint16_t gum    = (uint16_t)0xD92A;
+            const uint16_t eyeBk  = (uint16_t)0x0000;
             const int halfW = S(16);
 
             // ---- the dorsal fin, and the hood over his crown -------------
@@ -4880,9 +5366,9 @@ static void drawOutfit(TFT_eSPI& t, int cx2, int hy, uint32_t now, Mood m, float
             // top. Greys from the same RGB332 ramp SHARK SUIT uses -- the only
             // cool neutrals the frame buffer has.
             const uint16_t ink = BLACK;
-            const uint16_t fDk = t.color565( 73,  73,  85);
-            const uint16_t fMd = t.color565(146, 146, 170);
-            const uint16_t fLt = t.color565(219, 219, 255);
+            const uint16_t fDk = (uint16_t)0x4A4A;
+            const uint16_t fMd = (uint16_t)0x9495;
+            const uint16_t fLt = (uint16_t)0xDEDF;
             const int ax = cx2 + S(2), ay = hy - S(12);
             const int by = hy + S(1);
             const int bx[5] = { cx2 - S(14), cx2 - S(6), cx2 + S(1), cx2 + S(8), cx2 + S(14) };
@@ -4914,7 +5400,7 @@ static void drawOutfit(TFT_eSPI& t, int cx2, int hy, uint32_t now, Mood m, float
                 const float a = (float)(now % 700) / 700.0f * 6.2831853f;
                 const float c = cosf(a);
                 const int L = S(8), th = S(1) + 1;
-                const uint16_t bladeA = t.color565(219, 0, 0), bladeB = t.color565(0, 85, 255);
+                const uint16_t bladeA = (uint16_t)0xD800, bladeB = (uint16_t)0x02BF;
                 auto blade = [&](float dir, uint16_t col) {
                     int half = (int)(fabsf(c) * (float)L * 0.5f);
                     if (half < 1) half = 1;
@@ -4926,7 +5412,7 @@ static void drawOutfit(TFT_eSPI& t, int cx2, int hy, uint32_t now, Mood m, float
                 const bool aFront = sinf(a) > 0.0f;
                 blade(aFront ? -1.0f : 1.0f, aFront ? bladeB : bladeA);
                 blade(aFront ? 1.0f : -1.0f, aFront ? bladeA : bladeB);
-                t.fillCircle(tx, ty, S(1), t.color565(255, 219, 0));
+                t.fillCircle(tx, ty, S(1), (uint16_t)0xFEC0);
             }
             // A glint that jumps between facets every few seconds.
             const uint32_t gp = now % 4200;
@@ -4945,10 +5431,10 @@ static void drawOutfit(TFT_eSPI& t, int cx2, int hy, uint32_t now, Mood m, float
             // that flutter, a hood over the lower face with his eyes left in
             // the slit, and a red sash with a throwing star tucked in it.
             const uint16_t ink   = BLACK;
-            const uint16_t navy  = t.color565(36, 36, 85);
-            const uint16_t navyL = t.color565(73, 73, 170);
-            const uint16_t red   = t.color565(219, 0, 0);
-            const uint16_t redHi = t.color565(255, 109, 85);
+            const uint16_t navy  = (uint16_t)0x212A;
+            const uint16_t navyL = (uint16_t)0x4A55;
+            const uint16_t red   = (uint16_t)0xD800;
+            const uint16_t redHi = (uint16_t)0xFB6A;
             // Lower-face mask, kept below the shade line so his eyes
             // stay visible -- covers mouth/jaw, not the lenses.
             inked(ink, navy, [&](int ox, int oy, uint16_t c) {
@@ -4984,7 +5470,7 @@ static void drawOutfit(TFT_eSPI& t, int cx2, int hy, uint32_t now, Mood m, float
             });
             t.drawFastHLine(cx2 - S(th) + 1, hy + S(32), S(2 * th) - 2, redHi);
             // The throwing star, tucked in on the other side.
-            const uint16_t steel = t.color565(182, 182, 170);
+            const uint16_t steel = (uint16_t)0xB5B5;
             const int sx = cx2 - S(6), sy = hy + S(34), sr = S(2) + 1;
             t.fillTriangle(sx - sr, sy, sx + sr, sy, sx, sy - sr - 1, steel);
             t.fillTriangle(sx - sr, sy, sx + sr, sy, sx, sy + sr + 1, steel);
@@ -4999,9 +5485,9 @@ static void drawOutfit(TFT_eSPI& t, int cx2, int hy, uint32_t now, Mood m, float
             // go over them. TALL BRO's cap is the taller of the two.
             const bool tall = (outfit == OutfitId::TALLBRO);
             const uint16_t ink   = BLACK;
-            const uint16_t cap   = tall ? t.color565(  0, 182,   0) : t.color565(219,   0,   0);
-            const uint16_t capDk = tall ? t.color565(  0, 109,   0) : t.color565(146,   0,   0);
-            const uint16_t capHi = tall ? t.color565(109, 255,  85) : t.color565(255, 109,  85);
+            const uint16_t cap   = tall ? (uint16_t)0x05A0 : (uint16_t)0xD800;
+            const uint16_t capDk = tall ? (uint16_t)0x0360 : (uint16_t)0x9000;
+            const uint16_t capHi = tall ? (uint16_t)0x6FEA : (uint16_t)0xFB6A;
             const int top = tall ? S(9) : S(7);
             // The corner radius is held to half the dome's height: a round
             // rect asked for more than that folds its corners over each other
@@ -5026,13 +5512,13 @@ static void drawOutfit(TFT_eSPI& t, int cx2, int hy, uint32_t now, Mood m, float
             const int p = (S(2) * 3) / 5;
             if (p >= 1) capGlyph(t, ex - (3 * p) / 2, ey - (5 * p) / 2, p, cap);
             // The moustache, two lobes over the top of his mouth.
-            const uint16_t tash = t.color565(73, 36, 0);
+            const uint16_t tash = (uint16_t)0x4920;
             inked(ink, tash, [&](int ox, int oy, uint16_t c) {
                 t.fillEllipse(cx2 - S(4) + ox, hy + S(15) + oy, S(5), S(2), c);
                 t.fillEllipse(cx2 + S(4) + ox, hy + S(15) + oy, S(5), S(2), c);
             });
             // Gloves on the hands drawBody() published, so they follow a wave.
-            const uint16_t crease = t.color565(182, 182, 170);
+            const uint16_t crease = (uint16_t)0xB5B5;
             const int gr = S(4);
             t.fillCircle(s_armL1x, s_armL1y, gr + 1, ink);
             t.fillCircle(s_armR1x, s_armR1y, gr + 1, ink);
@@ -5049,15 +5535,15 @@ static void drawOutfit(TFT_eSPI& t, int cx2, int hy, uint32_t now, Mood m, float
             // smudge at this size; what actually makes a circle read as a
             // sphere is a thick rim plus a highlight that follows the curve.
             const int cy = hy + S(10), r = S(19);
-            const uint16_t steel = t.color565(226, 230, 240);
+            const uint16_t steel = (uint16_t)0xE73E;
             // ---- the suit on his arms and feet, before the helmet ----------
             // Along wherever each arm really is, like the parka's sleeves, and
             // started a little way down the arm so the round end does not
             // poke up over the corners of his jaw inside the helmet.
             {
-                const uint16_t suit  = t.color565(219, 219, 255);
-                const uint16_t suitD = t.color565(146, 146, 170);
-                const uint16_t glove = t.color565(255, 146, 0);
+                const uint16_t suit  = (uint16_t)0xDEDF;
+                const uint16_t suitD = (uint16_t)0x9495;
+                const uint16_t glove = (uint16_t)0xFC80;
                 const int aw = S(8);
                 for (int8_t sg = -1; sg <= 1; sg += 2) {
                     const int x0 = sg < 0 ? s_armL0x : s_armR0x, y0 = sg < 0 ? s_armL0y : s_armR0y;
@@ -5097,13 +5583,13 @@ static void drawOutfit(TFT_eSPI& t, int cx2, int hy, uint32_t now, Mood m, float
             // it now too, so the rim reads as a thick metal ring rather than
             // three pale hairlines.
             for (uint8_t k = 0; k < 3; k++) t.drawCircle(cx2, cy, r - k, steel);
-            t.drawCircle(cx2, cy, r - 3, t.color565(73, 73, 85));
+            t.drawCircle(cx2, cy, r - 3, (uint16_t)0x4A4A);
             t.drawCircle(cx2, cy, r + 1, BLACK);
             // A second, smaller glint low on the far side: two lights read as
             // curved glass, one reads as a sticker.
             t.fillCircle(cx2 + (r * 55) / 100, cy + (r * 45) / 100, S(1), WHITE);
-            t.fillRoundRect(cx2 - S(torsoHalf() + 2), hy + S(21), S(2 * torsoHalf() + 4), S(5), S(2), t.color565(186, 190, 202));
-            t.fillRect(cx2 - S(torsoHalf() + 2), hy + S(21), S(2 * torsoHalf() + 4), 1, t.color565(244, 244, 252));
+            t.fillRoundRect(cx2 - S(torsoHalf() + 2), hy + S(21), S(2 * torsoHalf() + 4), S(5), S(2), (uint16_t)0xBDF9);
+            t.fillRect(cx2 - S(torsoHalf() + 2), hy + S(21), S(2 * torsoHalf() + 4), 1, (uint16_t)0xF7BF);
             // The glint: a blunt plus rather than a tapered sparkle, because
             // square arms survive being six pixels wide and tapered ones do not.
             const int mx = cx2 + (int)(cosf(a0) * ar), my = cy + (int)(sinf(a0) * ar);
@@ -5145,7 +5631,7 @@ static void drawOutfit(TFT_eSPI& t, int cx2, int hy, uint32_t now, Mood m, float
             // Outlined, with the white strap, gold buckle and white sole that
             // make them those shoes rather than two red ovals.
             {
-                const uint16_t shoe = t.color565(219, 0, 0), shoeHi = t.color565(255, 109, 85);
+                const uint16_t shoe = (uint16_t)0xD800, shoeHi = (uint16_t)0xFB6A;
                 const int fx[2] = { s_footLx, s_footRx }, fy[2] = { s_footLy, s_footRy };
                 for (int k = 0; k < 2; k++) {
                     inked(BLACK, shoe, [&](int ox, int oy, uint16_t c) {
@@ -5154,7 +5640,7 @@ static void drawOutfit(TFT_eSPI& t, int cx2, int hy, uint32_t now, Mood m, float
                     t.drawFastHLine(fx[k] + S(1), fy[k] - S(1), S(8), shoeHi);
                     t.fillRect(fx[k] - S(1) + 1, fy[k] + S(4), S(14) - 2, S(2), WHITE);
                     t.fillRect(fx[k] + S(5), fy[k] - S(1), S(3), S(5), WHITE);
-                    t.fillRect(fx[k] + S(6), fy[k] + S(1), S(1) > 0 ? S(1) : 1, S(2), t.color565(255, 219, 0));
+                    t.fillRect(fx[k] + S(6), fy[k] + S(1), S(1) > 0 ? S(1) : 1, S(2), (uint16_t)0xFEC0);
                 }
                 // A puff of dust kicked up behind whichever foot just left the
                 // ground, while he walks.
@@ -5164,7 +5650,7 @@ static void drawOutfit(TFT_eSPI& t, int cx2, int hy, uint32_t now, Mood m, float
                     const int age = (int)(wp % 200);
                     const int pr = S(1) + age * S(2) / 200 + 1;
                     const int px = fx[k] + (k == 0 ? -S(2) : S(13)) - (k == 0 ? age * S(3) / 200 : -age * S(3) / 200);
-                    t.fillCircle(px, fy[k] + S(4), pr, t.color565(182, 182, 170));
+                    t.fillCircle(px, fy[k] + S(4), pr, (uint16_t)0xB5B5);
                 }
             }
             break;
@@ -5175,9 +5661,9 @@ static void drawOutfit(TFT_eSPI& t, int cx2, int hy, uint32_t now, Mood m, float
             // skull and crossbones in the middle. The old one was two black
             // triangles, which from across a room was a tent.
             const uint16_t ink    = BLACK;
-            const uint16_t felt   = t.color565( 36,  36,  85);
-            const uint16_t feltHi = t.color565( 73,  73, 170);
-            const uint16_t gold   = t.color565(255, 219,   0);
+            const uint16_t felt   = (uint16_t)0x212A;
+            const uint16_t feltHi = (uint16_t)0x4A55;
+            const uint16_t gold   = (uint16_t)0xFEC0;
             // The brim's outline, left to right along the top.
             static const int8_t B[9][2] = { {-17, 2}, {-19, -11}, {-9, -3}, {-5, -7}, {0, -8},
                                             {5, -7}, {9, -3}, {19, -11}, {17, 2} };
@@ -5215,6 +5701,7 @@ static void drawOutfit(TFT_eSPI& t, int cx2, int hy, uint32_t now, Mood m, float
         }
         case OutfitId::YZZERD: yzFront(t, cx2, hy, now, m, scale); break;
         case OutfitId::OVER9000: o9Front(t, cx2, hy, now, m, scale); break;
+        case OutfitId::SHAMBLER: shFront(t, cx2, hy, now, m, scale); break;
         default: break;
     }
 }
@@ -5294,6 +5781,7 @@ static int outfitReach(OutfitId o) {
         case OutfitId::WOLFPELT: return 26;
         case OutfitId::YZZERD:   return 26;   // the hat; its star goes past
         case OutfitId::OVER9000: return 31;   // the hair; its tallest tip goes past
+        case OutfitId::SHAMBLER: return 13;   // the flies, at the top of their loop
         case OutfitId::UNICORN:  return 24;
         case OutfitId::TINFOIL:  return 18;   // the antenna bead
         case OutfitId::CAPTAIN:  return 16;
@@ -5584,6 +6072,135 @@ static void auraFront(TFT_eSPI& t, int cx2, int hy, int ground, uint32_t now, Mo
 // ownsBubble: whether the ONE global speech bubble (bubbleText/bubbleUntil)
 // belongs to the body being drawn. True for our own Squachy, who is the only
 // one who can put a line in it. False for every cameo -- see drawWaving().
+// STRIPES. Black and white bands painted over his own fur, after his body,
+// arms and legs are down and before his head goes on top: every pixel in his
+// fur colours in that box is body, arm or leg at that moment, so the stripes
+// follow whatever pose he is in. Read back from the frame rather than drawn
+// as shapes, because the arms swing and the shapes would have to know every
+// pose. His hands and feet stay fur. Each run of suit gets a lit pixel on its
+// left end and a shadow on its right, which is what makes it read as cloth.
+// own: this is our Squachy, not a visitor: the cuff's ring is where the
+// chain goes, and only ours wears the chain.
+static void ankleCuff(TFT_eSPI& t, float scale, bool own);
+static void prisonStripes(TFT_eSPI& t, int cx2, int hy, float scale, uint16_t furMain, uint16_t furLight, bool own) {
+    auto S = [scale](int v) { return (int)(v * scale); };
+    // From the shoulders down -- or from his hands, when they are up in the
+    // air: nothing but arms is drawn above his shoulders yet.
+    int y0 = hy + S(22);
+    const int handTop = (s_armL1y < s_armR1y ? s_armL1y : s_armR1y) - S(5);
+    if (handTop < y0) y0 = handTop;
+    if (y0 < 0) y0 = 0;
+    int y1 = (s_footLy < s_footRy ? s_footLy : s_footRy);
+    if (y1 > t.height()) y1 = t.height();
+    int x0 = cx2 - S(30), x1 = cx2 + S(30);
+    if (x0 < 0) x0 = 0;
+    if (x1 > t.width()) x1 = t.width();
+    if (y1 <= y0 || x1 <= x0 || !DrawBand::has(y0, y1)) return;
+    // What the frame hands back for each fur colour: the colour itself on a
+    // 16-bit frame, its 8-bit cousin on an 8-bit one. Found by asking it,
+    // on a pixel put straight back.
+    const int py = DrawBand::top(y0);
+    if (py >= y1) return;
+    const uint16_t keep = t.readPixel(x0, py);
+    t.drawPixel(x0, py, furMain);  const uint16_t qM = t.readPixel(x0, py);
+    t.drawPixel(x0, py, furLight); const uint16_t qL = t.readPixel(x0, py);
+    t.drawPixel(x0, py, keep);
+    if (qM == qL) return;               // the frame could not tell them apart: leave him be
+    const int torsoTop = hy + S(23);
+    int band = (int)lroundf(1.48f * scale);
+    if (band < 2) band = 2;
+    const uint16_t BODY_W = (uint16_t)0xE73B, BODY_D = (uint16_t)0x18E3;
+    const uint16_t ARM_W  = Theme::WHITE,              ARM_D  = (uint16_t)0x31A7;
+    const uint16_t LIT    = (uint16_t)0xCE58, SHADE = (uint16_t)0x0862;
+    const int hr = S(4) + 1, hr2 = hr * hr;
+    uint8_t cls[512];
+    const int yA = DrawBand::top(y0), yB = DrawBand::bot(y1);
+    // The frame sprite is read straight from its buffer, a byte a pixel,
+    // against the fur colours' own 8-bit codes: through readPixel() this
+    // loop was 7-9 ms a frame on the 3.2in (measured 2026-10-06).
+#if defined(ARDUINO_ARCH_ESP32)
+    const FastSprite* fs = (g_frameSprite && (TFT_eSPI*)g_frameSprite == &t) ? g_frameSprite : nullptr;
+    const uint8_t cM8 = (uint8_t)t.color16to8(furMain), cL8 = (uint8_t)t.color16to8(furLight);
+#endif
+    for (int y = yA; y < yB; y++) {
+        const bool dark = (((y - torsoTop) + band * 64) / band) & 1;
+        const int n = x1 - x0 > 512 ? 512 : x1 - x0;
+        const int dyL = (y - s_armL1y) * (y - s_armL1y), dyR = (y - s_armR1y) * (y - s_armR1y);
+        auto handAt = [&](int x) { return (x - s_armL1x) * (x - s_armL1x) + dyL <= hr2 || (x - s_armR1x) * (x - s_armR1x) + dyR <= hr2; };
+#if defined(ARDUINO_ARCH_ESP32)
+        const uint8_t* row = fs ? fs->row8(y) : nullptr;
+        if (row) {
+            const uint8_t* p = row + x0;
+            for (int i = 0; i < n; i++) {
+                const uint8_t v = p[i];
+                cls[i] = v == cM8 ? 1 : (v == cL8 ? (handAt(x0 + i) ? 0 : 2) : 0);
+            }
+        } else
+#endif
+        for (int i = 0; i < n; i++) {
+            const int x = x0 + i;
+            const uint16_t c = t.readPixel(x, y);
+            uint8_t k = 0;
+            if (c == furMain || c == qM) k = 1;
+            else if (c == furLight || c == qL) k = handAt(x) ? 0 : 2;
+            cls[i] = k;
+        }
+        for (int i = 0; i < n; ) {
+            if (!cls[i]) { i++; continue; }
+            int e = i;
+            while (e + 1 < n && cls[e + 1]) e++;
+            // inside the run, one span per kind; the two ends shaded
+            for (int a = i; a <= e; ) {
+                int b = a;
+                while (b + 1 <= e && cls[b + 1] == cls[a]) b++;
+                const uint16_t col = cls[a] == 1 ? (dark ? BODY_D : BODY_W) : (dark ? ARM_D : ARM_W);
+                t.drawFastHLine(x0 + a, y, b - a + 1, col);
+                a = b + 1;
+            }
+            if (e > i) { t.drawPixel(x0 + i, y, LIT); t.drawPixel(x0 + e, y, SHADE); }
+            i = e + 1;
+        }
+    }
+    // The number patch on his chest: 1337, in the little 3x5 digits where he
+    // is big enough to read them.
+    {
+        const int w = S(8) > 8 ? S(8) : 8, h = S(3) > 5 ? S(3) + 1 : 5;
+        const int px0 = cx2 - w / 2 + S(2), py0 = torsoTop + S(3);
+        t.fillRect(px0 - 1, py0 - 1, w + 2, h + 2, Theme::BLACK);
+        t.fillRect(px0, py0, w, h, Theme::WHITE);
+        if (scale >= 1.9f) {
+            static const uint8_t D1[5] = { 2, 6, 2, 2, 7 }, D3[5] = { 7, 1, 7, 1, 7 }, D7[5] = { 7, 1, 2, 2, 2 };
+            const uint8_t* dig[4] = { D1, D3, D3, D7 };
+            int tx = px0 + (w - 15) / 2;
+            const int ty = py0 + (h - 5) / 2;
+            for (int d = 0; d < 4; d++, tx += 4)
+                for (int r = 0; r < 5; r++)
+                    for (int k = 0; k < 3; k++)
+                        if (dig[d][r] & (4 >> k)) t.drawPixel(tx + k, ty + r, Theme::BLACK);
+        }
+    }
+    ankleCuff(t, scale, own);
+}
+
+// The iron cuff on his right ankle, and its ring: worn in STRIPES, and
+// whenever the ball is his pet.
+static void ankleCuff(TFT_eSPI& t, float scale, bool own) {
+    auto S = [scale](int v) { return (int)(v * scale); };
+    {
+        const int lx = s_footRx + S(1), lw = S(8);
+        const int ch = S(1) > 2 ? S(1) + 1 : 2;
+        const int cy = s_footRy - ch - 1;
+        const uint16_t IRON = (uint16_t)0x7C11, IRON_HI = (uint16_t)0xC65A;
+        t.fillRect(lx - 1, cy - 1, lw + 2, ch + 2, Theme::BLACK);
+        t.fillRect(lx, cy, lw, ch, IRON);
+        t.drawFastHLine(lx, cy, lw, IRON_HI);
+        const int rw = S(1) > 1 ? S(1) : 2;
+        t.fillRect(lx + lw, cy - 1, rw + 1, ch + 2, Theme::BLACK);
+        t.fillRect(lx + lw, cy, rw, ch, IRON_HI);
+        if (own) { s_chainX = lx + lw + rw / 2; s_chainY = cy + ch / 2; s_chainAt = millis(); }
+    }
+}
+
 static void drawBody(TFT_eSPI& t, int cx, int hy, int headTopY, uint32_t now, Mood m, float scale,
                      bool forceTalking = false, bool ownsBubble = true) {
     auto S = [scale](int v) { return (int)(v * scale); };
@@ -5638,6 +6255,8 @@ static void drawBody(TFT_eSPI& t, int cx, int hy, int headTopY, uint32_t now, Mo
     // His own fur, kept for the outfits that dress the body in a colour and
     // then need the head -- and the hands -- back.
     const uint16_t furMain0 = furMain, furLight0 = furLight;
+    const bool t3 = outfitNow == OutfitId::TH3_0N3;
+    if (t3) t3Fur(furMain, furLight, furLight0, s_outfitOverride < 0);
     if (outfitNow == OutfitId::YZZERD) {
         // The robe: body and legs in its purple, the arms in the lighter
         // sleeve tone, so the arm chain below draws the sleeves for free.
@@ -5648,6 +6267,10 @@ static void drawBody(TFT_eSPI& t, int cx, int hy, int headTopY, uint32_t now, Mo
         // The gi: body and legs orange; the arms stay his own fur.
         s_o9Fur = furLight0;
         furMain = O9_GI;
+    } else if (outfitNow == OutfitId::SHAMBLER) {
+        // Grey-green all over, head and hands too: the costume is him.
+        furMain  = SH_FUR;
+        furLight = SH_FURLT;
     } else if (outfitNow == OutfitId::UNICORN) {
         // Baby-blue/baby-pink two-tone -- furMain (body fill) and
         // furLight (highlights/outlines) already alternate across
@@ -5663,19 +6286,19 @@ static void drawBody(TFT_eSPI& t, int cx, int hy, int headTopY, uint32_t now, Mo
         // The suit: orange-brown all over, head included, which is what makes
         // his head the hood. Lighter on the arms and the hood's rim, the way
         // the two fur tones alternate on plain Squachy.
-        furMain  = t.color565(219, 109, 0);
-        furLight = t.color565(255, 146, 0);
+        furMain  = (uint16_t)0xDB60;
+        furLight = (uint16_t)0xFC80;
     } else if (outfitNow == OutfitId::PARKA) {
         // One flat orange everywhere -- arms, legs and torso -- so the coat
         // only has to draw its own outline and hem rather than repaint him.
-        furMain  = t.color565(255, 138, 26);
-        furLight = t.color565(255, 138, 26);
+        furMain  = (uint16_t)0xFC43;
+        furLight = (uint16_t)0xFC43;
     } else if (outfitNow == OutfitId::VOIDEYE) {
         // Deep space, but chosen off the RGB332 ramp rather than nudged toward
         // it. The first pass used a true navy and he vanished outright: 8-bit
         // blue has four levels, and everything below the first one is black.
-        furMain  = t.color565(48, 44, 96);
-        furLight = t.color565(96, 88, 180);
+        furMain  = (uint16_t)0x316C;
+        furLight = (uint16_t)0x62D6;
     } else if (outfitNow == OutfitId::SHADOW) {
         // Mostly black -- furLight stays a touch lighter than pure
         // black purely so edges/highlights (ears, arm outlines) don't
@@ -5683,8 +6306,8 @@ static void drawBody(TFT_eSPI& t, int cx, int hy, int headTopY, uint32_t now, Mo
         //
         // Navy now, not near-black: black on black lost the whole shape of
         // him, and the navy keeps it while still reading as a ninja at night.
-        furMain  = t.color565(36, 36, 85);
-        furLight = t.color565(73, 73, 170);
+        furMain  = (uint16_t)0x212A;
+        furLight = (uint16_t)0x4A55;
     }
     // PARKA sits out the shimmer. Everything of him that shows is either the
     // coat, which is a fixed orange this cannot reach, or his legs and arms,
@@ -5714,8 +6337,8 @@ static void drawBody(TFT_eSPI& t, int cx, int hy, int headTopY, uint32_t now, Mo
         // which one is lower on screen, so both wings get the shadow
         // underneath instead of one of them looking flipped.
         const uint16_t wh  = TFT_WHITE;
-        const uint16_t wh2 = t.color565(214, 214, 228);
-        const uint16_t wh3 = t.color565(150, 150, 172);
+        const uint16_t wh2 = (uint16_t)0xD6BC;
+        const uint16_t wh3 = (uint16_t)0x94B5;
         // Wings rest, then break into a short burst of three beats
         // every few seconds, decaying so the last one is smallest.
         // Constant gentle motion reads as a hover; a bird at rest that
@@ -5747,9 +6370,9 @@ static void drawBody(TFT_eSPI& t, int cx, int hy, int headTopY, uint32_t now, Mo
         // down its middle. On every flap that band retracts to the shoulder
         // and runs back out to the tip, which is a shine sliding along it.
         (void)wh; (void)wh2; (void)wh3;
-        const uint16_t cBr = t.color565(219, 219, 255);
-        const uint16_t cMd = t.color565(146, 146, 170);
-        const uint16_t cDk = t.color565( 73,  73,  85);
+        const uint16_t cBr = (uint16_t)0xDEDF;
+        const uint16_t cMd = (uint16_t)0x9495;
+        const uint16_t cDk = (uint16_t)0x4A4A;
         const float shine = (fAge < 900u) ? 0.25f + 0.75f * (float)fAge / 900.0f : 1.0f;
         Theme::drawWing(t, (float)(cx2 - S(13)), sy, len,
                         218.0f, -beat, 0.50f, 3, cMd, BLACK, -0.55f, 26.0f, cDk);
@@ -5800,8 +6423,8 @@ static void drawBody(TFT_eSPI& t, int cx, int hy, int headTopY, uint32_t now, Mo
     // debris rather than fur.
     if (outfitNow == OutfitId::TANOOKI) {
         // The suit's orange with dark brown rings, as in the reference.
-        const uint16_t tcream = t.color565(219, 109, 0);
-        const uint16_t tdark  = t.color565(109, 36, 0);
+        const uint16_t tcream = (uint16_t)0xDB60;
+        const uint16_t tdark  = (uint16_t)0x6920;
         const float TAU = 6.2831853f;
 
         // A travelling S: the displacement is perpendicular to the spine and
@@ -5872,21 +6495,25 @@ static void drawBody(TFT_eSPI& t, int cx, int hy, int headTopY, uint32_t now, Mo
     // Behind him like the wings, the hide and the tail. The ground is where
     // his soles are, which a crouch leaves put while hy sinks.
     if (outfitNow == OutfitId::YZZERD) yzBack(t, cx2, hy, hy + S(55) - crouch, now, m, scale);
+    if (t3) t3Back(t, cx2, hy, hy + S(55) - crouch, now, m, scale);
 
     // Shadow (fixed, doesn't bob)
     // Silhouette keyline helpers. Drawn as slightly expanded copies UNDER
     // each shape, so no per-pose outline maths is needed -- whatever the
     // limb does, its outline does too.
-    // The Legend's aura. On our own Squachy only: a visitor is drawn with his
-    // outfit set as a preview (see setOutfitPreview), and he does not get to
-    // wear his host's fire. Which also keeps it off the outfit picker's
-    // preview, where it would be in the way of the costume being chosen.
-    const bool aura = hasAura() && Settings::auraShown() && s_outfitOverride < 0;
+    // The Legend's aura. Ours on our own Squachy; a visitor is drawn with his
+    // outfit set as a preview (see setOutfitPreview) and does not get to wear
+    // his host's fire, only his own, which his advert says he has or has not
+    // (setAuraPreview). No preview of either kind keeps it off the outfit
+    // picker, where it would be in the way of the costume being chosen.
+    const bool aura = s_auraOverride >= 0
+                        ? s_auraOverride > 0
+                        : (hasAura() && Settings::auraShown() && s_outfitOverride < 0);
     // With it on, his outline is the blue of the fire's inner edge, so the
     // fire grows out of a rim rather than standing behind a dark line.
     const uint16_t keyCol = aura ? auraKey(now, m)
                           : (outfitNow == OutfitId::PARKA)
-                            ? t.color565(138, 68, 8)      // a seam, not an edge
+                            ? (uint16_t)0x8A21      // a seam, not an edge
                             : blend(FUR_DARK, BLACK, 150);
     // Behind him like the wings, the hide, the tail and the rune circle. The
     // ground is where his soles are, which a crouch leaves put while hy sinks.
@@ -6064,8 +6691,8 @@ static void drawBody(TFT_eSPI& t, int cx, int hy, int headTopY, uint32_t now, Mo
 
     // The bros' overalls come down the legs: denim from the hip to the ankle.
     const bool bros = (outfitNow == OutfitId::PLUMBER || outfitNow == OutfitId::TALLBRO);
-    const uint16_t legCol = bros ? t.color565(36, 73, 170)
-                          : (outfitNow == OutfitId::SPACE) ? t.color565(219, 219, 255) : furMain;
+    const uint16_t legCol = bros ? (uint16_t)0x2255
+                          : (outfitNow == OutfitId::SPACE) ? (uint16_t)0xDEDF : furMain;
     auto legFill = [&](int x, int y, int w, int h) {
         int y0 = y;
         const int y1 = y + h;
@@ -6156,22 +6783,22 @@ static void drawBody(TFT_eSPI& t, int cx, int hy, int headTopY, uint32_t now, Mo
     // outfits used it at all, which is most of why the hat-only ones read as
     // nothing from across a room.
     if (outfitNow == OutfitId::SPACE) {
-        t.fillRoundRect(cx2 - S(torsoHalf()), hy + S(23), S(2 * torsoHalf()), S(18), S(5), t.color565(224, 224, 232));
-        t.fillRect(cx2 - S(torsoHalf()), hy + S(30), S(2 * torsoHalf()), S(2), t.color565(110, 116, 132));
-        t.fillRoundRect(cx2 - S(5), hy + S(33), S(10), S(6), 2, t.color565(40, 44, 60));
+        t.fillRoundRect(cx2 - S(torsoHalf()), hy + S(23), S(2 * torsoHalf()), S(18), S(5), (uint16_t)0xE71D);
+        t.fillRect(cx2 - S(torsoHalf()), hy + S(30), S(2 * torsoHalf()), S(2), (uint16_t)0x6BB0);
+        t.fillRoundRect(cx2 - S(5), hy + S(33), S(10), S(6), 2, (uint16_t)0x2967);
         // The two lights take turns, so the panel is doing something.
         const bool tick = ((now / 500) & 1u) != 0;
-        t.fillRect(cx2 - S(3), hy + S(35), S(2), S(2), tick ? t.color565(0, 255, 136) : t.color565(0, 73, 0));
-        t.fillRect(cx2 + S(1), hy + S(35), S(2), S(2), tick ? t.color565(109, 0, 0) : t.color565(255, 60, 60));
+        t.fillRect(cx2 - S(3), hy + S(35), S(2), S(2), tick ? (uint16_t)0x07F1 : (uint16_t)0x0240);
+        t.fillRect(cx2 + S(1), hy + S(35), S(2), S(2), tick ? (uint16_t)0x6800 : (uint16_t)0xF9E7);
     } else if (bros) {
         // Shirt the cap's colour, then the bib and straps over it, lit on the
         // left and shaded on the right like the cap.
         const bool tall = (outfitNow == OutfitId::TALLBRO);
-        const uint16_t shirt = tall ? t.color565(0, 182, 0) : t.color565(219, 0, 0);
+        const uint16_t shirt = tall ? (uint16_t)0x05A0 : (uint16_t)0xD800;
         const uint16_t den   = legCol;
-        const uint16_t denDk = t.color565(0, 36, 85);
-        const uint16_t denHi = t.color565(73, 146, 255);
-        const uint16_t gold  = t.color565(255, 219, 0);
+        const uint16_t denDk = (uint16_t)0x012A;
+        const uint16_t denHi = (uint16_t)0x4C9F;
+        const uint16_t gold  = (uint16_t)0xFEC0;
         const int th = torsoHalf();
         t.fillRoundRect(cx2 - S(th), hy + S(23), S(2 * th), S(18), S(5), shirt);
         t.fillRoundRect(cx2 - S(th), hy + S(33), S(2 * th), S(8), S(4), den);    // the seat
@@ -6189,9 +6816,9 @@ static void drawBody(TFT_eSPI& t, int cx, int hy, int headTopY, uint32_t now, Mo
     } else if (outfitNow == OutfitId::CAPTAIN) {
         // A red coat: white shirt in a V at the neck, lapels either side of
         // it, a black belt with a gold buckle and gold buttons above.
-        const uint16_t coat   = t.color565(182, 36, 0);
-        const uint16_t coatDk = t.color565(109, 0, 0);
-        const uint16_t gold   = t.color565(255, 219, 0);
+        const uint16_t coat   = (uint16_t)0xB120;
+        const uint16_t coatDk = (uint16_t)0x6800;
+        const uint16_t gold   = (uint16_t)0xFEC0;
         const int th = torsoHalf();
         t.fillRoundRect(cx2 - S(th), hy + S(23), S(2 * th), S(18), S(5), coat);
         t.fillTriangle(cx2 - S(5), hy + S(23), cx2 + S(5), hy + S(23), cx2, hy + S(32), WHITE);
@@ -6206,15 +6833,19 @@ static void drawBody(TFT_eSPI& t, int cx, int hy, int headTopY, uint32_t now, Mo
         yzRobe(t, cx2, hy, scale);
     } else if (outfitNow == OutfitId::OVER9000) {
         o9Gi(t, cx2, hy, hy + S(55) - crouch, now, scale);
+    } else if (outfitNow == OutfitId::SHAMBLER) {
+        shBody(t, cx2, hy, scale);
+    } else if (t3) {
+        t3Coat(t, cx2, hy, now, scale);
     } else if (outfitNow == OutfitId::TANOOKI) {
-        t.fillEllipse(cx2, hy + S(34), S(11), S(8), t.color565(238, 222, 190));
+        t.fillEllipse(cx2, hy + S(34), S(11), S(8), (uint16_t)0xEEF7);
     } else if (outfitNow == OutfitId::PARKA) {
         // His fur is already orange (recoloured above), so this is only the
         // coat's own shape, its hem, and a pair of boots over his feet.
-        const uint16_t ink  = t.color565(18, 10, 4);
-        const uint16_t seam = t.color565(138, 68, 8);
+        const uint16_t ink  = (uint16_t)0x1040;
+        const uint16_t seam = (uint16_t)0x8A21;
         t.fillRoundRect(cx2 - S(torsoHalf() + 2), hy + S(21), S(2 * torsoHalf() + 4), S(24), S(7), ink);
-        t.fillRoundRect(cx2 - S(torsoHalf() + 1), hy + S(22), S(2 * torsoHalf() + 2), S(22), S(6), t.color565(255, 138, 26));
+        t.fillRoundRect(cx2 - S(torsoHalf() + 1), hy + S(22), S(2 * torsoHalf() + 2), S(22), S(6), (uint16_t)0xFC43);
         // Hem HERE, before the arms, so the sleeves cover its ends and it
         // stays on the coat instead of running across his hands.
         t.fillRect(cx2 - S(torsoHalf() - 1), hy + S(40), S(2 * torsoHalf() - 2), 1, seam);
@@ -6227,7 +6858,7 @@ static void drawBody(TFT_eSPI& t, int cx, int hy, int headTopY, uint32_t now, Mo
         // resting one. Hard-coded to the rest position they stayed put while
         // the walk cycle lifted each foot in turn, and the orange fur slid out
         // from under the leather a few pixels at a time.
-        const uint16_t bootC = t.color565(36, 26, 16);
+        const uint16_t bootC = (uint16_t)0x20C2;
         t.fillRoundRect(s_footLx - kb, s_footLy - kb, S(12) + 2 * kb, S(6) + 2 * kb, 2, ink);
         t.fillRoundRect(s_footRx - kb, s_footRy - kb, S(12) + 2 * kb, S(6) + 2 * kb, 2, ink);
         t.fillRoundRect(s_footLx, s_footLy, S(12), S(6), 2, bootC);
@@ -6536,11 +7167,11 @@ static void drawBody(TFT_eSPI& t, int cx, int hy, int headTopY, uint32_t now, Mo
         // stayed put while a bow dropped the head, and its dark inner ring
         // showed as a second head above the real one.
         const int hcy = hy + s_headDrop + actHead + S(8);
-        t.fillCircle(cx2, hcy, S(23) + 2, t.color565(18, 10, 4));
-        t.fillCircle(cx2, hcy, S(23), t.color565(255, 138, 26));
+        t.fillCircle(cx2, hcy, S(23) + 2, (uint16_t)0x1040);
+        t.fillCircle(cx2, hcy, S(23), (uint16_t)0xFC43);
         const int pow_ = (S(17) * 102) / 100, poh = (S(16) * 102) / 100;
-        t.fillEllipse(cx2, hcy, pow_, poh, t.color565(107, 64, 40));
-        t.fillEllipse(cx2, hcy, pow_ - S(4), poh - S(4), t.color565(72, 42, 26));
+        t.fillEllipse(cx2, hcy, pow_, poh, (uint16_t)0x6A05);
+        t.fillEllipse(cx2, hcy, pow_ - S(4), poh - S(4), (uint16_t)0x4943);
     }
 
     // ---- head group ---------------------------------------------------
@@ -6563,12 +7194,15 @@ static void drawBody(TFT_eSPI& t, int cx, int hy, int headTopY, uint32_t now, Mo
     // YZZERD the same, after the sleeves and collar go on behind his head.
     if (outfitNow == OutfitId::YZZERD) { yzBehindHead(t, cx2, hh, scale); furMain = furMain0; furLight = furLight0; }
     if (outfitNow == OutfitId::OVER9000) { o9BehindHead(t, cx2, hh, scale); furMain = furMain0; furLight = furLight0; }
+    if (t3) { t3BehindHead(t, cx2, hh, scale); furMain = furMain0; furLight = furLight0; }
 
     // VOID EYE replaces his head outright with the sphere drawn in
     // drawOutfit(), so the whole face below is skipped rather than drawn and
     // then painted over -- his skull is wider than the sphere and its edges
     // would show around it. Everything inside keeps its original indentation
     // so this stays a two-line change instead of a two-hundred-line reformat.
+    if (outfitNow == OutfitId::STRIPES) prisonStripes(t, cx2, hy, scale, furMain, furLight, s_outfitOverride < 0);
+    else if (s_outfitOverride < 0 && ballPetOn()) ankleCuff(t, scale, true);
     const bool hideFace = (outfitNow == OutfitId::VOIDEYE);
     // PARKA has no mouth. Guarded at each draw rather than painted over
     // afterwards: the mouth moves and changes shape with the mood, so no
@@ -6604,8 +7238,8 @@ static void drawBody(TFT_eSPI& t, int cx, int hy, int headTopY, uint32_t now, Mo
     // TANOOKI's pointed ears, behind his head for the same reason as the
     // quills above: the head covers their roots and their outline with them.
     if (outfitNow == OutfitId::TANOOKI) {
-        const uint16_t earC  = t.color565(219, 109, 0);
-        const uint16_t earIn = t.color565(109, 36, 0);
+        const uint16_t earC  = (uint16_t)0xDB60;
+        const uint16_t earIn = (uint16_t)0x6920;
         for (int8_t sg = -1; sg <= 1; sg += 2) {
             const int bo = cx2 + sg * S(14), bi = cx2 + sg * S(4);
             const int tx = cx2 + sg * S(11), ty = hh - S(9);
@@ -6620,7 +7254,8 @@ static void drawBody(TFT_eSPI& t, int cx, int hy, int headTopY, uint32_t now, Mo
     // Head — broader jaw than before, brow ridge over the eyes.
     t.fillRoundRect(cx2 - S(15), hh, S(30), S(24), S(7), furLight);
     t.fillRoundRect(cx2 - S(12), hh + S(2), S(24), S(19), S(5), furMain);
-    t.fillRoundRect(cx2 - S(9),  hh + S(7), S(18), S(11), S(4), SKIN_TAN);
+    t.fillRoundRect(cx2 - S(9),  hh + S(7), S(18), S(11), S(4),
+                    outfitNow == OutfitId::SHAMBLER ? SH_SKIN : SKIN_TAN);
 
     // A cowlick, plus a couple of smaller shaggy fringe tufts either side.
     //
@@ -6684,9 +7319,11 @@ static void drawBody(TFT_eSPI& t, int cx, int hy, int headTopY, uint32_t now, Mo
     t.fillCircle(cx2 - S(15), hh + S(13), S(1), SKIN_DARK);
     t.fillCircle(cx2 + S(15), hh + S(13), S(1), SKIN_DARK);
 
-    // Blush
-    t.fillCircle(cx2 - S(8), hh + S(15), S(2), VAPOR_PINK);
-    t.fillCircle(cx2 + S(8), hh + S(15), S(2), VAPOR_PINK);
+    // Blush. Not on SHAMBLER: nothing about him is rosy.
+    if (outfitNow != OutfitId::SHAMBLER) {
+        t.fillCircle(cx2 - S(8), hh + S(15), S(2), VAPOR_PINK);
+        t.fillCircle(cx2 + S(8), hh + S(15), S(2), VAPOR_PINK);
+    }
 
     // Where the shades are, for the scouter's tap. Our own Squachy only.
     if (s_outfitOverride < 0) {
@@ -6815,6 +7452,10 @@ static void drawBody(TFT_eSPI& t, int cx, int hy, int headTopY, uint32_t now, Mo
         // sd slides the whole pair down the bridge of his nose during a
         // double-take, so he ends up looking over the top of them.
         const int sd = (int)s_shadeDrop;
+        if (t3) {
+            // TH3 0N3: his shades made round, the code inside them.
+            t3Shades(t, cx2, hh + sd, blink, scale);
+        } else {
         t.fillRoundRect(cx2 - S(12), hh + S(6) + sd, S(10), S(7), 2, BLACK);
         t.fillRoundRect(cx2 + S(2),  hh + S(6) + sd, S(10), S(7), 2, BLACK);
         // The bridge runs from the left frame's edge to the right frame's,
@@ -6829,6 +7470,10 @@ static void drawBody(TFT_eSPI& t, int cx, int hy, int headTopY, uint32_t now, Mo
         }
         t.fillRoundRect(cx2 - S(11), hh + S(7) + sd, S(8), S(5), 1, lensL);
         t.fillRoundRect(cx2 + S(3),  hh + S(7) + sd, S(8), S(5), 1, lensR);
+        // SHAMBLER's right lens is cracked. Here rather than in shFront() so
+        // it only exists while the shades do: a startled or yawning face
+        // has no lens to crack, and drawn later it landed on his bare eye.
+        if (outfitNow == OutfitId::SHAMBLER && lensR != BLACK) shCrack(t, cx2, hh + sd, scale);
         if (sd > 0) {
             // Two eyes peering over the frames -- without these the
             // dropped shades just read as badly-placed shades.
@@ -6842,6 +7487,7 @@ static void drawBody(TFT_eSPI& t, int cx, int hy, int headTopY, uint32_t now, Mo
         int gx = (int)(sweep * 6.0f);
         if (lensL != BLACK) t.drawFastVLine(cx2 - S(11) + S(1 + gx), hh + S(7) + sd, S(4), WHITE);
         if (lensR != BLACK) t.drawFastVLine(cx2 + S(3)  + S(1 + gx), hh + S(7) + sd, S(4), WHITE);
+        }   // end of his own shades (TH3 0N3 swaps them)
 
         // Angry brows, down in the middle, over the top of the frames.
         if (act == VisitPose::GRR || act == VisitPose::STRAIN) {
@@ -6898,13 +7544,14 @@ static void drawBody(TFT_eSPI& t, int cx, int hy, int headTopY, uint32_t now, Mo
     }   // end if (!hideFace)
 
     drawOutfit(t, cx2, hh, now, m, scale, outfitNow);
+    if (t3) t3Front(t, cx2, hh, now, m, scale);
     if (s_outfitOverride < 0 && !hideFace) drawScouter(t, cx2, hh, now, scale);
 
     // The headset, in the head group so it rides every bob and squash with
     // him. The band arcs over his crown from cup to cup; the cups sit on his
     // ears; the mic boom curls round to the corner of his mouth.
     if (s_headset) {
-        const uint16_t ink = BLACK, band = t.color565(182, 182, 170), cup = t.color565(73, 73, 85);
+        const uint16_t ink = BLACK, band = (uint16_t)0xB5B5, cup = (uint16_t)0x4A4A;
         const int bw = S(2) > 1 ? S(2) : 2;
         const int bcx = cx2, bcy = hh + S(12), br = S(16);
         for (uint8_t pass = 0; pass < 2; pass++) {
@@ -7012,10 +7659,10 @@ static void drawBody(TFT_eSPI& t, int cx, int hy, int headTopY, uint32_t now, Mo
         const int bw = tw + 6, bh = 12;
         const int bx = cx2 - bw / 2;
         const int by = hy + S(32) - bh / 2;   // mid-chest, clear of the chin
-        const uint16_t paper = t.color565(244, 242, 232);
+        const uint16_t paper = (uint16_t)0xF79D;
         t.fillRoundRect(bx - 1, by - 1, bw + 2, bh + 2, 3, keyCol);
         t.fillRoundRect(bx, by, bw, bh, 2, paper);
-        t.fillRect(bx, by, bw, 2, t.color565(220, 40, 40));   // the red band along the top
+        t.fillRect(bx, by, bw, 2, (uint16_t)0xD945);   // the red band along the top
         t.setTextColor(BLACK, paper);
         t.setCursor(bx + 3, by + 3);
         t.print(s_nameTag);
@@ -7140,9 +7787,24 @@ void drawWaving(TFT_eSPI& t, int cx, int baseY, uint32_t now, float scale, const
     // render two speech bubbles" looked like from outside. A visitor passes
     // a smaller gap so his bubble sits just above his own head and is
     // visibly his.
-    if (line) drawBubble(t, cx, headTopY - bubbleGap, line, now, false,
-                         bubbleTail ? bodyCx : NO_TAIL);
+    if (line) {
+        if (s_bubbleDefer) {
+            // Kept for drawDeferredBubble(): the caller has somebody still to
+            // draw who would otherwise stand on top of these words.
+            s_deferLine = line; s_deferCx = cx; s_deferY = headTopY - bubbleGap;
+            s_deferTail = bubbleTail ? bodyCx : NO_TAIL;
+        } else {
+            drawBubble(t, cx, headTopY - bubbleGap, line, now, false, bubbleTail ? bodyCx : NO_TAIL);
+        }
+    }
     s_cameo = false;
+}
+
+void deferBubble(bool on) { s_bubbleDefer = on; }
+void drawDeferredBubble(TFT_eSPI& t, uint32_t now) {
+    if (!s_deferLine) return;
+    drawBubble(t, s_deferCx, s_deferY, s_deferLine, now, false, s_deferTail);
+    s_deferLine = nullptr;
 }
 
 // Small filled heart, used by the tap-to-pet flourish.
@@ -7262,7 +7924,7 @@ void tick(TFT_eSPI& t, int cx, int topY, int availHeight, uint32_t now,
                              s_recentTypes[2] = DetectionType::CAMERA;
                              say("PACKET JUGGLE", SHOW_STEP_MS); break;
                     case 7:  mood = Mood::DANCE;   say("DANCE", SHOW_STEP_MS); break;
-                    case 8:  mood = Mood::WALK; s_walkStart = now; s_walkDir = 1;
+                    case 8:  mood = Mood::WALK; s_walkStart = now; s_walkDir = 1; s_walkYanked = false;
                              s_showWB = 1; say("WALK: SNIFF", SHOW_STEP_MS); break;
                     case 9:  s_showWB = 2; say("WALK: LOOK UP", SHOW_STEP_MS); break;
                     case 10: s_showWB = 3; say("WALK: SCRATCH", SHOW_STEP_MS); break;
@@ -7505,6 +8167,7 @@ void tick(TFT_eSPI& t, int cx, int topY, int availHeight, uint32_t now,
             moodUntil = now + WALK_DURATION_MS;
             s_walkStart = now;
             s_walkDir = random(0, 2) ? 1 : -1;
+            s_walkYanked = false;
             nextIdleAt = now + WALK_DURATION_MS + 12000 + random(0, 18000);
         } else if (random(0, 12) == 0) {
             // A brief fourth-wall wink -- see drawBody()'s Mood::WINK
@@ -7535,6 +8198,8 @@ void tick(TFT_eSPI& t, int cx, int topY, int availHeight, uint32_t now,
                 say(pickBackgroundLine(), MIN_BUBBLE_MS);
             } else if (longIdle && random(0, 3) == 0) {
                 say(pick(BORED_LINES, 4), MIN_BUBBLE_MS);
+            } else if (th3Wearing() && random(0, 3) == 0) {
+                say(pick(T3_LINES, T3_LINES_N), MIN_BUBBLE_MS);
             } else if (random(0, 5) == 0) {
                 say(pick(NOIR_LINES, NOIR_LINES_N), MIN_BUBBLE_MS);
             } else if (random(0, 4) == 0) {
@@ -7664,15 +8329,27 @@ void tick(TFT_eSPI& t, int cx, int topY, int availHeight, uint32_t now,
     if (bigPanel) {
         const float span = (float)t.width() / (s_company ? 2.0f : 1.0f) - 8.0f;
         scaleMax = span / 56.0f;
-        if (scaleMax > 3.0f) scaleMax = 3.0f;
+        // 3.0 everywhere, as before, except the 3.5" boards themselves: there
+        // the band is tall enough that LARGE stopped at 3.0 with sky to
+        // spare, and SMALL and MEDIUM -- 70% and 85% of a band he was already
+        // capped below -- came out the same size as each other.
+        const float roof = Theme::large() ? 4.0f : 3.0f;
+        if (scaleMax > roof) scaleMax = roof;
         if (scaleMax < minScale) scaleMax = minScale;
     }
 
     float scale = (float)charAvail / (float)baseH;
     if (scale < minScale) scale = minScale;
+    const bool atCeiling = scale > scaleMax;
     if (scale > scaleMax) scale = scaleMax;   // 3.0 everywhere; narrower on a wide panel with company
 
     int headTopY = topY + bubbleRowH + headroom;
+    // Laid out from the top, his feet land on the floor only when he fills
+    // the band. Held at the ceiling he does not, and he stood in the air:
+    // LARGE on a 320x240 board in portrait, where the band is tall enough
+    // to want more than 3.0. Stand him on the floor instead. The big panels
+    // re-anchor below anyway, and off the ceiling nothing moves.
+    if (atCeiling) headTopY = topY + availHeight - (int)(scale * (float)baseH);
 
     // The SIZE row in Settings, applied last, and only when it is not 100.
     //
@@ -7690,7 +8367,36 @@ void tick(TFT_eSPI& t, int cx, int topY, int availHeight, uint32_t now,
     // smaller than what they solved for, so their guarantees hold with
     // room to spare rather than needing to be recomputed. That is why the
     // setting only goes down.
-    if (sizePct < 100) {
+    // On the big panels the SIZE row is a share of the size he actually
+    // reaches -- the ceiling included -- and he always stands on the floor.
+    // Off the ceiling, this is exactly the old arithmetic (charAvail / baseH
+    // is the scale he reaches, and the floor anchor is where the top-down
+    // layout puts his feet anyway). On it, the old code shrank a band he was
+    // not filling, so the sizes ran into the same ceiling and came out equal,
+    // and LARGE, laid out from the top, hung with his feet in the air.
+    if (bigPanel) {
+        float s2 = scale * (float)sizePct / 100.0f;
+        // The boost (setSizeBoost), past everything above, held only by the
+        // panel's width -- half of it with company -- and the band's height.
+        float boost = s_sizeBoost;
+#ifndef ARDUINO
+        // Emulator only: SQUACHSIM_SQK=k multiplies it, for rendering a size
+        // slider's every step before one of them ships.
+        if (const char* kk = getenv("SQUACHSIM_SQK")) { const float k = (float)atof(kk); if (k > 0.0f) boost *= k; }
+#endif
+        if (boost != 1.0f) {
+            s2 *= boost;
+            const float wCap = ((float)t.width() * (s_company ? s_companyShare : 1.0f) - 8.0f) / 56.0f;
+            const float hCap = (float)(availHeight - headroom) / (float)baseH;
+            if (s2 > wCap) s2 = wCap;
+            if (s2 > hCap) s2 = hCap;
+        }
+        if (s2 < minScale) s2 = minScale;
+        int tall = (int)(s2 * (float)baseH);
+        if (tall < charAvailFloor) { tall = charAvailFloor; s2 = (float)tall / (float)baseH; }
+        scale    = s2;
+        headTopY = topY + availHeight - tall;
+    } else if (sizePct < 100) {
         int shrunk = (charAvail * (int)sizePct) / 100;
         if (shrunk < charAvailFloor) shrunk = charAvailFloor;
         float s2 = (float)shrunk / (float)baseH;
@@ -7704,6 +8410,30 @@ void tick(TFT_eSPI& t, int cx, int topY, int availHeight, uint32_t now,
         if (bigPanel && s2 > scaleMax) { s2 = scaleMax; shrunk = (int)(s2 * (float)baseH); }
         scale    = s2;
         headTopY = topY + availHeight - shrunk;
+    }
+
+    // The boost on the smaller panels, from wherever the branches above left
+    // him: the same multiplier and the same two limits, feet on the floor.
+    // The main screen sets it on the 320x240 boards (ui_clear.cpp); at 1 it
+    // does nothing at all.
+    if (!bigPanel) {
+        float boost = s_sizeBoost;
+#ifndef ARDUINO
+        if (const char* kk = getenv("SQUACHSIM_SQK")) { const float k = (float)atof(kk); if (k > 0.0f) boost *= k; }
+#endif
+        if (boost != 1.0f) {
+            // The limits stop him growing; they never shrink him. The 2.8"
+            // in portrait already draws a visiting pair wider than half the
+            // panel each, and a limit below that took him DOWN as k went up.
+            float s2 = scale * boost;
+            const float wCap = ((float)t.width() * (s_company ? s_companyShare : 1.0f) - 8.0f) / 56.0f;
+            const float hCap = (float)(availHeight - headroom) / (float)baseH;
+            const float cap  = fmaxf(fminf(wCap, hCap), fminf(scale, s2));
+            if (s2 > cap) s2 = cap;
+            if (s2 < minScale) s2 = minScale;
+            scale    = s2;
+            headTopY = topY + availHeight - (int)(s2 * (float)baseH);
+        }
     }
 
     // A little wander away from center during Mood::WALK. bodyCx (not
@@ -7732,6 +8462,13 @@ void tick(TFT_eSPI& t, int cx, int topY, int availHeight, uint32_t now,
         float roomR = (float)(t.width() - cx - halfW / 3);
         if (roomL < 0) roomL = 0;
         if (roomR < 0) roomR = 0;
+        // Chained to the ball, as the jailer or the pet: the chain is as
+        // long as it is, and a wander stops where it runs out.
+        if (chained()) {
+            const float reach = CHAIN_PX * scale;
+            if (roomL > reach) roomL = reach;
+            if (roomR > reach) roomR = reach;
+        }
         // WALK_CYCLES full sine cycles instead of one: 0 at the start,
         // out to one full edge, back through center, out to the other
         // full edge, then back to 0 -- repeated WALK_CYCLES times -- an
@@ -7740,6 +8477,9 @@ void tick(TFT_eSPI& t, int cx, int topY, int availHeight, uint32_t now,
         // idle.
         const float sweep = sinf(walkT * 6.2831853f * WALK_CYCLES) * (float)s_walkDir;
         bodyCx = cx + (int)(sweep * (sweep < 0.0f ? roomL : roomR));
+        // The first time a wander reaches the end of the chain, the ball
+        // notices (see the yank lines in pet_jail.inc).
+        if (chained() && !s_walkYanked && (sweep > 0.97f || sweep < -0.97f)) { s_walkYanked = true; s_yankAt = now ? now : 1; }
 
         // One beat per sweep, at the far end of it. cf is how far through
         // the current cycle he is; 0.25 and 0.75 are the two extremes,
@@ -7814,6 +8554,7 @@ void tick(TFT_eSPI& t, int cx, int topY, int availHeight, uint32_t now,
         // fixed 900ms period read as "impossibly fast" once the range
         // grew from a small corner dart to nearly the full screen.
         float jT = (float)(now % WALK_CYCLE_MS) / (float)WALK_CYCLE_MS * 6.2831853f;
+        if (chained() && (float)wanderRangePx > CHAIN_PX * scale) wanderRangePx = (int)(CHAIN_PX * scale);
         bodyCx = cx + (int)(sinf(jT) * wanderRangePx);
     }
 
@@ -7950,6 +8691,115 @@ void tick(TFT_eSPI& t, int cx, int topY, int availHeight, uint32_t now,
         if (bodyCx < halfW) bodyCx = halfW;
         if (bodyCx > t.width() - halfW) bodyCx = t.width() - halfW;
         s_dangle = true;
+    } else if (s_thPhase != Throw::NONE) {
+        // ---- thrown ----
+        const float floorY = (float)headTopY;
+        // He fills most of the height, so there is next to no air above
+        // him on screen: a throw upward is allowed out of the top, and he
+        // drops back in.
+        const float loYf   = (float)topY - 90.0f * scale;
+        const float halfWf = 24.0f * scale;
+        const float leftX  = halfWf, rightX = (float)t.width() - halfWf;
+        if (advance && s_thPhase == Throw::AIR) {
+            uint32_t dt = now - s_thLast;
+            if (dt > 60) dt = 60;
+            s_thLast = now;
+            // Small fixed steps, so a slow frame cannot carry him through
+            // the floor or a wall.
+            while (dt && s_thPhase == Throw::AIR) {
+                const float st = (float)(dt > 8 ? 8 : dt);
+                dt -= (dt > 8 ? 8 : dt);
+                s_thVY += TH_G * st;
+                s_thX  += s_thVX * st;
+                s_thY  += s_thVY * st;
+                if (s_thX < leftX && s_thVX < 0) {
+                    s_thX = leftX;
+                    if (-s_thVX > s_thHard) s_thHard = -s_thVX;
+                    s_thVX = -s_thVX * 0.55f;
+                } else if (s_thX > rightX && s_thVX > 0) {
+                    s_thX = rightX;
+                    if (s_thVX > s_thHard) s_thHard = s_thVX;
+                    s_thVX = -s_thVX * 0.55f;
+                }
+                if (s_thY < loYf && s_thVY < 0) { s_thY = loYf; s_thVY = -s_thVY * 0.4f; }
+                // Chained: about a third of the way up, and the ball has him.
+                // The pet's chain is as short as the jailer's.
+                if (chained() && s_thY < floorY - CHAIN_PX * scale && s_thVY < 0) {
+                    s_thY = floorY - CHAIN_PX * scale;
+                    s_thVY = 0.12f;
+                    s_thVX *= 0.3f;
+                    if (!s_thYanked) { s_thYanked = true; s_yankAt = now ? now : 1; }
+                }
+                if (s_thY >= floorY && s_thVY > 0) {
+                    s_thY = floorY;
+                    s_thSqAt = now;
+                    s_thSqK  = s_thVY > 0.9f ? 1.0f : s_thVY / 0.9f;
+                    if (s_thVY > s_thHard) s_thHard = s_thVY;
+                    if (s_thBounces == 0) Sound::play(Sound::Id::LAND);   // the first hit only
+                    if (s_thVY > 0.22f && s_thBounces < 4) {
+                        s_thVY = -s_thVY * 0.42f;
+                        s_thVX *= 0.7f;
+                        s_thBounces++;
+                    } else {
+                        s_thVY = 0;
+                        s_thPhase = Throw::SIT;
+                        s_thPhaseAt = now;
+                        const bool hard = s_thHard > 1.0f || s_thBounces >= 2;
+                        mood = Mood::IDLE;
+                        moodUntil = 0;
+                        static const char* const YANKED[3] = { "Worth it.", "Ow. Can't blame a guy.", "Okay. Okay. I'll sit." };
+                        if (s_thYanked) say(YANKED[random(0, 3)], MIN_BUBBLE_MS);
+                        else say(hard ? pick(DIZZY_LINES, 4) : pick(LAND_LINES, 3), MIN_BUBBLE_MS);
+                        s_thYanked = false;
+                    }
+                }
+            }
+            // Something went wrong if he is still up there after five
+            // seconds; put him down.
+            if (s_thPhase == Throw::AIR && now - s_thAt > 5000) {
+                s_thY = floorY; s_thPhase = Throw::SIT; s_thPhaseAt = now;
+            }
+        }
+        const bool hard = s_thHard > 1.0f || s_thBounces >= 2;
+        const uint32_t sitMs = hard ? TH_DAZE_MS : TH_SIT_MS;
+        if (advance && s_thPhase == Throw::SIT && now - s_thPhaseAt >= sitMs) {
+            s_thPhase = Throw::WALK;
+            s_thPhaseAt = now;
+        }
+        if (s_thPhase == Throw::AIR) {
+            bodyCx = (int)lroundf(s_thX);
+            hy     = (int)lroundf(s_thY);
+            s_dangle = true;
+        } else {
+            float x = s_thX;
+            if (s_thPhase == Throw::SIT && hard) {
+                // Dazed: a wobble that dies away.
+                const float k = 1.0f - (float)(now - s_thPhaseAt) / (float)sitMs;
+                x += sinf((float)(now - s_thPhaseAt) / 45.0f) * 3.0f * scale * (k > 0 ? k : 0);
+            } else if (s_thPhase == Throw::WALK) {
+                const float dist = fabsf((float)cx - s_thX);
+                uint32_t walkMs = (uint32_t)(dist / 0.09f);
+                if (walkMs < 400) walkMs = 400;
+                const uint32_t we = now - s_thPhaseAt;
+                if (we >= walkMs) {
+                    x = (float)cx;
+                    if (advance) s_thPhase = Throw::NONE;
+                } else {
+                    float k = (float)we / (float)walkMs;
+                    k = k * k * (3.0f - 2.0f * k);
+                    x = s_thX + ((float)cx - s_thX) * k;
+                    s_headDrop += (int)(fabsf(sinf((float)we / 110.0f)) * 2.0f * scale);
+                }
+            }
+            bodyCx += (int)lroundf(x) - cx;
+            s_dangle = false;
+        }
+        // The squash off each floor bounce, on the landing's channels.
+        if (s_thSqAt && now - s_thSqAt < LAND_MS) {
+            const float k = (1.0f - (float)(now - s_thSqAt) / (float)LAND_MS) * s_thSqK;
+            s_headDrop  += (int)(7.0f * scale * k);
+            s_shadowAdj += (int)(5.0f * scale * k);
+        }
     } else if (s_dropStart != 0) {
         const uint32_t de = now - s_dropStart;
         const int restY = headTopY + (int)bob;
@@ -8072,6 +8922,7 @@ void tick(TFT_eSPI& t, int cx, int topY, int availHeight, uint32_t now,
         if (drew) { ownX = (int16_t)lastBubbleX; ownY = (int16_t)lastBubbleY;
                     ownW = (int16_t)lastBubbleW; ownH = (int16_t)lastBubbleH; }
         else      { ownW = 0; ownH = 0; }
+        s_ownBX = ownX; s_ownBY = ownY; s_ownBW = ownW; s_ownBH = ownH;
     }
     // Gated: hadBubble tracks "did we draw a bubble last FRAME" for the
     // erase above. drawBubble()/drawOnboardBubble() compute identical

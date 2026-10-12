@@ -11,3 +11,17 @@ env.Replace(AR='xtensa-esp32-elf-gcc-ar', RANLIB='xtensa-esp32-elf-gcc-ranlib')
 # This firmware is an HTTPS client, never a TLS server. Rejecting the unused
 # role removes server handshake code retained by the pinned generic dispatcher.
 env.Append(LINKFLAGS=['-Wl,--wrap=mbedtls_ssl_handshake_server_step'])
+
+# The pinned SDK asks sscanf only to decode the coexistence version's three
+# integers. Use the equivalent integer-only newlib entry point for that object.
+# No global scanf replacement, SDK mutation or feature removal is involved.
+from pathlib import Path
+import sys
+sys.path.insert(0, env.subst('$PROJECT_DIR') + '/tools')
+from runtime_coex import adapt
+framework = Path(env.PioPlatform().get_package_dir('framework-arduinoespressif32'))
+toolchain = Path(env.PioPlatform().get_package_dir('toolchain-xtensa-esp32')) / 'bin'
+local_sdk = Path(env.subst('$BUILD_DIR')) / 'dnsp-sdk'
+adapt(framework / 'tools/sdk/esp32/lib/libbt.a', local_sdk,
+      toolchain / 'xtensa-esp32-elf-ar', toolchain / 'xtensa-esp32-elf-objcopy')
+env.Prepend(LIBPATH=[str(local_sdk)])

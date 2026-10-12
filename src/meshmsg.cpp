@@ -474,6 +474,41 @@ Open openRead(const Crypto& c, const uint8_t mac[6], const uint8_t* in, size_t l
     return r;
 }
 
+size_t sealHeadsUp(const Crypto& c, const uint8_t mac[6], uint32_t counter,
+                   uint8_t type, int8_t rssi, const uint8_t tail[3], uint8_t* out, size_t cap) {
+    const uint8_t pt[5] = { type, (uint8_t)rssi, tail[0], tail[1], tail[2] };
+    return sealBytes(c, mac, counter, KIND_HEADSUP, pt, sizeof pt, out, cap);
+}
+
+Open openHeadsUp(const Crypto& c, const uint8_t mac[6], const uint8_t* in, size_t len,
+                 uint32_t& counter, uint8_t& type, int8_t& rssi, uint8_t tail[3]) {
+    uint8_t pt[5] = { 0, 0, 0, 0, 0 };
+    const Open r = openBytes(c, mac, in, len, KIND_HEADSUP, sizeof pt, counter, pt);
+    type = pt[0]; rssi = (int8_t)pt[1];
+    tail[0] = pt[2]; tail[1] = pt[3]; tail[2] = pt[4];
+    return r;
+}
+
+size_t sealFix(const Crypto& c, const uint8_t mac[6], uint32_t counter,
+               int32_t lat7, int32_t lon7, uint8_t accM, uint8_t* out, size_t cap) {
+    const uint32_t la = (uint32_t)lat7, lo = (uint32_t)lon7;
+    const uint8_t pt[9] = { (uint8_t)la, (uint8_t)(la >> 8), (uint8_t)(la >> 16), (uint8_t)(la >> 24),
+                            (uint8_t)lo, (uint8_t)(lo >> 8), (uint8_t)(lo >> 16), (uint8_t)(lo >> 24), accM };
+    return sealBytes(c, mac, counter, KIND_FIX, pt, sizeof pt, out, cap);
+}
+
+Open openFix(const Crypto& c, const uint8_t mac[6], const uint8_t* in, size_t len,
+             uint32_t& counter, int32_t& lat7, int32_t& lon7, uint8_t& accM) {
+    uint8_t pt[9] = { 0 };
+    const Open r = openBytes(c, mac, in, len, KIND_FIX, sizeof pt, counter, pt);
+    lat7 = (int32_t)((uint32_t)pt[0] | ((uint32_t)pt[1] << 8) | ((uint32_t)pt[2] << 16) | ((uint32_t)pt[3] << 24));
+    lon7 = (int32_t)((uint32_t)pt[4] | ((uint32_t)pt[5] << 8) | ((uint32_t)pt[6] << 16) | ((uint32_t)pt[7] << 24));
+    accM = pt[8];
+    // A position off the planet is not one, whatever the tag says.
+    if (r == Open::OK && (lat7 < -900000000 || lat7 > 900000000 || lon7 < -1800000000 || lon7 > 1800000000)) return Open::BAD_FORMAT;
+    return r;
+}
+
 Open openHello(const Crypto& c, const uint8_t mac[6], const uint8_t* in, size_t len, uint32_t& counter, uint8_t ver[3]) {
     uint32_t epoch = 0; uint8_t zone = 0;
     return openHello(c, mac, in, len, counter, ver, epoch, zone);

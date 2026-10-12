@@ -9,7 +9,7 @@
 #include <string.h>
 
 namespace {
-const int BTN_H = 28;
+int btnH() { return Theme::dialogBtnH(28); }
 const int SLOP  = 6;
 
 char     s_from[13] = "";
@@ -20,11 +20,11 @@ struct Btns { int y, w, nowX, skipX; };
 
 Btns btns(TFT_eSPI& t) {
     Btns b;
-    b.w = 110;
+    b.w = Theme::large() ? 140 : 110;
     const int gap = 14;
     b.nowX  = (t.width() - (b.w * 2 + gap)) / 2;
     b.skipX = b.nowX + b.w + gap;
-    b.y     = t.height() - BTN_H - 8;
+    b.y     = t.height() - btnH() - 8;
     return b;
 }
 
@@ -57,12 +57,12 @@ void uiNudgeTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
     t.fillRect(0, 0, w, h, Theme::BG);
     Theme::drawListHeading(t, "SQUAD UPDATE", Theme::VAPOR_PINK);
 
-    t.setTextSize(1);
-    int y = Theme::LIST_TOP + Theme::LIST_HEADING_H + 10;
+    Theme::bodyFontOn(t);
+    int y = Theme::LIST_TOP + Theme::listHeadingH() + 10;
     char line[48];
     snprintf(line, sizeof line, "%s asked the squad to update", s_from);
     centred(t, y, Theme::WHITE, line);
-    y += 12;
+    y += Theme::bodyY(12);
     snprintf(line, sizeof line, "to %s. This board runs %s.", s_ver, OtaCore::runningVersion());
     centred(t, y, Theme::WHITE, line);
     y += 12;
@@ -73,20 +73,20 @@ void uiNudgeTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {
     // The count, big, in the middle of what is left.
     const Btns b = btns(t);
     const int left = uiNudgeSecondsLeft(now);
-    t.setTextSize(2);
+    t.setTextFont(1); t.setTextSize(Theme::upSize(2));
     snprintf(line, sizeof line, left > 0 ? "UPDATING IN %d" : "UPDATING...", left);
-    const int cy = y + 12 + (b.y - (y + 12) - t.fontHeight()) / 2;
+    const int cy = y + Theme::bodyY(12) + (b.y - (y + Theme::bodyY(12)) - t.fontHeight()) / 2;
     centred(t, cy, Theme::CYAN, line);
     t.setTextSize(1);
 
-    Theme::drawWin95Button(t, b.nowX,  b.y, b.w, BTN_H, "NOW",  false);
-    Theme::drawWin95Button(t, b.skipX, b.y, b.w, BTN_H, "SKIP", false);
+    Theme::drawWin95Button(t, b.nowX,  b.y, b.w, btnH(), "NOW",  false);
+    Theme::drawWin95Button(t, b.skipX, b.y, b.w, btnH(), "SKIP", false);
 }
 
 NudgeHit uiNudgeHit(TFT_eSPI& t, int x, int y) {
     const Btns b = btns(t);
-    if (in(x, y, b.nowX,  b.y, b.w, BTN_H)) return NudgeHit::NOW;
-    if (in(x, y, b.skipX, b.y, b.w, BTN_H)) return NudgeHit::SKIP;
+    if (in(x, y, b.nowX,  b.y, b.w, btnH())) return NudgeHit::NOW;
+    if (in(x, y, b.skipX, b.y, b.w, btnH())) return NudgeHit::SKIP;
     return NudgeHit::NONE;
 }
 #endif // SQUACH_MESH
