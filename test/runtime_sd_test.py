@@ -58,6 +58,44 @@ int main(){
    src=Path(directory)/'reset.cpp';exe=Path(directory)/'reset';src.write_text(harness)
    subprocess.run([compiler,'-std=c++11',str(src),'-o',str(exe)],check=True,capture_output=True)
    subprocess.run([str(exe)],check=True,capture_output=True)
+ def test_sector_write_responses(self):
+  driver=sdk_driver()
+  if driver is None:self.skipTest('pinned SDK checked in firmware job')
+  compiler=shutil.which('c++')
+  if not compiler:self.skipTest('C++ compiler unavailable')
+  updated=patch(driver.read_text());start=updated.index('bool sdWriteSector(');end=updated.index('bool sdWriteSectors(',start)
+  function=updated[start:end]
+  harness=r"""#include <cstdint>
+#include <cassert>
+struct SerialMock {template<class... A> void printf(const char*,A...) {}} Serial;
+struct Card {int type;};static Card card{3};static Card* s_cards[]={&card};
+#define CARD_SDHC 3
+#define WRITE_BLOCK_SINGLE 24
+#define SEND_STATUS 13
+static int token, attempts, rejectFirst;static bool ready;static unsigned status;
+bool sdSelectCard(uint8_t){return true;}
+void sdDeselectCard(uint8_t){}
+char sdWriteBytes(uint8_t,const char*,char){++attempts;return attempts==1&&rejectFirst?0x0a:token;}
+bool sdWait(uint8_t,unsigned){return ready;}
+char sdCommand(uint8_t,char,unsigned int,unsigned int*){return 0;}
+char sdTransaction(uint8_t,char,unsigned int,unsigned int* p){*p=status;return 0;}
+"""+function+r"""
+int main(){char data[512]{};
+ for(int response: {0,1,5,10,12,31}){
+  token=response;attempts=0;rejectFirst=0;ready=true;status=0;
+  assert(sdWriteSector(0,data,123)==(response==5));
+  assert(attempts==(response==10?3:1));
+ }
+ token=5;attempts=0;ready=false;assert(!sdWriteSector(0,data,123));
+ ready=true;status=1;assert(!sdWriteSector(0,data,123));
+ status=0;rejectFirst=1;attempts=0;assert(sdWriteSector(0,data,123)&&attempts==2);
+}
+"""
+  harness='#include <initializer_list>\n'+harness
+  with tempfile.TemporaryDirectory() as d:
+   p=Path(d);(p/'write.cpp').write_text(harness)
+   subprocess.run([compiler,'-std=c++11',str(p/'write.cpp'),'-o',str(p/'write')],check=True,capture_output=True)
+   subprocess.run([str(p/'write')],check=True,capture_output=True)
  def test_pinned_driver(self):
   source=sdk_driver()
   if source is None:self.skipTest('pinned SDK checked in firmware job')

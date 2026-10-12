@@ -387,24 +387,44 @@ bool SdLog::recoveryRemount() {
 }
 
 bool SdLog::recoveryTest() {
-    if (!_ready && !recoveryRemount()) return false;
+    Serial.println("[sd-test] starting temporary-file write/read/cleanup");
+    if (!_ready && !recoveryRemount()) {
+        Serial.printf("[sd-test] %s\n",_recovery); return false;
+    }
     const char* path = "/.dnsp-card-test.tmp";
     static const char sample[] = "DNSP microSD read/write test v1\n";
+    const size_t expected = sizeof(sample)-1;
     if(SD.exists(path) && !SD.remove(path)) {
-        snprintf(_recovery,sizeof _recovery,"Test FAILED: cannot remove previous temporary file."); return false;
+        snprintf(_recovery,sizeof _recovery,"Test FAILED: cannot remove previous temporary file.");
+        Serial.printf("[sd-test] %s\n",_recovery); return false;
     }
     File f = SD.open(path, FILE_WRITE);
-    if (!f) { snprintf(_recovery,sizeof _recovery,"Test FAILED: cannot create temporary file. Check card write access."); return false; }
-    const bool wrote = f.write((const uint8_t*)sample, sizeof(sample)-1) == sizeof(sample)-1;
+    if (!f) {
+        snprintf(_recovery,sizeof _recovery,"Test FAILED: cannot create temporary file. Check card write access.");
+        Serial.printf("[sd-test] %s\n",_recovery); return false;
+    }
+    const size_t accepted = f.write((const uint8_t*)sample, expected);
+    // File::flush() has no error result. Only a matching read-back verifies
+    // persistence; an accepted buffered fwrite count does not prove it.
     f.flush(); f.close();
     char back[sizeof sample] = {};
     f = SD.open(path, FILE_READ);
-    const bool read = f && f.size() == sizeof(sample)-1 && f.read((uint8_t*)back,sizeof(sample)-1) == sizeof(sample)-1;
+    const bool opened = bool(f) && !f.isDirectory();
+    const size_t stored = opened ? f.size() : 0;
+    const int received = opened ? f.read((uint8_t*)back,expected) : -1;
     f.close();
-    const bool same = wrote && read && memcmp(back,sample,sizeof(sample)-1)==0;
-    const bool removed = SD.remove(path);
+    const bool wrote = accepted == expected;
+    const bool same = wrote && opened && stored == expected && received == int(expected) && memcmp(back,sample,expected)==0;
+    const bool removed = SD.exists(path) && SD.remove(path);
     if (same && removed) snprintf(_recovery,sizeof _recovery,"Read/write test passed; temporary file removed.");
-    else snprintf(_recovery,sizeof _recovery,"Test FAILED: write %s, read-back %s, cleanup %s.",wrote?"ok":"failed",same?"ok":"failed",removed?"ok":"failed");
+    else if(!wrote) snprintf(_recovery,sizeof _recovery,"Test FAILED: write failed (%u/%u bytes); cleanup %s.",unsigned(accepted),unsigned(expected),removed?"ok":"failed");
+    else if(!opened) snprintf(_recovery,sizeof _recovery,"Test FAILED: read-back open failed; cleanup %s.",removed?"ok":"failed");
+    else if(stored != expected) snprintf(_recovery,sizeof _recovery,"Test FAILED: read-back size %u/%u bytes; cleanup %s.",unsigned(stored),unsigned(expected),removed?"ok":"failed");
+    else if(received != int(expected)) snprintf(_recovery,sizeof _recovery,"Test FAILED: read-back returned %d/%u bytes; cleanup %s.",received,unsigned(expected),removed?"ok":"failed");
+    else if(!same) snprintf(_recovery,sizeof _recovery,"Test FAILED: read-back content mismatch; cleanup %s.",removed?"ok":"failed");
+    else snprintf(_recovery,sizeof _recovery,"Test FAILED: verified read-back, but cleanup failed.");
+    Serial.printf("[sd-test] accepted=%u expected=%u reopened=%u size=%u read=%d match=%u cleanup=%u\n",unsigned(accepted),unsigned(expected),opened?1u:0u,unsigned(stored),received,same?1u:0u,removed?1u:0u);
+    Serial.printf("[sd-test] %s\n",_recovery);
     return same && removed;
 }
 

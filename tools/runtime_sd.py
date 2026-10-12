@@ -107,4 +107,50 @@ extern "C" bool dnsp_sd_cached_space(uint64_t* total, uint64_t* used) {
 }''',1)
     source=source.replace('uint8_t sdcard_unmount(uint8_t pdrv)\n{','uint8_t sdcard_unmount(uint8_t pdrv)\n{\n    if(pdrv<FF_VOLUMES) dnsp_volumes[pdrv]=nullptr;',1)
     source=source.replace('    card->sectors = sdGetSectorsCount(pdrv);\n    return true;', '    card->sectors = sdGetSectorsCount(pdrv);\n    dnsp_volumes[pdrv]=fs;\n    return true;',1)
+    # A sector write succeeds only after an accepted data response and busy
+    # completion. The SDK otherwise accepts unexpected response tokens.
+    old_write="""            char token = sdWriteBytes(pdrv, buffer, 0xFE);
+            sdDeselectCard(pdrv);
+
+            if (token == 0x0A) {
+                continue;
+            } else if (token == 0x0C) {
+                return false;
+            }
+
+            unsigned int resp;"""
+    new_write="""            char token = sdWriteBytes(pdrv, buffer, 0xFE);
+            const bool programmed = token == 0x05 && sdWait(pdrv, 500);
+            sdDeselectCard(pdrv);
+            if (token == 0x0A) continue; // CRC rejection: bounded SDK retry.
+            if (token != 0x05 || !programmed) {
+                Serial.printf("[sd-write] sector=%lu response=%02x ready=%u\\n",(unsigned long)sector,unsigned(uint8_t(token)),programmed?1u:0u);
+                return false;
+            }
+
+            unsigned int resp = 0;"""
+    assert source.count(old_write)==1
+    source=source.replace(old_write,new_write,1)
+    old_status="""        if (cmd == SEND_STATUS && resp) {
+            *resp = card->spi->transfer(0xFF);
+        } else if"""
+    new_status="""        if (cmd == SEND_STATUS) {
+            // R2 has a second byte even when the caller only requests R1.
+            uint8_t r2 = card->spi->transfer(0xFF);
+            if (resp) *resp = r2;
+        } else if"""
+    assert source.count(old_status)==1
+    source=source.replace(old_status,new_status,1)
+    old_multi="""                sdStop(pdrv);
+                sdDeselectCard(pdrv);
+
+                unsigned int resp;"""
+    new_multi="""                sdStop(pdrv);
+                bool finished = sdWait(pdrv, 500);
+                sdDeselectCard(pdrv);
+                if (!finished) return false;
+
+                unsigned int resp = 0;"""
+    assert source.count(old_multi)==1
+    source=source.replace(old_multi,new_multi,1)
     return source

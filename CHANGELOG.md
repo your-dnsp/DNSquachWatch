@@ -1,5 +1,12 @@
 # DNSquachWatch changelog
 
+## v1.8.3
+
+- Require accepted SD write responses and programming completion; consume complete card-status responses.
+- Report precise Test Card read-back results on screen and serial.
+- DNSP confirmed Test Card, backup, Safe Shutdown and reset/remount on the tested device/card; touch appeared normal.
+
+
 ## v1.8.2
 
 - Separate display and microSD SPI controllers; retain resistive-touch sampling through software SPI on existing pins.
