@@ -2,6 +2,13 @@ from pathlib import Path
 import runpy, unittest, subprocess, tempfile, shutil
 root=Path(__file__).resolve().parents[1]
 patch=runpy.run_path(str(root/'tools/runtime_sd.py'))['patch']
+def sdk_driver():
+ import os
+ for base in [root.parent/'platformio',Path(os.environ.get('PLATFORMIO_CORE_DIR',str(Path.home()/'.platformio')))]:
+  candidate=base/'packages/framework-arduinoespressif32/libraries/SD/src/sd_diskio.cpp'
+  if candidate.exists():return candidate
+ return None
+
 class Adapter(unittest.TestCase):
  def test_card_deselected_before_display(self):
   source=(root/'src/main.cpp').read_text();setup=source[source.index('void setup() {'):]
@@ -12,7 +19,8 @@ class Adapter(unittest.TestCase):
  def test_reset_recovery_exchange(self):
   compiler=shutil.which('c++')
   if not compiler:self.skipTest('C++ compiler unavailable')
-  driver=root.parent/'platformio/packages/framework-arduinoespressif32/libraries/SD/src/sd_diskio.cpp'
+  driver=sdk_driver()
+  if driver is None:self.skipTest('pinned SDK checked in firmware job')
   updated=patch(driver.read_text())
   begin=updated.index('    AcquireSPI card_locked(card, 100000);')
   end=updated.index('    if (!idle) goto unknown_card;',begin)
@@ -51,8 +59,8 @@ int main(){
    subprocess.run([compiler,'-std=c++11',str(src),'-o',str(exe)],check=True,capture_output=True)
    subprocess.run([str(exe)],check=True,capture_output=True)
  def test_pinned_driver(self):
-  source=root.parent/'platformio/packages/framework-arduinoespressif32/libraries/SD/src/sd_diskio.cpp'
-  if not source.exists():self.skipTest('pinned SDK not installed')
+  source=sdk_driver()
+  if source is None:self.skipTest('pinned SDK checked in firmware job')
   original=source.read_text();updated=patch(original)
   self.assertEqual(updated.count('WRITE_PERI_REG(SPI_USER_REG(2), SPI_USR_MOSI | SPI_USR_MISO | SPI_DOUTDIN);'),2)
   self.assertIn('AcquireSPI card_locked(card, 100000)',updated)

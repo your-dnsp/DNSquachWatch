@@ -29,6 +29,8 @@ jobs:
           persist-credentials: false
       - run: python3 -m pip install platformio==6.1.18
       - run: pio run -e cyd-fast
+      - run: python3 test/runtime_touch_test.py
+      - run: python3 test/runtime_sd_test.py
   release:
     needs: [native, firmware]
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
