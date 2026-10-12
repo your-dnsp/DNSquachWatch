@@ -91,10 +91,11 @@ int main(){char data[512]{};
  status=0;rejectFirst=1;attempts=0;assert(sdWriteSector(0,data,123)&&attempts==2);
 }
 """
-  harness='#include <initializer_list>\n'+harness
+  harness='#include <initializer_list>\n#include <cstddef>\n'+harness
   with tempfile.TemporaryDirectory() as d:
    p=Path(d);(p/'write.cpp').write_text(harness)
-   subprocess.run([compiler,'-std=c++11',str(p/'write.cpp'),'-o',str(p/'write')],check=True,capture_output=True)
+   compiled=subprocess.run([compiler,'-std=c++11',str(p/'write.cpp'),'-o',str(p/'write')],capture_output=True,text=True)
+   self.assertEqual(compiled.returncode,0,compiled.stderr)
    subprocess.run([str(p/'write')],check=True,capture_output=True)
  def test_pinned_driver(self):
   source=sdk_driver()
