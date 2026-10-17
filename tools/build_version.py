@@ -113,3 +113,8 @@ env.Append(LINKFLAGS=['-fuse-linker-plugin'])
 # Native symbol tables let the pinned platform's per-library archivers index
 # LTO objects; the final plugin-aware linker still performs optimization.
 env.Append(CCFLAGS=['-ffat-lto-objects'])
+
+# Xtensa branch-target padding favors speed over flash. CYD uses long calls
+# and supports these instruction alignments; omit optional target NOP padding
+# in the constrained image, retaining all features and partition sizes.
+env.Append(CCFLAGS=['-mno-target-align'], LINKFLAGS=['-mno-target-align'])

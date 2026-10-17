@@ -179,7 +179,7 @@ static ReactPose reactPoseFor(DetectionType t) {
 static ReactPose curReactPose();       // below, once s_reactType is declared
 
 // ---- Line banks (string literals live in flash, not RAM) ----
-static const char* IDLE_LINES[] = {
+static const char* const IDLE_LINES[] = {
     "Stay squachy out there.",
     "Been in these walls for years.",
     "Don't be a skid. Learn the craft.",
@@ -200,7 +200,7 @@ static const char* IDLE_LINES[] = {
     "Nobody suspects the Sasquach.",
 };
 
-static const char* ENCOURAGE_LINES[] = {
+static const char* const ENCOURAGE_LINES[] = {
     "Nothing detected? Boring. Go walk.",
     "Take me outside, I get restless.",
     "Every parking lot's got a story.",
@@ -211,7 +211,7 @@ static const char* ENCOURAGE_LINES[] = {
     "Field work builds character.",
 };
 
-static const char* BORED_LINES[] = {
+static const char* const BORED_LINES[] = {
     "...anybody there?",
     "I could use a walk. Just saying.",
     "Standing by. Very patiently.",
@@ -221,7 +221,7 @@ static const char* BORED_LINES[] = {
 // Biased in for a while after real detection activity, instead of the
 // usual idle pool — see s_activityHeat. Makes idle chatter read as
 // connected to what the device is actually doing.
-static const char* ALERT_MOOD_LINES[] = {
+static const char* const ALERT_MOOD_LINES[] = {
     "Staying sharp. Lot going on today.",
     "Busy shift. Not complaining though.",
     "Eyes open. Things keep showing up.",
@@ -229,7 +229,7 @@ static const char* ALERT_MOOD_LINES[] = {
 };
 
 // The opposite bias — a long stretch of nothing at all.
-static const char* RELAXED_MOOD_LINES[] = {
+static const char* const RELAXED_MOOD_LINES[] = {
     "Quiet enough to nap standing up.",
     "Nothing but vibes today.",
     "Slow day. I'll take it.",
@@ -237,7 +237,7 @@ static const char* RELAXED_MOOD_LINES[] = {
 };
 
 // A little wander — see the Mood::WALK handling in tick()/drawBody().
-static const char* WALK_LINES[] = {
+static const char* const WALK_LINES[] = {
     "Just stretching my legs.",
     "Patrol time.",
     "Gotta walk the perimeter.",
@@ -255,7 +255,7 @@ static const char* const DANCE_LINES[] = {
 // off a log entry's own hit count, not the lifetime total: a MAC
 // that's matched a handful of times is a real pattern, not a
 // coincidence, so it gets called out distinctly from a fresh sighting.
-static const char* SEEN_BEFORE_LINES[] = {
+static const char* const SEEN_BEFORE_LINES[] = {
     "Seen this one before.",
     "We meet again.",
     "This one's a regular.",
@@ -317,14 +317,14 @@ static const char* const IGNORED_LINES[] = {
     "Still here. Still unpoked. Just saying.",
 };
 
-static const char* PERSISTENT_LINES[] = {
+static const char* const PERSISTENT_LINES[] = {
     "This one keeps coming back. Worth noting.",
     "Not a one-time thing anymore. Keep an eye on it.",
     "Same one, again. That's a pattern, not a coincidence.",
     "This one's really sticking around.",
 };
 
-static const char* BOOT_LINES[] = {
+static const char* const BOOT_LINES[] = {
     "SquachWatch online. Let's find something.",
     "Booted. Don't just stare at your phone.",
 };
@@ -351,12 +351,12 @@ static const char* const ONBOARD_LINES[] = {
 static const uint8_t  ONBOARD_N        = sizeof(ONBOARD_LINES) / sizeof(ONBOARD_LINES[0]);
 static const uint32_t ONBOARD_STEP_MS  = 11000; // auto-advances if nobody taps
 
-static const char* LOG_OPEN_LINES[] = {
+static const char* const LOG_OPEN_LINES[] = {
     "Snooping the log? Bold. Respect.",
     "This is where the receipts live.",
 };
 
-static const char* LOG_CLEAR_LINES[] = {
+static const char* const LOG_CLEAR_LINES[] = {
     "Log wiped. Fresh start, cryptid style.",
 };
 // Counted rather than hard-coded at the call site. pick() indexes with
@@ -364,7 +364,7 @@ static const char* LOG_CLEAR_LINES[] = {
 // off the end -- which removing a line from this pool would have done.
 static const uint8_t LOG_CLEAR_N = sizeof(LOG_CLEAR_LINES) / sizeof(LOG_CLEAR_LINES[0]);
 
-static const char* ROTATE_LINES[] = {
+static const char* const ROTATE_LINES[] = {
     "Whoa, easy on the spins.",
     "Now THAT'S a plot twist.",
     "I get dizzy but I never complain.",
@@ -372,7 +372,7 @@ static const char* ROTATE_LINES[] = {
 
 // Tap-to-pet reactions — a minority get the milestone treatment below
 // instead (see PET_MILESTONES).
-static const char* PET_LINES[] = {
+static const char* const PET_LINES[] = {
     "Ooh, right there.",
     "Personal space? Never heard of it.",
     "Petting a cryptid. Bold move.",
@@ -397,7 +397,7 @@ static const char* PET_LINES[] = {
 
 // A stationary press-and-hold reads as more deliberate than a quick
 // tap -- a beat longer, a bit more sincere, still self-aware about it.
-static const char* HELD_LINES[] = {
+static const char* const HELD_LINES[] = {
     "Okay, that's actually nice.",
     "Don't stop. I mean it.",
     "This is a whole moment right now.",
@@ -409,7 +409,7 @@ static const char* HELD_LINES[] = {
 // An actual dragging/stroking touch is the most affectionate of the
 // three gestures -- leans further into "genuinely enjoying this" than
 // PET_LINES or HELD_LINES do.
-static const char* PETTING_LINES[] = {
+static const char* const PETTING_LINES[] = {
     "Okay yeah. This is the good stuff.",
     "I'm not saying I purr. I'm not saying I don't.",
     "This is exactly what I needed today.",
@@ -428,7 +428,7 @@ static const char* PETTING_LINES[] = {
 //
 // Deliberately more lines than the other pools. A reassurance you see twice
 // a minute for hours has to not wear out, and four would.
-static const char* WATCHING_LINES[] = {
+static const char* const WATCHING_LINES[] = {
     "Still watching. Nothing's snuck past.",
     "Eyes open. You're covered.",
     "Sweeping the airwaves. All quiet so far.",
@@ -442,7 +442,7 @@ static const char* WATCHING_LINES[] = {
 };
 static const uint8_t WATCHING_N = sizeof(WATCHING_LINES) / sizeof(WATCHING_LINES[0]);
 
-static const char* SLEEPY_LINES[] = {
+static const char* const SLEEPY_LINES[] = {
     "*yawn* ...still here.",
     "Cryptid power-nap. Don't tell anyone.",
     "Resting my eyes. Not my watch.",
@@ -451,7 +451,7 @@ static const char* SLEEPY_LINES[] = {
 
 // A few over-the-top lines for the rare full "party mode" flourish
 // (see s_legendary below) — bigger occasion than the plain shimmer.
-static const char* PARTY_LINES[] = {
+static const char* const PARTY_LINES[] = {
     "PARTY MODE. You're welcome.",
     "Whoa. Did you just see that?",
     "This is a disco now. No refunds.",
@@ -671,6 +671,8 @@ static const char* s_clippyIntro     = nullptr;
 static bool     s_toasterUnlocked    = false;  // earned by tapping the same flying toaster three times
 static bool     s_ballUnlocked    = false;      // the ball and chain, earned by serving a sentence
 static const char* s_toasterIntro    = nullptr;
+static bool     s_meatyUnlocked    = false;  // earned by knocking three times on the SNOWFALL igloo
+static const char* s_meatyIntro    = nullptr;
 // Whether the card has been shown for him. Kept separately from the unlock
 // itself, and for the same reason the outfits keep an "announced" bitmask:
 // the pet survives a reboot, so without this the celebration would play
@@ -1398,7 +1400,7 @@ static_assert(sizeof(BG_LINES) / sizeof(BG_LINES[0]) == Settings::BACKGROUND_COU
 // brings one up it is a nudge, the second is clearer, and from then on he just
 // tells you what to do. Counted in RAM, so a reboot starts the nudges over,
 // which is right for somebody who has not been paying attention.
-enum Egg : uint8_t { EGG_WOLF, EGG_CHROME, EGG_PET, EGG_EYE, EGG_PARKA, EGG_YZZERD, EGG_O9K, EGG_REEK, EGG_GLYPH, EGG_TOASTY, EGG_N };
+enum Egg : uint8_t { EGG_WOLF, EGG_CHROME, EGG_PET, EGG_EYE, EGG_PARKA, EGG_YZZERD, EGG_O9K, EGG_REEK, EGG_GLYPH, EGG_TOASTY, EGG_IGLOO, EGG_N };
 static const char* const HINTS[EGG_N][3] = {
     /* FIRE: five taps on the moon */
     { "That moon's got a werewolf look to it.",
@@ -1440,6 +1442,10 @@ static const char* const HINTS[EGG_N][3] = {
     { "One of those toasters looks lonely.",
       "Keep tapping the same toaster. It wants down.",
       "Tap one toaster three times, quick!" },
+    /* SNOWFALL: three knocks on the igloo */
+    { "Somebody lives in that igloo.",
+      "Two eyes in that igloo door. Saw 'em.",
+      "Knock on the igloo three times!" },
 };
 static uint8_t s_hintSaid[EGG_N] = {};
 
@@ -1458,6 +1464,7 @@ static bool eggLocked(uint8_t e) {
         case EGG_REEK:   return !outfitUnlocked((uint8_t)OutfitId::SHAMBLER);
         case EGG_GLYPH:  return !outfitUnlocked((uint8_t)OutfitId::TH3_0N3);
         case EGG_TOASTY: return !s_toasterUnlocked;
+        case EGG_IGLOO:  return !s_meatyUnlocked;
         default:         return false;
     }
 }
@@ -1470,7 +1477,7 @@ static uint8_t eggsHere(uint8_t out[3]) {
         case Settings::Background::FIRE:      add(EGG_WOLF); add(EGG_REEK); break;
         case Settings::Background::TOASTERS:  add(EGG_CHROME); add(EGG_PET); add(EGG_TOASTY); break;
         case Settings::Background::STARFIELD: add(EGG_EYE); break;
-        case Settings::Background::SNOWFALL:  add(EGG_PARKA); break;
+        case Settings::Background::SNOWFALL:  add(EGG_PARKA); add(EGG_IGLOO); break;
         case Settings::Background::TERMINAL:  add(EGG_YZZERD); break;
         case Settings::Background::DIGITAL:   add(EGG_GLYPH); break;
         default: break;
@@ -1526,6 +1533,7 @@ static void ensurePrefsLoaded() {
     s_clippyUnlocked     = s_petPrefs.getBool("clippy", false);
     s_toasterUnlocked    = s_petPrefs.getBool("toaster", false);
     s_ballUnlocked       = s_petPrefs.getBool("ball", false);
+    s_meatyUnlocked    = s_petPrefs.getBool("meaty", false);
     // The master unlock means every pet too, including ones that did not
     // exist when it was entered: a board that has it catches up at boot.
     if (s_allOutfitsUnlocked) {
@@ -1533,6 +1541,7 @@ static void ensurePrefsLoaded() {
         if (!s_clippyUnlocked)  { s_clippyUnlocked = true;  s_petPrefs.putBool("clippy", true); }
         if (!s_toasterUnlocked) { s_toasterUnlocked = true; s_petPrefs.putBool("toaster", true); }
         if (!s_ballUnlocked)    { s_ballUnlocked = true;    s_petPrefs.putBool("ball", true); }
+        if (!s_meatyUnlocked) { s_meatyUnlocked = true; s_petPrefs.putBool("meaty", true); }
     }
     // Defaults ON once earned: somebody who just unlocked a pet wants to
     // see it, not to go and find a switch.
@@ -2233,12 +2242,40 @@ static void drawBubbleIn(TFT_eSPI& t, int cx, int topY, const char* text,
 static bool s_bubbleHeld = false;
 static bool s_sceneRepainted = false;
 void bubbleSceneRepainted(bool value) { s_sceneRepainted=value; }
+// The 2.8"'s bubble size on a big panel too, for a screen that would rather
+// give the room to him (the boot splash). See setBubbleSmall().
+static bool s_bubbleSmall = false;
+void setBubbleSmall(bool on) { s_bubbleSmall = on; }
 void holdBubble(bool held) { s_bubbleHeld = held; }
 
 // A cameo's bubble, held back to be drawn on top of whoever comes after it.
 static bool        s_bubbleDefer = false;
+static bool        s_cameoBub = false;                     // drawWaving()'s last bubble, for cameoBubble()
+static int         s_cameoBX = 0, s_cameoBY = 0, s_cameoBW = 0, s_cameoBH = 0;
+static const char* s_ownLine = nullptr;                    // tick()'s bubble this frame, for redrawOwnBubble()
+static int         s_ownCx = 0, s_ownTopY = 0, s_ownTail = 0;
 static const char* s_deferLine   = nullptr;
 static int         s_deferCx = 0, s_deferY = 0, s_deferTail = 0;
+
+// The bubble's face for `text`. Above the size the board was built with
+// (FONTS > BUBBLES), a line that would run out of the bubble's lines steps
+// the face down until it fits, or is back at that size: a bigger bubble
+// never loses the end of what he said.
+static void speechFace(TFT_eSPI& t, const char* text) {
+    Theme::speechFontOn(t, s_bubbleSmall);
+    t.setTextWrap(false);
+    while (Theme::speechAboveNormal()) {
+        const int k = Theme::speechScale();
+        const int screenW = t.width();
+        int maxW = screenW - 16;
+        if (k > 1 && maxW > screenW - 2 * CORNER_W - 2) maxW = screenW - 2 * CORNER_W - 2;
+        if (t.textWidth(text) <= maxW - 10) return;
+        char lines[BUBBLE_MAX_LINES + 1][48];
+        const uint8_t maxL = k > 1 ? BUBBLE_MAX_LINES : 2;
+        if (Theme::wrapText(t, text, maxW - 10, lines, maxL + 1) <= maxL) return;
+        Theme::speechFontSmaller(t);
+    }
+}
 
 static void drawBubble(TFT_eSPI& t, int cx, int topY, const char* text,
                        uint32_t now, bool mayRise = false, int tailX = NO_TAIL) {
@@ -2246,7 +2283,7 @@ static void drawBubble(TFT_eSPI& t, int cx, int topY, const char* text,
     const char* visible=text;
     while (*visible && (unsigned char)*visible<=' ') ++visible;
     if (!*visible) { lastBubbleW=lastBubbleH=0; return; }
-    Theme::bubbleFontOn(t);
+    speechFace(t, text);
     drawBubbleIn(t, cx, topY, text, now, mayRise, tailX);
     Theme::bubbleFontOff(t);
     t.setTextSize(1);
@@ -2257,8 +2294,9 @@ static void drawBubbleIn(TFT_eSPI& t, int cx, int topY, const char* text,
                          uint32_t now, bool mayRise, int tailX) {
     // Twice the size on the 3.5" boards, where the 2.8"'s 16 rows read as
     // small print. Only his own bubble: the other screens that share the
-    // font are laid out around 16 rows.
-    const int k = Theme::large() ? 2 : 1;
+    // font are laid out around 16 rows. FONTS > BUBBLES moves it a rung
+    // either way (Theme::speechFontOn()).
+    const int k = Theme::speechScale();
     t.setTextSize(k);
     t.setTextWrap(false);
     if (topY < 32) topY = 32; // Also applies to visitor bubbles that do not rise.
@@ -2274,7 +2312,7 @@ static void drawBubbleIn(TFT_eSPI& t, int cx, int topY, const char* text,
     if (!strchr(text, '\n') && tw <= maxW - 10) {
         // Fits on one line -- the original compact box.
         int bw = tw + 10;
-        int bh = Theme::bubbleTextH() * k + 6;
+        int bh = Theme::speechTextH() * k + 6;
         int bx = cx - bw / 2;
         if (bx + bw > screenW - 2) bx = screenW - 2 - bw;
         if (bx < 2) bx = 2;
@@ -2284,7 +2322,7 @@ static void drawBubbleIn(TFT_eSPI& t, int cx, int topY, const char* text,
         t.drawRoundRect(bx, by, bw, bh, 3, Theme::VAPOR_PINK);
         if (s_bubbleTone == 1) t.drawRoundRect(bx - 1, by - 1, bw + 2, bh + 2, 4, Theme::AMBER);
         t.setTextColor(s_bubbleTone == 2 ? Theme::W95_LIGHT : Theme::WHITE, Theme::BG);
-        t.setCursor(bx + 5, by + 3 + Theme::bubbleAscent());
+        t.setCursor(bx + 5, by + 3 + Theme::speechAscent());
         t.print(text);
         lastBubbleX = bx;
         lastBubbleY = by;
@@ -2311,7 +2349,7 @@ static void drawBubbleIn(TFT_eSPI& t, int cx, int topY, const char* text,
     char lines[BUBBLE_MAX_LINES][48];
     uint8_t n = Theme::wrapText(t, text, bw - 10, lines, k > 1 ? BUBBLE_MAX_LINES : 2);
 
-    const int lineH = Theme::bubbleTextH() * k + 1;
+    const int lineH = Theme::speechTextH() * k + 1;
     int bh = 3 + (int)n * lineH + 3;
 
     // Asked the same question, and the width answers it: a wrapped box is
@@ -2326,7 +2364,7 @@ static void drawBubbleIn(TFT_eSPI& t, int cx, int topY, const char* text,
     t.setTextColor(s_bubbleTone == 2 ? Theme::W95_LIGHT : Theme::WHITE, Theme::BG);
     for (uint8_t i = 0; i < n; i++) {
         int lw = t.textWidth(lines[i]);
-        t.setCursor(bx + (bw - lw) / 2, by + 3 + i * lineH + Theme::bubbleAscent());
+        t.setCursor(bx + (bw - lw) / 2, by + 3 + i * lineH + Theme::speechAscent());
         t.print(lines[i]);
     }
     lastBubbleX = bx;
@@ -2734,7 +2772,8 @@ bool consumePetUnlockCard() {
 bool petUnlocked() { ensurePrefsLoaded(); return s_petUnlocked; }
 bool clippyUnlocked() { ensurePrefsLoaded(); return s_clippyUnlocked; }
 bool toasterUnlocked() { ensurePrefsLoaded(); return s_toasterUnlocked; }
-bool anyPetUnlocked() { ensurePrefsLoaded(); return s_petUnlocked || s_clippyUnlocked || s_toasterUnlocked || s_ballUnlocked; }
+bool anyPetUnlocked() { ensurePrefsLoaded(); return s_petUnlocked || s_clippyUnlocked || s_toasterUnlocked || s_ballUnlocked || s_meatyUnlocked; }
+bool meatyUnlocked() { ensurePrefsLoaded(); return s_meatyUnlocked; }
 bool ballUnlocked() { ensurePrefsLoaded(); return s_ballUnlocked; }
 bool ballPetOn() { ensurePrefsLoaded(); return s_ballUnlocked && (PetId)s_petSel == PetId::BALL && !s_jailLeft; }
 void unlockBall() {
@@ -2753,6 +2792,7 @@ static bool petOutNow() {
     if (p == PetId::CLIPPY)  return s_clippyUnlocked;
     if (p == PetId::TOASTER) return s_toasterUnlocked;
     if (p == PetId::BALL)    return s_ballUnlocked;
+    if (p == PetId::MEATY) return s_meatyUnlocked;
     return false;
 }
 
@@ -2792,6 +2832,31 @@ void unlockToaster(const char* why) {
 }
 
 const char* takeToasterIntro() { const char* w = s_toasterIntro; s_toasterIntro = nullptr; return w; }
+
+void unlockMeaty(const char* why) {
+    ensurePrefsLoaded();
+    if (s_meatyUnlocked) return;
+    s_meatyUnlocked = true;
+    s_petPrefs.putBool("meaty", true);
+    // The same manners as the other two: on at once when nobody else is out.
+    if (!petOutNow()) {
+        s_petSel = (uint8_t)PetId::MEATY;
+        s_petPrefs.putUChar("petSel", s_petSel);
+        s_meatyIntro = why;
+    } else {
+        Theme::showToast("M3@ty", "new pet. Settings > Pet", Theme::AMBER, 3500);
+    }
+}
+
+const char* takeMeatyIntro() { const char* w = s_meatyIntro; s_meatyIntro = nullptr; return w; }
+
+void relockMeaty() {
+    ensurePrefsLoaded();
+    s_meatyUnlocked = false;
+    s_meatyIntro = nullptr;
+    s_petPrefs.putBool("meaty", false);
+    if ((PetId)s_petSel == PetId::MEATY) { s_petSel = (uint8_t)PetId::OFF; s_petPrefs.putUChar("petSel", s_petSel); }
+}
 
 bool mouthPoint(int& x, int& y) {
     if (s_lastCx <= -9999) return false;
@@ -2859,6 +2924,7 @@ const char* petName() {
         case PetId::CLIPPY: return "C1iPPY";
         case PetId::TOASTER: return "T0@$TY";
         case PetId::BALL:   return "BALL & CHAIN";
+        case PetId::MEATY: return "M3@ty";
         default:            return "OFF";
     }
 }
@@ -3087,6 +3153,7 @@ void unlockAllOutfits() {
     if (!s_clippyUnlocked) { s_clippyUnlocked = true; s_petPrefs.putBool("clippy", true); }
     if (!s_toasterUnlocked) { s_toasterUnlocked = true; s_petPrefs.putBool("toaster", true); }
     if (!s_ballUnlocked) { s_ballUnlocked = true; s_petPrefs.putBool("ball", true); }
+    if (!s_meatyUnlocked) { s_meatyUnlocked = true; s_petPrefs.putBool("meaty", true); }
     // No popups for the cheat: it already has its own rainbow-and-confetti
     // tell below, and eleven modals in a row would bury it. Mark the lot as
     // seen so nothing queues now or on the next boot.
@@ -3201,6 +3268,7 @@ void setSizeBoost(float k) { s_sizeBoost = k > 0.0f ? k : 1.0f; }
 static float s_companyShare = 0.5f;
 void setCompanyShare(float share) { s_companyShare = share > 0.0f ? share : 0.5f; }
 bool visiting() { return s_visiting; }
+bool dancing() { return mood == Mood::DANCE; }
 void setListening(bool v) { s_listening = v; }
 
 static const char* const MEET_HOST_LINES[] = {
@@ -7675,6 +7743,7 @@ void drawWaving(TFT_eSPI& t, int cx, int baseY, uint32_t now, float scale, const
     // This cameo is placed by callers that have already reserved room, so
     // there is no region to clamp against.
     s_cameo = true;
+    s_cameoBub = false;   // set again below if this call draws a bubble
     s_topLimit = -10000;
     // The cameo has no mood machine driving the pose channels, so clear
     // them rather than letting whatever CLEAR left behind leak into the
@@ -7794,13 +7863,61 @@ void drawWaving(TFT_eSPI& t, int cx, int baseY, uint32_t now, float scale, const
             s_deferLine = line; s_deferCx = cx; s_deferY = headTopY - bubbleGap;
             s_deferTail = bubbleTail ? bodyCx : NO_TAIL;
         } else {
+            lastBubbleW = 0;
             drawBubble(t, cx, headTopY - bubbleGap, line, now, false, bubbleTail ? bodyCx : NO_TAIL);
+            if (lastBubbleW > 0) {
+                s_cameoBub = true;
+                s_cameoBX = lastBubbleX; s_cameoBY = lastBubbleY; s_cameoBW = lastBubbleW; s_cameoBH = lastBubbleH;
+            }
         }
     }
     s_cameo = false;
 }
 
+bool cameoBubble(int& x, int& y, int& w, int& h) {
+    if (!s_cameoBub) return false;
+    x = s_cameoBX; y = s_cameoBY; w = s_cameoBW; h = s_cameoBH;
+    return true;
+}
+
 void deferBubble(bool on) { s_bubbleDefer = on; }
+// The FONTS page's preview: his bubble exactly as he would say `text`, with
+// no tail and the pop already over.
+void drawSampleBubble(TFT_eSPI& t, int cx, int topY, const char* text) {
+    speechFace(t, text);
+    drawBubbleIn(t, cx, topY, text, bubbleStart + BUBBLE_POP_MS, false, NO_TAIL);
+    Theme::bubbleFontOff(t);
+    t.setTextSize(1);
+}
+// How tall his bubble comes out for `text` on this panel, without drawing
+// it: the same font, size and wrap width drawBubbleIn() uses.
+int bubbleHeight(TFT_eSPI& t, const char* text) {
+    speechFace(t, text);
+    const int k = Theme::speechScale();
+    t.setTextSize(k);
+    t.setTextWrap(false);
+    const int screenW = t.width();
+    int maxW = screenW - 16;
+    if (k > 1 && maxW > screenW - 2 * CORNER_W - 2) maxW = screenW - 2 * CORNER_W - 2;
+    int h;
+    if (t.textWidth(text) <= maxW - 10) {
+        h = Theme::speechTextH() * k + 6;
+    } else {
+        char lines[BUBBLE_MAX_LINES][48];
+        const uint8_t n = Theme::wrapText(t, text, maxW - 10, lines, k > 1 ? BUBBLE_MAX_LINES : 2);
+        h = 6 + (int)n * (Theme::speechTextH() * k + 1);
+    }
+    Theme::bubbleFontOff(t);
+    t.setTextSize(1);
+    return h;
+}
+// tick()'s own bubble again, exactly as it drew it this frame (same text,
+// place and moment, so the same pixels), for a caller that has drawn
+// somebody over it since.
+void redrawOwnBubble(TFT_eSPI& t, uint32_t now) {
+    if (!s_ownLine) return;
+    drawBubble(t, s_ownCx, s_ownTopY, s_ownLine, now, true, s_ownTail);
+}
 void drawDeferredBubble(TFT_eSPI& t, uint32_t now) {
     if (!s_deferLine) return;
     drawBubble(t, s_deferCx, s_deferY, s_deferLine, now, false, s_deferTail);
@@ -8914,6 +9031,10 @@ void tick(TFT_eSPI& t, int cx, int topY, int availHeight, uint32_t now,
         else                 drawBubble(t, cx, topY, renderedSpeech, now, true,
                                         s_visiting ? bodyCx : NO_TAIL);
     }
+    // Kept for redrawOwnBubble(): a visit draws the visitor after this, and
+    // he stood on top of these words (seen on the 3.5", 2026-10-11).
+    s_ownLine = (showBubble && !s_onboardActive) ? bubbleText : nullptr;
+    s_ownCx = cx; s_ownTopY = topY; s_ownTail = s_visiting ? bodyCx : NO_TAIL;
     // Only what this call itself drew. A bubble that is held, or still
     // popping in, returns before recording anything, and the rectangle
     // left in lastBubble* is then somebody else's.

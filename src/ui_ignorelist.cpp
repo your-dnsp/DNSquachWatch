@@ -45,7 +45,7 @@ static void drawRow(TFT_eSPI& t, int w, int y, int hgt, uint8_t idx) {
     // muted something without telling you what, and the log entry that would
     // have answered that has usually scrolled out of the ring by then.
     const DetectionType ty = IgnoreList::typeAt(idx);
-    t.setTextSize(Theme::uiMenuTextSize(t));
+    Theme::menuFontOn(t, false);   // FONTS > MENUS
     t.setTextColor(Theme::colorFor(ty), Theme::BG);
     t.setCursor(6, y + 3);
     t.print(detectionTypeName(ty));

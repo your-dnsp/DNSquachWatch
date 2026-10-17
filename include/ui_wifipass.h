@@ -21,6 +21,8 @@ void           uiWifiPassInit(TFT_eSPI& t, const char* ssid);
 // Cleared band buffers require a complete paint on every draw pass.
 void           uiWifiPassTick(TFT_eSPI& t, uint32_t now, bool repaint = false);
 void           uiWifiPassTouch(int x, int y, uint32_t now, WifiPassTouch phase);
+// A character from a physical keyboard: '\b' deletes, '\n' is OK.
+void           uiWifiPassKey(char c, uint32_t now);
 WifiPassResult uiWifiPassResult();
 const char*    uiWifiPassText();
 const char*    uiWifiPassSsid();

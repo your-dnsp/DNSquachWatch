@@ -40,26 +40,42 @@ DeauthBurstResult DeauthBurstTracker::note(const DeauthFrameEvidence& frame, uin
         e.samples = 0;
     }
 
+    // Exact BSSID continuity needs one address and a saturated run count,
+    // rather than an address per sample. This also handles queued frames with
+    // identical millis() timestamps: a time alone cannot distinguish them.
+    if (!e.samples || memcmp(e.bssid, frame.bssid, 6) != 0) {
+        memcpy(e.bssid, frame.bssid, 6);
+        e.bssidRun = 1;
+    } else if (e.bssidRun < THRESHOLD) {
+        ++e.bssidRun;
+    }
+    bool broadcast = true;
+    for (uint8_t i = 0; i < 6; ++i) if (frame.destination[i] != 0xFF) broadcast = false;
     const uint8_t slot = e.head;
     e.at[slot] = now;
     e.targetHash[slot] = macHash(frame.destination);
-    memcpy(e.bssid[slot], frame.bssid, 6);
     e.reason[slot] = frame.reason;
-    e.flags[slot] = (frame.reasonValid ? 0x01 : 0) | (frame.protectedFrame ? 0x02 : 0);
+    e.flags[slot] = (frame.reasonValid ? 0x01 : 0) | (frame.protectedFrame ? 0x02 : 0) | (broadcast ? 0x04 : 0);
     e.head = (uint8_t)((e.head + 1) % THRESHOLD);
     if (e.samples < THRESHOLD) ++e.samples;
     e.lastSeen = now;
     e.rssi = frame.rssi;
     e.channel = frame.channel;
 
-    if (e.samples < THRESHOLD) return out;
+    if (e.samples < BROADCAST_THRESHOLD) return out;
 
     uint8_t recent[THRESHOLD];
-    uint8_t n = 0;
-    for (uint8_t i = 0; i < e.samples; ++i) {
-        if ((uint32_t)(now - e.at[i]) <= WINDOW_MS) recent[n++] = i;
+    uint8_t n = 0, broadcasts = 0;
+    for (uint8_t k = 0; k < e.samples; ++k) {
+        // Oldest-to-newest also makes equal-timestamp reason-code ties choose
+        // the last observed frame, including after the sample ring wraps.
+        const uint8_t i = e.samples == THRESHOLD ? (uint8_t)((e.head + k) % THRESHOLD) : k;
+        if ((uint32_t)(now - e.at[i]) <= WINDOW_MS) {
+            recent[n++] = i;
+            if (e.flags[i] & 0x04) ++broadcasts;
+        }
     }
-    if (n < THRESHOLD) return out;
+    if (n < THRESHOLD && broadcasts < BROADCAST_THRESHOLD) return out;
     if (e.fired && (uint32_t)(now - e.lastFire) < COOLDOWN_MS) return out;
 
     uint32_t oldestAge = 0;
@@ -70,12 +86,10 @@ DeauthBurstResult DeauthBurstTracker::note(const DeauthFrameEvidence& frame, uin
     bool reasonValid = false;
     uint16_t latestReason = 0;
     uint32_t latestReasonAge = UINT32_MAX;
-    const uint8_t firstSlot = recent[0];
     for (uint8_t k = 0; k < n; ++k) {
         const uint8_t i = recent[k];
         const uint32_t age = now - e.at[i];
         if (age > oldestAge) oldestAge = age;
-        if (memcmp(e.bssid[firstSlot], e.bssid[i], 6) != 0) sameBssid = false;
         bool known = false;
         for (uint8_t j = 0; j < targetCount; ++j) if (targets[j] == e.targetHash[i]) known = true;
         if (!known) targets[targetCount++] = e.targetHash[i];
@@ -87,11 +101,13 @@ DeauthBurstResult DeauthBurstTracker::note(const DeauthFrameEvidence& frame, uin
         }
     }
 
+    sameBssid = e.bssidRun >= n;
+
     e.lastFire = now;
     e.fired = true;
     out.alert = true;
     memcpy(out.source, e.source, 6);
-    if (sameBssid) memcpy(out.bssid, e.bssid[firstSlot], 6);
+    if (sameBssid) memcpy(out.bssid, e.bssid, 6);
     out.rssi = e.rssi;
     out.channel = e.channel;
     out.count = n;

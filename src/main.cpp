@@ -23,6 +23,7 @@
 #if defined(ESP32)
 #include <esp_sleep.h>       // deep sleep: the watch's heal cycle, the Freenove boards' POWER OFF
 #include <driver/rtc_io.h>   // the pull-up that keeps BOOT high through that sleep
+#include <esp_wifi.h>        // and WiFi stopped before it
 #endif
 // The core dump's own summary -- which task, and where. The emulator has
 // neither header, and nothing to summarise.
@@ -992,6 +993,85 @@ static bool readTouchRaw(int16_t& a, int16_t& b) {
 #endif
 }
 
+#if defined(TDECK_PLUS)
+// ---- T-Deck Plus: power rail, bus tidying, and the stepped backlight ------
+// GPIO10 is the board's power enable: on battery nothing past the S3 has
+// power until it is HIGH (on USB it happens to be fed anyway). The SD slot
+// and the SX1262 share the display's SPI bus, so their chip selects are
+// parked HIGH before TFT_eSPI's first byte, and MISO gets a pull-up so an
+// idle bus reads quiet. From LilyGo's UnitTest sketch.
+static const int TDECK_POWERON = 10, TDECK_SD_CS = 39, TDECK_LORA_CS = 9, TDECK_MISO = 38;
+static void tdeckPowerUp() {
+    pinMode(TDECK_POWERON, OUTPUT); digitalWrite(TDECK_POWERON, HIGH);
+    pinMode(TDECK_SD_CS, OUTPUT);   digitalWrite(TDECK_SD_CS, HIGH);
+    pinMode(TDECK_LORA_CS, OUTPUT); digitalWrite(TDECK_LORA_CS, HIGH);
+    pinMode(TFT_CS, OUTPUT);        digitalWrite(TFT_CS, HIGH);
+    pinMode(TDECK_MISO, INPUT_PULLUP);
+    delay(50);   // the rail, the panel and the touch chip come up
+}
+// The backlight is not a PWM pin. GPIO42 drives a 16-step LED driver that
+// counts pulses: a rising edge from off is full brightness, each short
+// low-high pulse after that steps it down one level, and holding it low
+// turns it off. A 5 kHz PWM on it would step through all sixteen levels three
+// hundred times a second. So the firmware's 0..255 duty becomes 0..16 steps,
+// sent the way LilyGo's setBrightness() sends them.
+//
+// Every change starts from OFF: the pin held low for 3 ms, then the rising
+// edge that means full, then 16 - want short pulses down. Absolute, not
+// relative, so the chip's real state never drifts from the firmware's idea
+// of it. And the pulses sit inside a critical section: a pulse is a low of
+// well under a microsecond, and a task switch between the LOW and the HIGH
+// (the frame push, the LoRa task) held the pin low for milliseconds, which
+// the chip reads as OFF -- the T-Deck went black with the firmware running
+// (2026-10-12). The flash of full brightness before the steps is too short
+// to see.
+static void tdeckBacklight(uint8_t duty) {
+    static int level = -1;               // what was last asked for; -1 = never
+    const int want = duty == 0 ? 0 : 1 + (int)(((uint32_t)duty * 15 + 127) / 255);
+    if (want == level) return;
+    level = want;
+    digitalWrite(BL_PIN_S3, LOW);
+    delay(3);                             // long enough low: off, whatever it was doing
+    if (want == 0) return;
+    portDISABLE_INTERRUPTS();
+    digitalWrite(BL_PIN_S3, HIGH);        // on, at full
+    delayMicroseconds(30);
+    for (int i = 0; i < 16 - want; i++) {
+        digitalWrite(BL_PIN_S3, LOW);
+        delayMicroseconds(1);
+        digitalWrite(BL_PIN_S3, HIGH);
+        delayMicroseconds(1);
+    }
+    portENABLE_INTERRUPTS();
+}
+// The keyboard: LilyGo's helper chip (an ESP32-C3 running their firmware) on
+// the touch chip's I2C bus at 0x55. Asked, it answers one byte: the character
+// of the key pressed since last time, 0x0D for enter, 0x08 for backspace,
+// 0x00 for nothing. Shift and the symbol key are applied inside it, and alt+B
+// toggles its own backlight without telling us. Polled every 25 ms: it holds
+// one key, and the loop comes round faster than fingers do. The key goes to
+// whichever text screen is up; anywhere else it is dropped.
+static const uint8_t TDECK_KBD = 0x55;
+static void tdeckKeysTick(uint32_t now) {
+    static uint32_t at = 0;
+    if (now - at < 25) return;
+    at = now;
+    Wire.beginTransmission(TDECK_KBD);
+    if (Wire.endTransmission() != 0) return;
+    if (Wire.requestFrom((int)TDECK_KBD, 1) != 1) return;
+    const uint8_t k = (uint8_t)Wire.read();
+    if (k == 0 || k == 0x0C) return;             // nothing, or alt+C (its own)
+    const char c = k == 0x0D ? '\n' : k == 0x08 ? '\b' : (char)k;
+    if (state == AppState::WIFI_PASS) uiWifiPassKey(c, now);
+#if SQUACH_MESH
+    else if (state == AppState::PHONE) uiPhoneKey(c);
+#endif
+#if SQUACH_LORA
+    else if (state == AppState::LORA_CHAT) uiLoraChatKey(c, now);
+#endif
+}
+#endif
+
 // Set by the power-saver timer in loop(). Kept out of Settings on purpose:
 // it is a live state, not a preference, and it must never be persisted --
 // coming back from a reboot into a dimmed screen with no memory of why would
@@ -1121,7 +1201,7 @@ static void initTouchFit() {
 // diagnostics screen's answer to "did it actually crash", the exact
 // question a live serial monitor was needed for earlier today.
 static const char* resetReasonName() {
-    switch (esp_reset_reason()) {
+    switch (g_resetReason) {
         case ESP_RST_POWERON:   return "power-on";
         case ESP_RST_SW:        return "software";
         case ESP_RST_PANIC:     return "PANIC/crash";
@@ -1302,6 +1382,14 @@ static const bool DEFAULT_TOUCH_USABLE = true;
 
 static bool s_calRanThisBoot = false;   // for the RADIO report on the watch
 static void runTouchCalibration() {
+    // The calibration draws straight at the panel. On the boards whose frames
+    // go out from a task of their own, the last one may still be on the wire:
+    // drawing over it scrambled the panel's commands and left it white (the
+    // Marauder V8, from Settings, 2026-10-12). First boot never saw it -- the
+    // task does not exist yet. A no-op everywhere else.
+#if SQW_PUSH_ASYNC
+    FramePush::asyncWait();
+#endif
     s_calRanThisBoot = true;
     TouchFit::Fit fit;
 #if defined(TWATCH_S3)
@@ -1473,6 +1561,15 @@ static void enterAlert(const Detection& d) {
     // worked, which is presumably why nobody noticed the banner was missing.
     s_infoPending = false;
     uiAlertInit(*canvas, d);
+#if defined(CYD_GPS)
+    // Only for a live catch with a fresh fix: a card opened later from
+    // NEARBY shows no place, because the board may have moved since.
+    {
+        const uint32_t nowMs = millis();
+        if (Gnss::fresh(nowMs) && !d.restored && nowMs - d.lastSeen <= Gnss::FRESH_MS)
+            uiAlertSetPlace(true, Gnss::fix().lat7, Gnss::fix().lon7, Gnss::faked());
+    }
+#endif
     // The lifetime count for the type includes this one, so one means first.
     {
         const bool first = engine.lifetimeTypeCount(d.type) == 1;
@@ -1667,6 +1764,7 @@ static void enterInvite() {
 }
 
 // INVERT and ROT on the console -- see clock.cpp. Consumed in loop().
+volatile bool g_consoleMeaty = false; // upstream pet bench hook
 volatile bool g_consoleXyzzy=false, g_consoleLegend=false, g_consoleCharge=false;
 volatile bool g_consoleClippy=false, g_consoleToaster=false, g_consoleBall=false;
 volatile bool g_consolePet=false, g_consoleJail=false, g_consoleFree=false;
@@ -2680,6 +2778,9 @@ void setup() {
 // same mistake as the LEDC attach further down, just earlier.
     // Backlight pin selection happens below; do not drive touch pins.
     tft.init();
+#if SQW_SPEAKER
+    bootStage(1);
+#endif
 
     // Load persisted settings before the first real pixel is drawn, so
     // boot itself already reflects the saved theme/invert choice
@@ -2693,6 +2794,9 @@ void setup() {
     if(Care::giftDue())Settings::prepareGiftDisplay();
     Theme::applyPalette(Settings::paletteIndex());
     Clock::begin();   // after Settings: the zone is applied there, the history here
+#if defined(CYD_GPS)
+    cydGpsStart();
+#endif
 #if defined(TWATCH_S3)
     twatchRtcBegin();      // after Clock::begin(): a real time beats the note's guess
     twatchHapticBegin();
@@ -2852,6 +2956,9 @@ void setup() {
         touch.setRotation(0);
     }
 #endif
+#if SQW_SPEAKER
+    bootStage(2);
+#endif
 
     initBacklight(true);
 
@@ -2949,6 +3056,9 @@ void setup() {
         }
         BlackBox::noteBoot(br);
     }
+#if SQW_SPEAKER
+    bootStage(3);
+#endif
 
 #if defined(TWATCH_S3)
     // What the watch is like at the moment the radios start. A boot that
@@ -2984,6 +3094,9 @@ void setup() {
     // against a frame built by an independent implementation.
     MeshTalk::begin();
 #endif
+#if SQW_SPEAKER
+    bootStage(9);
+#endif
     applyBrightness();
     // After a wipe the board comes back the way the wipe asked: straight to the
     // main screen, unlocked, with no splash and no boot quip, after a duress
@@ -2998,6 +3111,9 @@ void setup() {
         Squachy::trigger(Squachy::Event::BOOTED, DetectionType::UNKNOWN, engine.lifetimeTotal());
         enterBoot();
     }
+#if SQW_SPEAKER
+    bootStage(10);
+#endif
 }
 
 // ---- PRIM: what each drawing primitive costs on the real sprite ----
@@ -3382,6 +3498,12 @@ static void openSettingsRow(SettingsRow row,uint32_t now,int gestureStartX,int g
                             if (gestureStartX < tft.width() / 2) Settings::cyclePrevDeskBackground();
                             else                                 Settings::cycleDeskBackground();
                             break;
+                        case SettingsRow::CLOCK_FORMAT: Settings::toggleClock24Hour(); break;
+                        case SettingsRow::FONTS: uiSettingsOpenPage(SettingsPage::FONTS); break;
+                        case SettingsRow::FONT_MENUS: case SettingsRow::FONT_TEXT:
+                        case SettingsRow::FONT_BUTTONS: case SettingsRow::FONT_BUBBLES:
+                        case SettingsRow::FONT_PETS: case SettingsRow::FONT_XP:
+                            uiSettingsFontTap(frame, gestureStartX, gestureStartY, tft.width(), tft.height()); break;
                         case SettingsRow::CLOCK_FONT:     Settings::cycleClockFont();     break;
                         case SettingsRow::CLOCK_SIZE:     Settings::cycleClockSize();     break;
                         case SettingsRow::CLOCK_BACKDROP: Settings::cycleClockBackdrop(); break;
@@ -3420,7 +3542,7 @@ static void openSettingsRow(SettingsRow row,uint32_t now,int gestureStartX,int g
                         // From a sub-page, back to the main list; from the
                         // main list, out.
                         case SettingsRow::BACK:
-                            if (uiSettingsCurrentPage() != SettingsPage::MAIN) uiSettingsOpenPage(SettingsPage::MAIN);
+                            if (uiSettingsCurrentPage() != SettingsPage::MAIN) uiSettingsOpenPage(uiSettingsParentPage());
                             else                                               enterClear();
                             break;
                         default: break;
@@ -3909,6 +4031,12 @@ void loop() {
     }
     if (g_consoleBall) { g_consoleBall = false; Squachy::unlockBall(); Serial.println("[pet] ball and chain unlocked"); }
     if (g_consolePet)  { g_consolePet = false; Squachy::cyclePet(); Serial.printf("[pet] now %s\n", Squachy::petName()); }
+    if (g_consoleMeaty) {
+        g_consoleMeaty = false;
+        const bool had = Squachy::meatyUnlocked();
+        Squachy::unlockMeaty("Who's there? Oh. It's you. I'm comin' out.");
+        Serial.println(had ? "[pet] M3@ty was already here (PET to choose him)" : "[pet] M3@ty unlocked");
+    }
     if (g_consoleToaster) {
         g_consoleToaster = false;
         Squachy::unlockToaster("Reporting for duty. I'm not scared.");
@@ -4026,7 +4154,7 @@ void loop() {
         else if (state == AppState::SETTINGS) {
             // The gear on a sub-page goes back up a level, the way it does
             // from every other screen Settings opens.
-            if (uiSettingsCurrentPage() != SettingsPage::MAIN) uiSettingsOpenPage(SettingsPage::MAIN);
+            if (uiSettingsCurrentPage() != SettingsPage::MAIN) uiSettingsOpenPage(uiSettingsParentPage());
             else                                               enterClear();
         }
         else {
@@ -4339,6 +4467,7 @@ void loop() {
             if (Theme::consumeWerewolfSummon()) Squachy::unlockWolfPelt();
             if (Theme::consumeToasterCatch())   Squachy::unlockChromeWing();
             if (Theme::consumeToasterPetCatch()) Squachy::unlockToaster("You came for me? I knew you would. I wasn't scared.");
+            if (Theme::consumeIglooKnock())     Squachy::unlockMeaty("Who's there? Oh. It's you. I'm comin' out.");
             if (Theme::consumeEyeCatch())       Squachy::unlockVoidEye();
             if (Theme::consumeLodgeKnock())     Squachy::unlockParka();
             if (Theme::consumeSharkCatch())     Squachy::unlockShark();
@@ -5340,7 +5469,7 @@ void loop() {
                     if (uiSettingsTapPinnedBack(*canvas, gestureStartX, gestureStartY,
                                                  tft.width(), tft.height())) {
                         if (uiSettingsCurrentPage() != SettingsPage::MAIN)
-                            uiSettingsOpenPage(SettingsPage::MAIN);
+                            uiSettingsOpenPage(uiSettingsParentPage());
                         else
                             enterClear();
                         gestureActive = false;
@@ -6493,8 +6622,12 @@ void loop() {
             info.boardName = "StickS3 LAB";
 #elif defined(CARDPUTER_ADV)
             info.boardName = "Cardputer ADV LAB";
+#elif defined(TDECK_PLUS)
+            info.boardName = "tdeck-plus LAB";
 #elif defined(FREENOVE_S3_35)
             info.boardName = "freenove-s3-35 BETA";
+#elif defined(FREENOVE_S3_40)
+            info.boardName = "freenove-s3-40";
 #elif defined(CYD35C)
             info.boardName = "cyd35c BETA";
 #elif defined(CYD35)
@@ -6513,6 +6646,23 @@ void loop() {
             info.lastScreenUs   = s_lastScreenUs;
             info.freeHeap = heap_caps_get_free_size(MALLOC_CAP_8BIT);
             info.largestBlock = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+#if defined(CYD_GPS)
+            {
+                const Gnss::Fix& f = Gnss::fix();
+                const Gnss::Sky k = Gnss::sky();
+                const uint32_t nowMs = millis();
+                info.gpsShown = true;
+                info.gpsGood = Gnss::good(); info.gpsBad = Gnss::bad();
+                info.view = k.view; info.heard = k.heard; info.used = f.used;
+                info.accM = f.accM; info.lat7 = f.lat7; info.lon7 = f.lon7;
+                info.fixAgeMs = f.atMs ? nowMs - f.atMs : UINT32_MAX;
+                info.fresh = Gnss::fresh(nowMs); info.faked = Gnss::faked();
+                info.wdOn = Wardrive::enabled();
+                info.wdState = (uint8_t)Wardrive::sdState(nowMs);
+                info.wdWritten = Wardrive::written(); info.wdSkipped = Wardrive::skipped();
+                info.wdDropped = Wardrive::dropped(); info.wdFile = Wardrive::sdFileName();
+            }
+#endif
             info.resetReason = resetReasonName();
             info.loopFree    = s_loopHeapFree;
             info.loopLargest = s_loopHeapLargest;

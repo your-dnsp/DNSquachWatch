@@ -327,6 +327,14 @@ void uiWifiPassTick(TFT_eSPI& t, uint32_t now, bool repaint) {
     }
 }
 
+// A key from a real keyboard (the T-Deck's): the same path a tapped key takes.
+// '\b' deletes, '\n' is OK, anything else printable is typed as it came --
+// the keyboard's own shift and symbol keys already chose the character.
+void uiWifiPassKey(char c, uint32_t now) {
+    if (c == '\r') c = K_OK;
+    if (c == K_DEL || c == K_OK || (c >= ' ' && c < 0x7F)) type(c, now);
+}
+
 void uiWifiPassTouch(int x, int y, uint32_t now, WifiPassTouch phase) {
     switch (phase) {
         case WifiPassTouch::DOWN:

@@ -122,3 +122,6 @@ bool uiClearEmote(uint8_t emote, uint8_t setup, bool fromGuest);
 void uiClearEmoteTick(uint32_t now);
 #endif
 
+// One XP counter tile, lit, at the main screen's scale: the FONTS page's
+// preview of XP TILES. Returns its width.
+int uiClearSampleTile(TFT_eSPI& t, int x, int y, const char* txt, uint16_t iconCol);

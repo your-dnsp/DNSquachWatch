@@ -15,6 +15,7 @@
 #include "settings.h"
 #include "crowd_bench.h"
 #include "blackbox.h"    // BLACKBOX dumps it
+#include "pet.h"         // YETI DISCO / YETI FLOSS
 #include "ota_core.h"    // VERTEST, on bench builds
 #include "frame_push.h"  // PUSH, the frame-push switch
 #include "fast_sprite.h" // FAST, the sprite fast-path switch
@@ -70,6 +71,7 @@ extern volatile uint8_t g_consoleHeadsUp;
 extern volatile bool g_consoleClippy;
 extern volatile bool g_consoleToaster;
 extern volatile bool g_consoleBall;
+extern volatile bool g_consoleMeaty;
 extern volatile bool g_consolePet;
 extern volatile bool g_consoleJail;
 extern volatile bool g_consoleFree;
@@ -87,6 +89,8 @@ extern volatile int8_t g_consoleSound;
 extern volatile bool g_consoleScreen;
 #if defined(FREENOVE_S3) || defined(FREENOVE_S3_35)
 extern volatile bool g_consolePowerOff;   // main.cpp: POWER OFF, the Freenove boards' deep sleep
+extern volatile bool g_consoleNapTest;       // main.cpp: NAPTEST, POWER OFF that wakes itself 3 s later
+extern volatile bool g_consolePowerLog;   // main.cpp: POWERLOG, the power diary
 #endif
 extern volatile bool g_consoleRadioTest;
 extern volatile bool g_consolePmu;
@@ -111,6 +115,21 @@ static uint32_t    s_greeted  = 0;
 static uint32_t    s_mileSaid = 0;
 static bool        s_guess    = false;   // running from the note to self
 static uint32_t    s_lastNote = 0;       // millis() of the last note written
+#if defined(ARDUINO_ARCH_ESP32)
+// The guess outlives a restart the same way the time it guessed does. It did
+// not: the note's time stayed in the system clock across the next restart or
+// POWER OFF wake, and that boot, finding a clock already set, took it as a
+// real one -- the 3.5" ran ten and a half hours slow, trusted, after a flash
+// (2026-10-12). RTC RAM keeps the flag next to the time it describes.
+static const uint32_t GUESS_MAGIC = 0x6E55E550u;
+RTC_NOINIT_ATTR static uint32_t s_guessWord;
+#endif
+static void setGuess(bool g) {
+    s_guess = g;
+#if defined(ARDUINO_ARCH_ESP32)
+    s_guessWord = g ? GUESS_MAGIC : 0u;
+#endif
+}
 static const uint32_t NOTE_EVERY_MS = 10u * 60u * 1000u;
 
 #if !defined(ARDUINO_ARCH_ESP32)
@@ -195,7 +214,7 @@ bool setEpoch(uint32_t epoch) {
     if (epoch <= kPlausible) return false;
     // A real answer, from wherever: the guess is over, and the note is
     // brought up to date at once rather than ten minutes from now.
-    s_guess = false;
+    setGuess(false);
     writeSystemClock(epoch);
     noteKnown();
     if (s_begun) { s_prefs.putUInt("last", epoch); s_lastNote = millis(); }
@@ -468,12 +487,22 @@ void begin() {
     s_mileSaid = s_prefs.getUInt("mile", 0);
     // Carried across a soft reset with the date already known: the first
     // such boot is still the first day.
-    if (isSet()) { noteKnown(); return; }
+    if (isSet()) {
+#if defined(ARDUINO_ARCH_ESP32)
+        if (s_guessWord == GUESS_MAGIC) {
+            s_guess = true;
+            Serial.println("[clock] still the note's guess from before the restart");
+            return;
+        }
+#endif
+        noteKnown();
+        return;
+    }
     // A cold boot: the note to self, if there is one, as a floor.
     const uint32_t last = s_prefs.getUInt("last", 0);
     if (last > kPlausible) {
         writeSystemClock(last);
-        s_guess = true;
+        setGuess(true);
         char buf[40];
         formatClock(buf, sizeof buf);
         Serial.printf("[clock] no clock; starting from the last note: %s\n", buf);
@@ -574,7 +603,24 @@ void pollSerial() {
         if (strcasecmp(line, "EXT ROT") == 0) { g_consoleExt = 2; continue; }
 #endif
         if (strcasecmp(line, "CLIPPY") == 0) { g_consoleClippy = true; continue; }
+        // The yeti pet's dances, on demand: now if he is there, else he comes on.
+        if (strcasecmp(line, "YETI DISCO") == 0) { Pet::yetiDance(0); Serial.println("[yeti] disco"); continue; }
+        if (strcasecmp(line, "YETI FLOSS") == 0) { Pet::yetiDance(1); Serial.println("[yeti] floss"); continue; }
         if (strcasecmp(line, "TOASTER") == 0) { g_consoleToaster = true; continue; }
+        // MEATY unlocks him; MEATY IGLOO / DOG / SHAKE / SPLIT / DANCE, his shapes on demand.
+        if (strcasecmp(line, "MEATY") == 0) { g_consoleMeaty = true; continue; }
+        if (strncasecmp(line, "MEATY ", 6) == 0) {
+            const char* w = line + 6;
+            // MEATY LOCK: take him back, so the igloo can be knocked on again.
+            // A board with the master unlock gets him back at the next boot.
+            if (strcasecmp(w, "LOCK") == 0) { Squachy::relockMeaty(); Serial.println("[meaty] locked: knock on the SNOWFALL igloo"); continue; }
+            const int8_t k = strcasecmp(w, "IGLOO") == 0 ? 0 : strcasecmp(w, "DOG") == 0 ? 1 : strcasecmp(w, "SHAKE") == 0 ? 2 : strcasecmp(w, "SPLIT") == 0 ? 3 : strcasecmp(w, "DANCE") == 0 ? 4 :
+                             strcasecmp(w, "WAVE") == 0 ? 5 : strcasecmp(w, "SHRUG") == 0 ? 6 : strcasecmp(w, "HIPS") == 0 ? 7 :
+                             strcasecmp(w, "SCRATCH") == 0 ? 8 : strcasecmp(w, "POINT") == 0 ? 9 : -1;
+            if (k >= 0) { Pet::meatyAct(k); Serial.printf("[meaty] %s (if he is the pet on screen)\n", w); }
+            else Serial.println("[meaty] MEATY IGLOO | DOG | SHAKE | SPLIT | DANCE | WAVE | SHRUG | HIPS | SCRATCH | POINT");
+            continue;
+        }
         if (strcasecmp(line, "BALL") == 0)    { g_consoleBall = true; continue; }
         if (strcasecmp(line, "PET") == 0)     { g_consolePet = true; continue; }
         if (strcasecmp(line, "JAIL") == 0)    { g_consoleJail = true; continue; }
@@ -596,6 +642,8 @@ void pollSerial() {
         if (strcasecmp(line, "SCREEN") == 0) { g_consoleScreen = true; continue; }
 #if defined(FREENOVE_S3) || defined(FREENOVE_S3_35)
         if (strcasecmp(line, "POWER OFF") == 0) { g_consolePowerOff = true; continue; }
+        if (strcasecmp(line, "NAPTEST") == 0)   { g_consoleNapTest = true; g_consolePowerOff = true; continue; }
+        if (strcasecmp(line, "POWERLOG") == 0)  { g_consolePowerLog = true; continue; }
 #endif
         if (strcasecmp(line, "RADIO TEST") == 0) { g_consoleRadioTest = !g_consoleRadioTest; Serial.printf("[radio] bench test %s\n", g_consoleRadioTest ? "ON: cycling on the cable, screen or not" : "OFF"); continue; }
         if (strcasecmp(line, "PMU") == 0)    { g_consolePmu = true; continue; }
@@ -762,7 +810,7 @@ void pollSerial() {
             // uxTaskGetSystemState needs a trace facility this build does
             // not carry, so the tasks are asked for by name -- the ones with
             // a stack size somebody picked, which is the question here.
-            static const char* TASKS[] = { "loopTask", "nimble_host", "btController",
+            static const char* const TASKS[] = { "loopTask", "nimble_host", "btController",
                                            "wifi", "tiT", "esp_timer", "arduino_events",
                                            "sys_evt", "otawifi", "IDLE" };
             for (uint8_t i = 0; i < sizeof TASKS / sizeof TASKS[0]; i++) {

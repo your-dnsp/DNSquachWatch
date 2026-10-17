@@ -67,12 +67,24 @@ int main() {
        lookup(0xB4, 0x1E, 0x52, &conf) == DetectionType::FLOCK);
     ck("...and graded HIGH", conf == Confidence::HIGH_CONF);
 
-    // 24:0A:C4 is Espressif. Flock build on ESP32, so it is real evidence --
-    // shared with every dev board, smart plug and hobby project on earth,
-    // which is exactly what LOW is for.
-    ck("a generic Espressif block still matches FLOCK",
-       lookup(0x24, 0x0A, 0xC4, &conf) == DetectionType::FLOCK);
-    ck("...but graded LOW", conf == Confidence::LOW_CONF);
+    // 24:0A:C4 is Espressif: every dev board, smart plug, hobby project --
+    // and every SquachWatch. It used to match FLOCK at LOW; the projects that
+    // test at real Flock sites stopped trusting Espressif blocks, and Flock's
+    // newer cameras run a Qualcomm radio. Taken out 2026-10-14, so a
+    // SquachWatch is never somebody else's Flock camera.
+    ck("a generic Espressif block is no longer FLOCK",
+       lookup(0x24, 0x0A, 0xC4, &conf) != DetectionType::FLOCK);
+    ck("...nor is the one this board's own C3/S3 chips use",
+       lookup(0x3C, 0x71, 0xBF, &conf) != DetectionType::FLOCK);
+
+    // The new tables, spot-checked (2026-10-14).
+    ck("ShotSpotter's own block is a gunshot sensor",
+       lookup(0xD4, 0x11, 0xD6, &conf) == DetectionType::RAVEN);
+    ck("WatchGuard VIDEO is a body cam", lookup(0x00, 0x1D, 0x96, &conf) == DetectionType::AXON);
+    ck("...and WatchGuard Technologies, the firewall maker, is not",
+       lookup(0x00, 0x01, 0x21, &conf) == DetectionType::UNKNOWN);
+    ck("Skydio is a drone", lookup(0x38, 0x1D, 0x14, &conf) == DetectionType::DRONE);
+    ck("the HC-05 maker's real block is a skimmer", lookup(0x98, 0xD3, 0x31, &conf) == DetectionType::SKIMMER);
 
     // Ring LLC's own registration versus Amazon's umbrella block, which
     // also covers Echo, Fire TV and Kindle.
@@ -110,6 +122,46 @@ int main() {
     ck("eleven digits is not", !isBareSerialName("40220190331"));
     ck("nine digits is not", !isBareSerialName("402201903"));
     ck("digits with a letter is not", !isBareSerialName("40220A9033"));
+
+    suite("The 2026-10-14 signatures");
+    ck("a Flock hotspot's network is FLOCK", lookupSsid("Flock Camera net.") == DetectionType::FLOCK);
+    ck("FS- and a hex serial is FLOCK", lookupBtName("FS-BEC46A") == DetectionType::FLOCK);
+    ck("...but not FS- and a word", lookupBtName("FS-Living Room") == DetectionType::UNKNOWN);
+    ck("...nor FS- and two digits", !isFlockFsName("FS-12"));
+    ck("a BodyWorn remote is a body cam", lookupBtName("BodyWorn Remote") == DetectionType::AXON);
+    ck("Axon's company ID is AXON", lookupMfgId(0x034D) == DetectionType::AXON);
+    ck("Axon's SIG UUIDs are AXON", lookupUuid(0xFE6B) == DetectionType::AXON && lookupUuid(0xFC81) == DetectionType::AXON);
+    ck("Meta's 0x058E (the Quest's) is gone", lookupMfgId(0x058E) == DetectionType::UNKNOWN);
+    {
+        // AD 0x21 (128-bit service data), the tag as the field capture has it:
+        // reversed, so it reads ...ECIVEDCWB in byte order.
+        const uint8_t bwc[] = { 0x02, 0x01, 0x06, 0x12, 0x21,
+                                'E','C','I','V','E','D','C','W','B','S','U','N','A','J','X','A', 0x00 };
+        ck("Axon's BWCDEVICE tag, reversed, is found", isAxonBwcPayload(bwc, sizeof bwc));
+        const uint8_t fwd[] = { 0x0A, 0x09, 'B','W','C','D','E','V','I','C','E' };
+        ck("...and forwards", isAxonBwcPayload(fwd, sizeof fwd));
+        const uint8_t no[] = { 0x08, 0x09, 'B','W','C','D','E','V','I' };
+        ck("...but not a part of it", !isAxonBwcPayload(no, sizeof no));
+    }
+    {
+        // Find Hub: flags, then service data AA FE 40 and an EID.
+        const uint8_t fmdn[] = { 0x02, 0x01, 0x06, 0x06, 0x16, 0xAA, 0xFE, 0x40, 0x11, 0x22 };
+        ck("a Find Hub tag (frame 0x40) is one", isFmdnPayload(fmdn, sizeof fmdn));
+        const uint8_t utp[] = { 0x05, 0x16, 0xAA, 0xFE, 0x41, 0x11 };
+        ck("...and in unwanted-tracking mode (0x41)", isFmdnPayload(utp, sizeof utp));
+        const uint8_t url[] = { 0x02, 0x01, 0x06, 0x03, 0x03, 0xAA, 0xFE, 0x06, 0x16, 0xAA, 0xFE, 0x10, 0x00, 0x01 };
+        ck("an Eddystone URL beacon on the same UUID is not", !isFmdnPayload(url, sizeof url));
+    }
+    {
+        const uint8_t tile[] = { 0x02, 0x01, 0x06, 0x05, 0x16, 0xED, 0xFE, 0x02, 0x00 };
+        ck("Tile's UUID as service data is found", serviceDataUuid(tile, sizeof tile) == 0xFEED);
+        const uint8_t dult[] = { 0x04, 0x16, 0xB2, 0xFC, 0x01 };
+        ck("the DULT tracker standard is a TRACKER", lookupUuid(serviceDataUuid(dult, sizeof dult)) == DetectionType::GOOGLE_TAG);
+        const uint8_t other[] = { 0x04, 0x16, 0x34, 0x12, 0x01 };
+        ck("an unknown service data UUID is nothing", serviceDataUuid(other, sizeof other) == 0);
+        const uint8_t bad[] = { 0x09, 0x16, 0xED, 0xFE };   // a length that runs off the end
+        ck("a malformed advert is read safely", serviceDataUuid(bad, sizeof bad) == 0);
+    }
 
     return report();
 }

@@ -27,6 +27,12 @@ namespace Pet {
     // arguments are the exception, in the pets' own (layer) pixels.
     void setZoom(int k);
     int  zoom();
+    // Whether a squad crowd is on screen this frame: M3@ty steps down a size
+    // so he doesn't stand in front of them.
+    void setCrowd(bool on);
+    // The line Squachy's feet stand on, in screen pixels. The pets stand on
+    // their own line above it (the old counter line); M3@ty stands here.
+    void setGround(int y);
     // Whether tick() can draw anything this frame (a pet earned and chosen,
     // or the ball out). The caller skips the double-size layer when not.
     bool anyOut(uint32_t now);
@@ -43,7 +49,7 @@ namespace Pet {
     bool clippyHit(int x, int y);
     void clippyPoke(uint32_t now);
     bool clippyCenter(int& x, int& y);
-    // The pet as drawn this frame (C1iPPY, T0@$TY or the ball), top left, in
+    // The pet as drawn this frame (C1iPPY, T0@$TY, MEATY or the ball), top left, in
     // the pet's own coordinates; false when none is on screen. For the
     // emulator's motion checks.
     bool drawnAt(int& x, int& y);
@@ -51,6 +57,9 @@ namespace Pet {
     // layer, drawn now at the screen's own size. Call after the layer is
     // laid down; does nothing when none is waiting.
     void drawHeldBalloons(TFT_eSPI& t);
+    // A pet's balloon saying `text`, its tail on a box at (x, y) w wide: the
+    // FONTS page's preview of PETS.
+    void drawSampleBalloon(TFT_eSPI& t, int x, int y, int w, const char* text);
     // Picking him up. A touch that lands on him grabs him at once; every
     // frame it is held drags him; letting go is a poke when the finger never
     // went anywhere, a throw when it was still moving, and a drop otherwise.
@@ -62,5 +71,15 @@ namespace Pet {
     // flings of a pet inside a minute call it; so do the console's JAIL and
     // the emulator.
     void arrest(uint32_t now);
+
+    // The yeti's dances (pet_yeti.inc): 0 SATURDAY NIGHT YETI, 1 THE FLOSS.
+    // He dances it now if he is standing there, otherwise he comes on next
+    // and dances it. The console's YETI DISCO / YETI FLOSS and the emulator.
+    void yetiDance(int8_t which);
+
+    // MEATY's shapes on demand (pet_meaty.inc): 0 the igloo, 1 the hot dog,
+    // 2 Shake it, 3 three of him. The console's MEATY IGLOO and the rest, and
+    // the emulator.
+    void meatyAct(int8_t which);
 }
 

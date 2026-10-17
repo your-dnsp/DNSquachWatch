@@ -1,4 +1,4 @@
-"""Use newlib's integer scanner for the pinned SDK's integer-only version query.
+"""Use DNSP's bounded integer scanner for the pinned SDK's integer-only version query.
 
 Patch a build-local archive, never the installed SDK. The original SDK object
 is hash-checked; an SDK change requires reviewing its formats again. This avoids
@@ -14,7 +14,7 @@ def adapt(source, dest, ar, objcopy):
     obj = dest/'bt.c.obj'
     if hashlib.sha256(obj.read_bytes()).hexdigest() != EXPECTED:
         raise RuntimeError('Unreviewed Bluetooth SDK object: cannot apply integer version scanner')
-    subprocess.run([str(objcopy), '--redefine-sym', 'sscanf=siscanf', str(obj)], check=True)
+    subprocess.run([str(objcopy), '--redefine-sym', 'sscanf=dnspIntegerScanC', str(obj)], check=True)
     archive=dest/'libbt.a';shutil.copyfile(source, archive)
     subprocess.run([str(ar), 'r', str(archive), str(obj)], check=True)
     return archive

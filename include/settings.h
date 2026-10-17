@@ -72,7 +72,7 @@ namespace Settings {
     // The desk clock. FONT: 0 the segment digits, 1 Bangers. SIZE: 0 small,
     // 1 medium (the size it has always been), 2 large. BACKDROP: what plays
     // inside its plate -- 0 plain, 1 digital rain, 2 snow, 3 flying toasters,
-    // 4 fire, 5 starfield, 6 fireflies.
+    // 4 fire, 5 starfield, 6 fireflies. The time format is 12 or 24 hour.
     uint8_t     clockFont();
     const char* clockFontName();
     void        cycleClockFont();
@@ -83,6 +83,8 @@ namespace Settings {
     const char* clockBackdropName();
     void        cycleClockBackdrop();
     void        cyclePrevClockBackdrop();
+    bool        clock24Hour();
+    void        toggleClock24Hour();
     void       cyclePrevBackground(); // same, but backward
 
     // Disables the two CLEAR-screen gestures that cycle background
@@ -128,6 +130,10 @@ namespace Settings {
     // first time the button turns the screen off.
     bool       pocketNoteShown();
     void       markPocketNoteShown();
+    // What the yeti pet has been found to do: bit 0 he has been thrown, bit
+    // 1 he has been tapped (and danced). Until each is, his lines drop hints.
+    uint8_t    yetiFound();
+    void       markYetiFound(uint8_t bits);
 
     // Disables the title-bar rotate button (and the ROTATED gesture it
     // triggers) without touching its icon -- an accidental tap during
@@ -145,6 +151,17 @@ namespace Settings {
     // the full counter rows at the bottom, as before v1.31.0).
     bool       detXp();
     void       toggleDetXp();
+
+    // FONTS on the APPEARANCE page: a slider per kind of text, around the
+    // size each board was built with. 0..4 for -2..+2; 2 is as built. Theme
+    // decides what a step means on this board and how far it can go
+    // (Theme::fontDelta(), Theme::fontRange()).
+    enum class FontKind : uint8_t { MENUS = 0, TEXT, BUTTONS, BUBBLES, XP_TILES, PETS, COUNT };
+    uint8_t    fontStep(FontKind k);
+    void       setFontStep(FontKind k, uint8_t step);
+    // And a face: 0 as built, 1 PIXEL, 2 SMOOTH (Theme::fontSmooth()).
+    uint8_t    fontFace(FontKind k);
+    void       setFontFace(FontKind k, uint8_t face);
 
     // Last rotation (0..3, TFT_eSPI's setRotation() values) the rotate
     // button left the screen on -- so it comes back up the same way
@@ -327,8 +344,14 @@ namespace Settings {
     // default: the radio takes turns between the two). Applied by
     // Lora::applyListen().
     uint8_t     loraListen();
+    void        setLoraListen(uint8_t v);   // 0 off, 1 Meshtastic, 2 MeshCore, 3 both
     void        cycleLoraListen();
     const char* loraListenName();
+    // LORA TX (the T-Deck): what the chats' compose line sends at. 0 = off,
+    // else dBm. Off by default: a sniffer that talks is opt-in.
+    uint8_t     loraTxDbm();
+    void        cycleLoraTx();         // OFF -> 10 dBm -> 20 dBm -> OFF
+    const char* loraTxName();
     uint8_t     loraRegion();
     void        setLoraRegion(uint8_t r);
     uint8_t     loraFocus();
@@ -511,6 +534,10 @@ namespace Settings {
     // than standing. 1 is the old behaviour -- one visitor, both of them on
     // the ground. Measured on hardware: eight at the size they shrink to cost
     // LESS to draw than the two at today's size do (17.6 ms against 29).
+    //
+    // NONE (0) puts nobody else on screen at all -- no visit, no crowd -- for a
+    // bench of boards that should each show just its own Squachy; the badge,
+    // messages and heads-ups still work.
     //
     // Any number from one to eight, and EIGHT IS NOT ARBITRARY: the radio's
     // squad ring holds eight (SQUAD_N in mesh.cpp), so a ninth board in the

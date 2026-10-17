@@ -129,19 +129,30 @@ crash_reports_test_SRCS := $(SRC)/crash_reports.cpp
 TESTS += pocket_screen_test
 
 .PHONY: all clean
+TESTS += integer_scan_test mesh_airtime_test mesh_tx_policy_test mesh_appearance_test mesh_primary_transport_test mesh_visit_appearance_test
+
 all: $(addprefix run-,$(TESTS))
 
 $(OUT):
 	@mkdir -p $(OUT)
 
 define TEST_rule
-$(OUT)/$(1): $(1).cpp $(SRC)/simulation.cpp $$($(1)_SRCS) $$(wildcard $$(INC)/*.h) $$(wildcard $$(INC)/*.inc) $$(wildcard $$(SIM)/*.h) Makefile | $(OUT)
-	@$$(CXX) $$(CXXFLAGS) $$($(1)_FLAGS) -o $$@ $$< $$($(1)_SRCS) $(SRC)/simulation.cpp
+$(OUT)/$(1): $(1).cpp $(SRC)/integer_scan.cpp $(SRC)/simulation.cpp $$($(1)_SRCS) $$(wildcard $$(INC)/*.h) $$(wildcard $$(INC)/*.inc) $$(wildcard $$(SIM)/*.h) Makefile | $(OUT)
+	@$$(CXX) $$(CXXFLAGS) $$($(1)_FLAGS) -o $$@ $$< $$($(1)_SRCS) $(SRC)/integer_scan.cpp $(SRC)/simulation.cpp
 
 .PHONY: run-$(1)
 run-$(1): $(OUT)/$(1)
 	@./$(OUT)/$(1)
 endef
+
+# Upstream squad transport/appearance regression tests.
+mesh_airtime_test_SRCS :=
+mesh_tx_policy_test_SRCS :=
+mesh_appearance_test_SRCS := $(SRC)/squachmesh.cpp
+mesh_appearance_test_FLAGS := -DSQUACH_MESH=1
+mesh_primary_transport_test_SRCS := $(SRC)/meshmsg.cpp $(SRC)/meshwords.cpp $(SRC)/squachmesh.cpp
+mesh_primary_transport_test_FLAGS := -DSQUACH_MESH=1
+mesh_visit_appearance_test_SRCS :=
 
 $(foreach t,$(TESTS),$(eval $(call TEST_rule,$(t))))
 

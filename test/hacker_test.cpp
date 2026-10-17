@@ -27,15 +27,14 @@ int main() {
 
     suite("Flipper Zero");
 
-    ck("its own IEEE block is HACKER", oui(0x0C, 0xFA, 0x22, &conf) == DetectionType::HACKER);
-    ck("...and graded HIGH", conf == Confidence::HIGH_CONF);
+    ck("BUSY Bar Wi-Fi prefix does not identify a Flipper Zero", oui(0x0C, 0xFA, 0x22, &conf) == DetectionType::UNKNOWN);
 
     // Not merely absent: these must never be added, because they are not
     // Flipper's and nothing in the registry says they are anybody's.
     ck("80:E1:26 matches nothing", oui(0x80, 0xE1, 0x26, &conf) == DetectionType::UNKNOWN);
     ck("80:E1:27 matches nothing", oui(0x80, 0xE1, 0x27, &conf) == DetectionType::UNKNOWN);
 
-    ck("SIG company ID 0x0E29 is HACKER", lookupMfgId(0x0E29) == DetectionType::HACKER);
+    ck("BUSY Bar company ID alone is not HACKER", lookupMfgId(0x0E29) == DetectionType::UNKNOWN);
     ck("0x0FBA (Cosonic) is not", lookupMfgId(0x0FBA) == DetectionType::UNKNOWN);
 
     // Three UUIDs, one per case colour. All three have to be present: ship

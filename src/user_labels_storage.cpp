@@ -12,6 +12,7 @@ constexpr const char* DIR="/User Labeled Device Findings";
 constexpr const char* CSV="/User Labeled Device Findings/user-labeled-device-findings-v2.csv";
 
 const char* evidenceName(MatchEvidence e){
+    if(e==MatchEvidence::BLE_PAYLOAD)return "BLE_PAYLOAD";
     switch(e){case MatchEvidence::OUI:return "OUI";case MatchEvidence::SSID:return "SSID";case MatchEvidence::BLE_COMPANY:return "BLE company";case MatchEvidence::BLE_SERVICE:return "BLE service";case MatchEvidence::BLE_NAME:return "BLE name";case MatchEvidence::FIND_MY:return "Find My";case MatchEvidence::IBEACON:return "iBeacon";case MatchEvidence::DEAUTH_BURST:return "deauth burst";case MatchEvidence::EVIL_TWIN:return "evil twin";case MatchEvidence::PWNAGOTCHI:return "Pwnagotchi";case MatchEvidence::RESEARCH_COMPOSITE:return "research composite";case MatchEvidence::WIFI_REMOTE_ID:return "WiFi Remote ID";case MatchEvidence::BLE_REMOTE_ID:return "BLE Remote ID";default:return "unknown";}
 }
 const char* confidenceName(Confidence c){return c==Confidence::HIGH_CONF?"high":c==Confidence::MED_CONF?"medium":"low";}

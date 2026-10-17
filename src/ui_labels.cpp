@@ -20,7 +20,7 @@ uint8_t lastKey=255;
 uint32_t lastKeyAt=0;
 
 static const uint8_t TYPES[]={1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,UserLabels::OTHER_TAG};
-static const char* SUBTAGS[]={"NO SUBTAG","CAMERA","SENSOR","GUNSHOT DETECTOR","DOORBELL","GLASSES","TRACKER","DRONE","RADIO","TYPE CUSTOM..."};
+static const char* const SUBTAGS[]={"NO SUBTAG","CAMERA","SENSOR","GUNSHOT DETECTOR","DOORBELL","GLASSES","TRACKER","DRONE","RADIO","TYPE CUSTOM..."};
 constexpr uint8_t TYPE_N=sizeof(TYPES)/sizeof(TYPES[0]);
 constexpr uint8_t SUB_N=sizeof(SUBTAGS)/sizeof(SUBTAGS[0]);
 
@@ -31,7 +31,7 @@ void row(TFT_eSPI& t,int i,const char* text){Theme::drawButton(t,10,42+i*36,t.wi
 void startType(){stage=Stage::TYPE;typePage=0;}
 void startSubtag(){stage=Stage::SUBTAG;subPage=label.type==UserLabels::OTHER_TAG?2:0;label.subtag[0]=0;}
 void appendT9(uint8_t key,uint32_t now){
-    static const char* chars[]={"1","ABC2","DEF3","GHI4","JKL5","MNO6","PQRS7","TUV8","WXYZ9"};
+    static const char* const chars[]={"1","ABC2","DEF3","GHI4","JKL5","MNO6","PQRS7","TUV8","WXYZ9"};
     if(key>=9)return;const char* set=chars[key];size_t n=strlen(label.subtag),m=strlen(set);
     if(lastKey==key&&now-lastKeyAt<900&&n){const char* p=strchr(set,label.subtag[n-1]);label.subtag[n-1]=p?set[(p-set+1)%m]:set[0];}
     else if(n<UserLabels::MAX_SUBTAG){label.subtag[n]=set[0];label.subtag[n+1]=0;}
@@ -70,7 +70,7 @@ void draw(TFT_eSPI& t){
         char more[20];snprintf(more,sizeof more,"MORE %u/%u",subPage+1,(SUB_N+3)/4);footer(t,"BACK",more);
     }else if(stage==Stage::T9){
         title(t,"T9 SUBTAG - UP TO 24 CHARACTERS");t.setTextSize(2);t.setTextColor(Theme::WHITE,Theme::BG);t.setCursor(10,38);t.printf("%s_",label.subtag);
-        static const char* keys[]={"1","ABC2","DEF3","DEL","GHI4","JKL5","MNO6","SPACE","PQRS7","TUV8","WXYZ9","DONE"};
+        static const char* const keys[]={"1","ABC2","DEF3","DEL","GHI4","JKL5","MNO6","SPACE","PQRS7","TUV8","WXYZ9","DONE"};
         for(int i=0;i<12;i++){int col=i%4,rowIx=i/4;Theme::drawButton(t,6+col*(w-8)/4,68+rowIx*38,(w-16)/4,32,keys[i],false);}footer(t,"BACK","");
     }else if(stage==Stage::CONFIRM){
         title(t,"REVIEW USER OBSERVATION");char sub[48];Simulation::subtags(sub,sizeof sub,label.subtag,target.mac);char mac[24],b[280];snprintf(mac,sizeof mac,"%02X:%02X:%02X:%02X:%02X:%02X",target.mac[0],target.mac[1],target.mac[2],target.mac[3],target.mac[4],target.mac[5]);Privacy::mac(mac,sizeof mac,target.mac);snprintf(b,sizeof b,"MAC: %s\nDetected: %s\nUser label: %s\nSubtag: %s\n\nThis records your observation; it does not prove device identity.",mac,detectionTypeName(target.original),UserLabels::typeName(label.type),sub[0]?sub:"(none)");prose(t,b,40,112);Theme::drawButton(t,10,h-84,w-20,34,"SAVE + EXPORT TO microSD",false);footer(t,"BACK","");
@@ -81,11 +81,12 @@ void draw(TFT_eSPI& t){
 
 Outcome tap(int x,int y,int w,int h,uint32_t now){
     if(!on)return Outcome::NONE;
+    const bool singleFooter = x>=8 && x<w-8 && y>=h-40 && y<h-8;
     if(stage==Stage::CHOICE){
         if(y>=172&&y<196){stage=Stage::SHARE;return Outcome::NONE;}
         if(y>=100&&y<130){if(!hadLabel){label.type=(uint8_t)target.original;label.subtag[0]=0;}stage=Stage::CONFIRM;return Outcome::NONE;}
         if(y>=136&&y<166){startType();return Outcome::NONE;}
-        if(y>=h-40&&x<w/2){on=false;return Outcome::CANCELLED;}
+        if(singleFooter){on=false;return Outcome::CANCELLED;}
     }else if(stage==Stage::SHARE){
         
         if(y>=h-40){if(x<w/2)stage=Stage::CHOICE;else stage=ResearchSubmission::savePair(target,label,now,sharePath,sizeof sharePath)?Stage::SHARE_DONE:Stage::SHARE_ERROR;}
@@ -100,13 +101,13 @@ Outcome tap(int x,int y,int w,int h,uint32_t now){
         if(y>=h-40){if(x<w/2)stage=Stage::TYPE;else subPage=(uint8_t)((subPage+1)%((SUB_N+3)/4));return Outcome::NONE;}
     }else if(stage==Stage::T9){
         if(y>=68&&y<182){int col=x*4/w;if(col<0)col=0;if(col>3)col=3;int rowIx=(y-68)/38,key=rowIx*4+col;if(key==3){size_t n=strlen(label.subtag);if(n)label.subtag[n-1]=0;lastKey=255;}else if(key==7){size_t n=strlen(label.subtag);if(n<UserLabels::MAX_SUBTAG){label.subtag[n]=' ';label.subtag[n+1]=0;}lastKey=255;}else if(key==11){if(label.subtag[0])stage=Stage::CONFIRM;}else{static const uint8_t map[]={0,1,2,255,3,4,5,255,6,7,8,255};appendT9(map[key],now);}return Outcome::NONE;}
-        if(y>=h-40&&x<w/2){stage=Stage::SUBTAG;return Outcome::NONE;}
+        if(singleFooter){stage=Stage::SUBTAG;return Outcome::NONE;}
     }else if(stage==Stage::CONFIRM){
         if(y>=h-84&&y<h-50){if(UserLabels::save(target,label,now)){on=false;return Outcome::SAVED;}stage=Stage::ERROR;return Outcome::NONE;}
-        if(y>=h-40&&x<w/2){stage=Stage::SUBTAG;return Outcome::NONE;}
+        if(singleFooter){stage=Stage::SUBTAG;return Outcome::NONE;}
     }else{
         if(y>=h-84&&y<h-50){stage=Stage::CONFIRM;return Outcome::NONE;}
-        if(y>=h-40&&x<w/2){on=false;return Outcome::CANCELLED;}
+        if(singleFooter){on=false;return Outcome::CANCELLED;}
     }
     return Outcome::NONE;
 }

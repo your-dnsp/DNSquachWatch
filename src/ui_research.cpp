@@ -5,7 +5,7 @@
 namespace ResearchUI {
 static uint8_t page=0,selection=0,note=0;static Research::Profile profile=Research::Profile::BALANCED;static bool raw=false,confirmRaw=false;
 static Research::Record selected; static bool haveSelected=false;
-static const char* notes[]={"No note","Control location","Stationary observation","Moving observation","Camera visually nearby"};
+static const char* const notes[]={"No note","Control location","Stationary observation","Moving observation","Camera visually nearby"};
 void open(){page=0;selection=0;confirmRaw=false;haveSelected=false;}
 // Wrap long URLs as well as prose; never silently discard a long word.
 static void text(TFT_eSPI& t,const char* msg,int y,int bottom=0) {

@@ -10,7 +10,7 @@ Normal classifications, signatures, confidence, user labels, tags, subtags and s
 
 Wi-Fi observations preserve whether their matching address was the claimed transmitter or the BSSID. BLE observations record advertiser provenance. Accepted stronger evidence carries its provenance through merging and queued alerts; weaker observations cannot overwrite it. Legacy observations without recorded provenance are described as a matched address.
 
-Deauthentication simulation status comes exclusively from the claimed transmitter used by the existing per-source tracker. A simulated receiver/destination or BSSID alone cannot mark an ordinary transmitter. The existing threshold remains six observed frames in the true 3,000 ms sliding window, with a 15,000 ms cooldown per source. Counts describe observed channel dwell periods, not all traffic transmitted by a network.
+Deauthentication simulation status comes exclusively from the claimed transmitter used by the existing per-source tracker. A simulated receiver/destination or BSSID alone cannot mark an ordinary transmitter. The threshold is twelve observed deauthentication/disassociation frames, or six broadcast-destination frames, in a true 3,000 ms sliding window, with a 15,000 ms cooldown per source. Simulation never lowers either threshold. Counts describe observed channel dwell periods, not all traffic transmitted by a network.
 
 Sketchy Environment endpoints retain their own addresses and provenance. Two marked endpoints yield `SIMULATED`; one yields `CONTAINS SIMULATED EVIDENCE`. Details and incident exports identify the marked ALPR and/or deauth endpoint. Neither status raises confidence or bypasses the rule's ordinary timing and matching conditions.
 

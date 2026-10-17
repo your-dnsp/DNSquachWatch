@@ -38,8 +38,8 @@ const Device kDevices[] = {
       "The MAC prefix matches Flock Safety's registered block. This is stronger evidence than a shared chip prefix, but does not prove the model, owner, or presence of a camera." },
     { DetectionType::FLOCK, "FLOCK BLE", "Flock-BLE", nullptr,
       "Bluetooth from Flock gear: a XUNTONG radio (Flock's supplier), Flock's own accessory service, or a battery pack named by a bare serial number. XUNTONG sells to others and a number is just a number -- a lead." },
-    { DetectionType::FLOCK, "ESP32 MODULE", "Flock-ESP32|Flok-ESP-S3|Flok-ESP-S2|Flok-ESP-C6", nullptr,
-      "An Espressif ESP32-family chip. Flock cameras use them -- and so do smart plugs, dev boards and this SquachWatch. Filed under Flock because it could be one. Treat it as a maybe." },
+    { DetectionType::FLOCK, "FLOCK HOTSPOT", "Flock-Cam", nullptr,
+      "A network called Flock Camera net., which a Flock camera has been caught putting up. This is a naming-pattern clue; SSIDs can be copied." },
     { DetectionType::FLOCK, "LITEON CHIP", "Flock-Liteo", nullptr,
       "A Liteon wireless module. Flock hardware has used them, and so have millions of laptops. A maybe, not a match." },
     { DetectionType::FLOCK, "WIFI MODULE", "Flock-UGSI|Flock-SiLab", nullptr,
@@ -61,6 +61,14 @@ const Device kDevices[] = {
       "An address other detectors tie to modern Axon body cameras. A lead rather than proof, so it is graded low." },
     { DetectionType::AXON, "AXON SIGNAL", "Axon-Signal", nullptr,
       "Axon Signal: small Bluetooth sensors on holsters and patrol cars that tell nearby body cameras to start recording when a gun is drawn or the lights go on. Graded low." },
+    { DetectionType::AXON, "AXON BODY CAM", "Axon-BWC", nullptr,
+      "An Axon body camera, by the BWCDEVICE tag it puts in its own Bluetooth broadcast. Real cams carried it in field tests, and it survives Axon changing addresses. The tag does not report whether the camera is recording." },
+    { DetectionType::AXON, "BODYWORN", "BodyWorn", "BodyWorn",
+      "Utility's BodyWorn: a police body camera system. This is its activation remote, which officers clip on to start the camera recording." },
+    { DetectionType::AXON, "WATCHGUARD", "WatchGuard", nullptr,
+      "A radio on WatchGuard Video's block: Motorola's police body cameras and in-car video. Not the firewall company of the same name." },
+    { DetectionType::AXON, "DIGITAL ALLY", "DigitalAlly", nullptr,
+      "A radio on Digital Ally's block: body cameras and in-car video for police, ambulance and security fleets." },
 
     // ---- ALPR ---------------------------------------------------------------
     { DetectionType::ALPR, "MOTOROLA", "ALPR-Mtrla", nullptr,
@@ -69,7 +77,7 @@ const Device kDevices[] = {
       "A Genetec vendor-prefix match. Genetec offers AutoVu license-plate readers and other products. This prefix alone does not identify an ALPR camera; model support is unvalidated." },
 
     // ---- SKIMMER: names first -- over Bluetooth the label is just "BLE" -------
-    { DetectionType::SKIMMER, "HC-05 MODULE", nullptr, "HC-0",
+    { DetectionType::SKIMMER, "HC-05 MODULE", "Skim-HC05", "HC-0",
       "An HC-series Bluetooth serial module: the $3 part hidden in gas-pump and ATM skimmers. Hobby projects use it too, so where you are matters. At a pump, take it seriously." },
     { DetectionType::SKIMMER, "RN42 MODULE", nullptr, "RN42",
       "An RN42 Bluetooth serial module, common in electronics projects and in older card skimmers. Near a card reader, worth a second look." },
@@ -103,6 +111,8 @@ const Device kDevices[] = {
       "An Avigilon camera, Motorola Solutions' business video line, found in offices, campuses and city systems." },
     { DetectionType::CAMERA, "AXIS", "Axis", nullptr,
       "An Axis Communications network camera, from one of the oldest professional CCTV makers. Common in shops, transit and city surveillance." },
+    { DetectionType::CAMERA, "I-PRO", "i-PRO", nullptr,
+      "An i-PRO camera: Panasonic's old security business, making CCTV and police body cameras. Found in cities, campuses and patrol cars." },
 
     { DetectionType::AXON, "AXON EQUIP", "Axon-equip|TASER-equip", nullptr,
       "Experimental Axon/TASER company or service signature. Multiple clues can corroborate it. This does not confirm a body camera, its operator or recording state." },
@@ -123,6 +133,8 @@ const Device kDevices[] = {
       "A radio from Luxottica, the eyewear giant behind Ray-Ban and Oakley, which builds Meta's camera glasses." },
     { DetectionType::META, "SPECTACLES", "Snap", nullptr,
       "Snap Spectacles: camera glasses from Snapchat's maker that record clips from the wearer's point of view." },
+    { DetectionType::META, "VUZIX", "Vuzix", nullptr,
+      "Vuzix smart glasses, sold mostly to warehouses, hospitals and police. Many models have a camera." },
 };
 const uint8_t kDeviceCount = sizeof(kDevices) / sizeof(kDevices[0]);
 

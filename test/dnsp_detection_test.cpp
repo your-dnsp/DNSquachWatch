@@ -107,5 +107,7 @@ int main() {
     seen=row;seen.conf=Confidence::LOW_CONF;seen.evidence=MatchEvidence::OUI;seen.addressRole=AddressRole::TRANSMITTER;mergeObservation(row,seen,1900);
     ck("weaker observation cannot replace retained evidence provenance",row.addressRole==AddressRole::BSSID);
     ck("details explain convention without claiming authenticated identity",strstr(DetectionInfo::why(out),"Real hardware")&&strstr(DetectionInfo::why(out),"BSSID"));
+    d.type=DetectionType::AXON;d.vendor="Axon-BWC";d.evidence=MatchEvidence::BLE_PAYLOAD;
+    ck("payload evidence explains signature without claiming recording",strstr(DetectionInfo::why(d),"BWCDEVICE")&&strstr(DetectionInfo::why(d),"does not establish recording"));
     return report();
 }

@@ -25,11 +25,11 @@ static const char* const EXPLAIN_TEXT[] = {
     // SKIMMER
     "A Bluetooth card skimmer, usually wired into an ATM or gas pump reader. It quietly exfiltrates stolen card data over BLE instead of needing physical pickup.",
     // RAVEN
-    "A Raven gunshot-detection sensor, usually mounted on a streetlight or rooftop. It listens constantly, not just after something happens. Matched on Raven's own Bluetooth service IDs, which have not been checked against real hardware -- hence the middling confidence. NOT ShotSpotter: those hold no registered hardware ID at all and backhaul over cellular rather than broadcasting, so nothing here can see one.",
+    "Raven or ShotSpotter gunshot-sensor clue. WHY THIS MATCHED distinguishes a service signature from a manufacturer prefix. Shared or imitated radio identifiers do not confirm a particular sensor or its activity. Wired or cellular-only sensors may be invisible.",
     // AIRTAG
     "An Apple AirTag, riding Apple's Find My network. Legitimate for keys and luggage -- also a known method for tracking a person or vehicle without consent.",
     // DRONE
-    "Remote ID broadcast. This firmware receives legacy Bluetooth and 2.4 GHz WiFi Beacon/NAN messages. Broadcast identity and position are unauthenticated. FPV & DRONES shows separate aircraft records, freshness and consistency warnings. Many FPV whoops emit no Remote ID. No video is received; Bluetooth 5 extended broadcasts are unsupported.",
+    "Drone-related radio clue: a manufacturer prefix or a decoded Remote ID broadcast. A prefix alone does not prove an aircraft is present or flying. Remote ID identity and position are unauthenticated. FPV & DRONES shows decoded aircraft records. Many FPV whoops emit no Remote ID. No video is received; Bluetooth 5 extended broadcasts are unsupported.",
     // ALPR
     "A manufacturer associated with some license-plate readers. A vendor prefix alone does not confirm ALPR. Model-specific support remains experimental; wired or cellular cameras may be invisible.",
     // CAMERA
@@ -37,13 +37,13 @@ static const char* const EXPLAIN_TEXT[] = {
     // SAMSUNG_TAG
     "A Samsung Galaxy SmartTag, riding Samsung's own item-finder network. Same tracking-without-consent concern as an AirTag, different ecosystem.",
     // GOOGLE_TAG
-    "A tracker on Google's Find My Device network -- Chipolo, Pebblebee, Moto Tag and others all ride the same system. Android's answer to Find My.",
+    "Tracker radio clue: Google Find Hub, a DULT unwanted-tracking service, or another listed tracker signature. Radio fields can be imitated. This does not establish ownership, intent or that a person is being tracked.",
     // TILE
     "A Tile Bluetooth tracker, one of the original item-finders. Independent of Apple/Google/Samsung's networks, same basic capability either way.",
     // RING
     "A Ring doorbell or camera, Amazon's video doorbell line. Often networked into neighborhood-wide sharing through the Neighbors app.",
     // DEAUTH
-    "Not a hardware identification. This records a burst of WiFi deauthentication frames from one claimed transmitter address. One frame is normal traffic; repeated frames may be a flood, but source addresses can be spoofed and Squachy only samples each channel during its dwell time.",
+    "Not a hardware identification. This records a burst of WiFi deauth/disassociation frames from one claimed transmitter address. One frame is normal traffic; repeated frames may be a flood, but source addresses can be spoofed and Squachy only samples each channel during its dwell time.",
     // EVILTWIN
     "Two different boxes are broadcasting the same network name, and they disagree about security -- one wants a password, the other is wide open. That's how a fake hotspot lures you on. A mesh system never argues with itself about encryption, which is what separates this from your own router.",
     // IBEACON
@@ -130,6 +130,7 @@ static const char* whyBase(const Detection& d) {
         case MatchEvidence::BLE_REMOTE_ID: reason = "A Remote ID message was decoded from Bluetooth service data. Broadcast identity and position are not authenticated."; break;
         case MatchEvidence::WIFI_REMOTE_ID: reason = "A structurally valid WiFi Remote ID message pack was received. Broadcast identity and position are not authenticated."; break;
         case MatchEvidence::SSID: reason = "The WiFi network name matches a known naming pattern. Names can be changed or imitated."; break;
+        case MatchEvidence::BLE_PAYLOAD: reason = "The Bluetooth payload contains the BWCDEVICE body-camera signature. Payloads can be imitated; this does not establish recording status."; break;
         case MatchEvidence::BLE_COMPANY: reason = "Bluetooth company data matches a listed manufacturer. It does not prove a particular model."; break;
         case MatchEvidence::BLE_SERVICE: reason = "An advertised Bluetooth service matches the signature list. Other products can share or imitate a service."; break;
         case MatchEvidence::BLE_NAME: reason = "The Bluetooth name matches a listed pattern. Names can be changed or imitated."; break;
@@ -149,7 +150,7 @@ static const char* whyBase(const Detection& d) {
             if ((d.evidenceBits & DEAUTH_META_SAME_BSSID) && d.name[0])
                 {char pv[40];snprintf(bssidPart, sizeof bssidPart, "BSSID %s",Privacy::name(d.name,pv,sizeof pv));}
             snprintf(text, sizeof text,
-                     "%u deauth frames from one claimed transmitter in %lums; %u target%s, %s, %s, %s. Source MACs can be spoofed. Channel hopping means Squachy observed only part of the traffic. This does not prove an attack.",
+                     "%u deauth/disassoc frames from one claimed transmitter in %lums; %u target%s, %s, %s, %s. Source MACs can be spoofed. Channel hopping means Squachy observed only part of the traffic. This does not prove an attack.",
                      (unsigned)d.hits, duration, targets, targets == 1 ? "" : "s",
                      bssidPart, reasonPart, protection);
             return text;

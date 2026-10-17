@@ -28,7 +28,7 @@ CSV contains only generated numeric/enum values and a hexadecimal MAC or `redact
 
 For an observed 802.11 deauthentication management frame, both JSONL and CSV identify the frame as DEAUTH evidence and add the claimed transmitter, receiver, BSSID, reason code when readable, and Protected Management Frame bit. RAW mode includes those three addresses. Redacted mode replaces them with `redacted`, removes the packet bytes, and retains the non-identifying reason/protection/channel/signal facts. A protected frame body is not decoded as a plaintext reason code.
 
-The ordinary detector separately requires six frames from the same claimed transmitter inside a true sliding three-second window. Each source has its own 15-second alert cooldown. Research reports count a detector-confirmed threshold crossing as a coherent burst rather than treating every recorded frame as an alert. Transmitter addresses can be spoofed, protection status alone does not prove an attack, and the ESP32's channel hopping means these counts describe only frames observed during channel dwell periods.
+The ordinary detector separately requires twelve deauthentication/disassociation frames, or six broadcast-destination frames, from the same claimed transmitter inside a true sliding three-second window. Each source has its own 15-second alert cooldown. Research reports count a detector-confirmed threshold crossing as a coherent burst rather than treating every recorded frame as an alert. Transmitter addresses can be spoofed, protection status alone does not prove an attack, and the ESP32's channel hopping means these counts describe only frames observed during channel dwell periods.
 
 ## Field notebook
 

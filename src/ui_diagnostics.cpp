@@ -3,8 +3,14 @@
 #include "clock.h"
 #include "theme.h"
 #include "detection.h"
+#if SQUACH_MESH
+#include "meshtalk.h"
+#endif
 #include <Arduino.h>
 #include <stdarg.h>
+#if defined(CYD_GPS)
+#include "sd_row.h"   // degreesText() for the FIX line
+#endif
 
 static void backButtonRect(int screenW, int screenH, int& x, int& y, int& w, int& h) {
     Theme::ButtonBarGeom g = Theme::computeButtonBar(screenW, screenH);
@@ -114,6 +120,61 @@ void uiDiagnosticsTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, co
     }
     y = drawLine(t, y, Theme::CYAN, "HEAP:", "%lu free / %lu largest",
                  (unsigned long)info.freeHeap, (unsigned long)info.largestBlock);
+#if defined(CYD_GPS)
+    if (info.gpsShown) {
+        if (info.gpsGood == 0)
+            y = drawLine(t, y, Theme::CYAN, "GPS:", "no data from the module");
+        else
+            y = drawLine(t, y, Theme::CYAN, "GPS:", "%u in view, %u heard, %u used",
+                         info.view, info.heard, info.used);
+        if (info.fixAgeMs == UINT32_MAX) {
+            y = drawLine(t, y, Theme::CYAN, "FIX:", "none");
+        } else {
+            char la[16], lo[16], acc[12];
+            SdRow::degreesText(la, sizeof la, info.lat7, 5);
+            SdRow::degreesText(lo, sizeof lo, info.lon7, 5);
+            if (info.faked) snprintf(acc, sizeof acc, "FAKE");
+            else            snprintf(acc, sizeof acc, "+-%u m", info.accM);
+            y = drawLine(t, y, info.fresh ? Theme::GREEN : Theme::CYAN, "FIX:", "%s,%s %s %lus",
+                         la, lo, acc, (unsigned long)(info.fixAgeMs / 1000));
+        }
+        // Two lines: the file name does not fit beside the counts at 320 px.
+        static const char* const WD[] = { "OFF", "NO CARD", "LOW MEMORY", "WAITING FOR FIX", "ON" };
+        if (!info.wdOn)
+            y = drawLine(t, y, Theme::CYAN, "WARDRIVE:", "off");
+        else
+            y = drawLine(t, y, Theme::CYAN, "WARDRIVE:", "%s, %lu written, %lu repeats, %lu dropped",
+                         info.wdState < 5 ? WD[info.wdState] : "?", (unsigned long)info.wdWritten,
+                         (unsigned long)info.wdSkipped, (unsigned long)info.wdDropped);
+        y = drawLine(t, y, Theme::CYAN, "WIGLE:", "%s", info.wdFile && *info.wdFile ? info.wdFile : "no file yet");
+    }
+#endif
+#if SQUACH_MESH
+    // Unlike BLE SEEN's old "advertising" flag, this is read from NimBLE's
+    // actual controller state. Failed starts can leave the UI looking like
+    // SEND worked; show the failure count and last failure stage on-device.
+    {
+        const Mesh::TxStatus tx = Mesh::txStatus();
+        y = drawLine(t, y, tx.advertising ? Theme::GREEN : Theme::AMBER,
+                     "MESH TX:", "%s %s, ok %lu / fail %lu (%u)",
+                     tx.advertising ? "ON" : "OFF",
+                     tx.sendingFrame ? "FRAME" : "IDLE",
+                     (unsigned long)tx.starts, (unsigned long)tx.failures,
+                     (unsigned)tx.lastFailure);
+        const MeshTalk::RxDiagnostics rx = MeshTalk::rxDiagnostics();
+        y = drawLine(t, y, Theme::CYAN, "MESH RX:", "%lu queued / %lu heard, full %lu",
+                     (unsigned long)rx.queued, (unsigned long)rx.seen,
+                     (unsigned long)rx.queueFull);
+        y = drawLine(t, y, Theme::CYAN, "INV RX:", "parts %lu mask %x/15 done %lu",
+                     (unsigned long)rx.inviteParts, (unsigned)rx.mask,
+                     (unsigned long)rx.inviteComplete);
+        y = drawLine(t, y, rx.inviteRejected ? Theme::AMBER : Theme::CYAN,
+                     "INV ERR:", "%lu rejected (%u), replay %lu",
+                     (unsigned long)rx.inviteRejected,
+                     (unsigned)rx.lastReject,
+                     (unsigned long)rx.replayRejected);
+    }
+#endif
     // Where the heap went on the way up, in KB: free/largest with WiFi up,
     // with Bluetooth up, and at the first pass of loop().
     {

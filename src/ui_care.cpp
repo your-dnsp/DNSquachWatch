@@ -78,7 +78,7 @@ static void prose(TFT_eSPI& t,const char* s,int bottom=88){
  Lang::draw(t,chunk,12,58,t.width()-24,t.height()-58-bottom,Theme::WHITE,false);
 }
 static void footer(TFT_eSPI& t,const char* right){int w=t.width(),h=t.height();Lang::button(t,8,h-40,w/2-12,34,current==Page::BACKUP&&working()?"BACK / CANCEL":"BACK");Lang::button(t,w/2+4,h-40,w/2-12,34,right);}
-static const char* demos[]={
+static const char* const demos[]={
  "SIMULATED: Possible Flock clue. LOW confidence. A shared manufacturer prefix does not confirm a camera. This sample is never logged or counted.",
  "SIMULATED: Why this matched. Example name + manufacturer clues agree. MEDIUM means stronger evidence, not proof. Confirm visually before reporting.",
  "SIMULATED: Drone / FPV. Remote ID can describe a broadcasting aircraft. An ELRS setup name only suggests equipment; it does not prove flight.",

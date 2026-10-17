@@ -42,6 +42,14 @@ struct SimDetectionProfile {
 // so those get a locally-administered prefix rather than one that would claim
 // to be a real registration.
 inline const SimDetectionProfile kSimProfiles[] = {
+    { DetectionType::FLOCK, {0x00,0x00,0x00}, "Flock-Cam", "Flock Camera net.", -55, false, "Flock hotspot" },
+    { DetectionType::AXON, {0x00,0x00,0x00}, "Axon-BWC", "BWCDEVICE", -55, false, "Axon payload tag" },
+    { DetectionType::AXON, {0x00,0x00,0x00}, "BodyWorn", "BodyWorn", -55, false, "BodyWorn remote" },
+    { DetectionType::AXON, {0x00,0x1D,0x96}, "WatchGuard", "", -55, false, "WatchGuard video" },
+    { DetectionType::AXON, {0x00,0x23,0xBD}, "DigitalAlly", "", -55, false, "Digital Ally" },
+    { DetectionType::CAMERA, {0x08,0x00,0x23}, "i-PRO", "", -55, false, "i-PRO camera" },
+    { DetectionType::META, {0x00,0x00,0x00}, "Vuzix", "Vuzix", -55, false, "Vuzix glasses" },
+
     { DetectionType::AXON, {2,3,0x4d}, "Axon-equip", "", -60, false, "Experimental Axon equipment" },
     { DetectionType::FLOCK, {2,9,0xc8}, "Flock-acc?", "", -60, false, "Experimental accessory" },
     { DetectionType::FLOCK, {2,1,2}, "Flock-name?", "", -60, true, "Flock naming pattern" },
@@ -106,8 +114,8 @@ inline const SimDetectionProfile kSimProfiles[] = {
     { DetectionType::EVILTWIN,    {0x02, 0xE7, 0x11}, "EvilTwin",    "HomeNet-5G",     -52, true,  "Evil twin AP" },
     // Six hex of the proximity UUID, then major.minor -- as the detector does.
     { DetectionType::IBEACON,     {0x02, 0x00, 0x4C}, "iBeacon",     "B9407F 10.42",   -59, false, "iBeacon" },
-    // HACKER -- Flipper Devices' own block, and the name a Flipper advertises
-    { DetectionType::HACKER,      {0x0C, 0xFA, 0x22}, "Flipper",     "Flipper Ozzyx",  -49, false, "Flipper Zero" },
+    // HACKER -- a Flipper-advertised address and name; no OUI-only match
+    { DetectionType::HACKER,      {0x80, 0xE1, 0x26}, "Flipper",     "Flipper Ozzyx",  -49, false, "Flipper Zero" },
     { DetectionType::HACKER,      {0x02, 0x50, 0x57}, "Pwnagotchi",  "rikki",          -62, true,  "Pwnagotchi" },
     { DetectionType::HACKER,      {0x06, 0x50, 0x49}, "Pineapple",   "",               -60, true,  "WiFi Pineapple" },
     { DetectionType::HACKER,      {0x06, 0xDE, 0xA7}, "Deauther",    "",               -57, true,  "ESP deauther" },

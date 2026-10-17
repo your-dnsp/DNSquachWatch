@@ -23,7 +23,7 @@ void endFrame() {
 }
 
 void print() {
-    static const char* NAMES[N] = { "pre", "bg", "squachy", "idle", "headline", "chrome", "post", "push", "x1", "x2", "x3", "x4", "x5", "x6" };
+    static const char* const NAMES[N] = { "pre", "bg", "squachy", "idle", "headline", "chrome", "post", "push", "x1", "x2", "x3", "x4", "x5", "x6" };
     Serial.print("[frame]");
     for (uint8_t i = 0; i < N; i++)
         if (i < X1 || s_avg[i])

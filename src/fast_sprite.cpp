@@ -222,7 +222,7 @@ int FastSprite::selfCheck(Print& out) {
                 const uint32_t fg = 0xFFE0, bgc = withBg ? 0x001F : 0xFFE0;
                 fillRect(-1000, -1000, 3000, 3000, 0x0000);
                 pattern([&](uint32_t i){ baseChar((int32_t)(mix(i) % (W + 20)) - 10, (int32_t)(mix(i + 1) % (H + 20)) - 10, (uint16_t)(i % 255), fg, bgc, size); });
-                static const char* NAMES[4] = { "char s1", "char s1+bg", "char s2", "char s2+bg" };
+                static const char* const NAMES[4] = { "char s1", "char s1+bg", "char s2", "char s2+bg" };
                 cases[n].what = NAMES[(size - 1) * 2 + withBg]; cases[n].a = checksum();
                 fillRect(-1000, -1000, 3000, 3000, 0x0000);
                 pattern([&](uint32_t i){ drawChar((int32_t)(mix(i) % (W + 20)) - 10, (int32_t)(mix(i + 1) % (H + 20)) - 10, (uint16_t)(i % 255), fg, bgc, size); });

@@ -476,6 +476,20 @@ static void drawPinPad(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bo
     }
 }
 
+// A key from a real keyboard (the T-Deck's), on whichever board is up: the
+// same dispatch as a QWERTY release. The boards are upper-case, so letters
+// go up; the name board takes letters and space only, the PIN pad digits
+// only, and the message board whatever it draws.
+void uiPhoneKey(char c) {
+    if (c == '\r') c = Qwerty::OK;
+    if (c >= 'a' && c <= 'z') c = (char)(c - 'a' + 'A');
+    if      (c == Qwerty::BKSP) deleteLast();
+    else if (c == Qwerty::OK)   saveAndClose();
+    else if (pin())             { if (c >= '0' && c <= '9') appendChar(c); }
+    else if (msg())             { if (c >= ' ' && c < 0x7F) appendChar(c); }
+    else                        { if ((c >= 'A' && c <= 'Z') || c == ' ') appendChar(c); }
+}
+
 void uiPhoneTouch(int x, int y, uint32_t now, PhoneTouch phase) {
     if (phase == PhoneTouch::DOWN) s_ringDismissed = true;
     if (pin()) { if (phase == PhoneTouch::DOWN) pinTouch(x, y, now); return; }

@@ -29,7 +29,9 @@ void geom(TFT_eSPI& t, int& top, int& rowH) {
     // Eight rows at that height run under BACK on a landscape panel, so there
     // they share what room there is instead.
     const int room = t.height() - Theme::pinnedBackH(t.width()) - 2 - top;
-    if (ROW_N * rowH > room && !Theme::compact()) rowH = room / ROW_N;
+    // ...unless FONTS > MENUS made the letters too tall to share it: then
+    // they keep their height and the list scrolls, as on a compact screen.
+    if (ROW_N * rowH > room && !Theme::compact() && room / ROW_N >= t.fontHeight() + 4) rowH = room / ROW_N;
 }
 
 // On a compact screen the rows keep their height and the list scrolls
@@ -48,7 +50,10 @@ void row(TFT_eSPI& t, int w, int y, int hgt, const char* label,
     // the labels sat straight on the dimmed backdrop, and the synthwave sun
     // came through the gaps in every word.
     Theme::drawListRowPanel(t, w, y, hgt);
-    t.setTextSize(Theme::uiMenuTextSize(t));
+    // FONTS > MENUS: a row the bigger size would run off the screen steps
+    // back down, label and value together.
+    Theme::menuFontOn(t, false);
+    while (t.textWidth(label) + (value ? t.textWidth(value) + 8 : 0) > w - 16 && Theme::menuFontSmaller(t)) {}
     t.setTextWrap(false);
     t.setTextColor(Theme::VAPOR_PINK, Theme::BG);
     // On the large panels the taller heading leaves 31-row rows in landscape,
@@ -58,11 +63,13 @@ void row(TFT_eSPI& t, int w, int y, int hgt, const char* label,
                                   : y + (hgt - t.fontHeight()) / 2;
     t.setCursor(8, ty);
     t.print(label);
-    if (!value) return;
-    t.setTextColor(valueCol, Theme::BG);
-    const int vw = t.textWidth(value);
-    t.setCursor(w - 8 - vw, ty);
-    t.print(value);
+    if (value) {
+        t.setTextColor(valueCol, Theme::BG);
+        const int vw = t.textWidth(value);
+        t.setCursor(w - 8 - vw, ty);
+        t.print(value);
+    }
+    t.setTextFont(1);
 }
 
 } // namespace
@@ -118,7 +125,7 @@ void uiMeshMenuTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng, bool 
     row(t, w, rowY(3), rowH, "HEADS-UP", Settings::meshHeadsUp() ? "ON" : "OFF",
         Settings::meshHeadsUp() && MeshTalk::ready() ? Theme::GREEN : Theme::W95_SHADOW);
     row(t, w, rowY(4), rowH, "CROWD", Settings::meshCrowdLabel(),
-        Settings::meshCrowd() > 1 ? Theme::GREEN : Theme::W95_SHADOW);
+        Settings::meshCrowd() > 1 ? Theme::GREEN : Settings::meshCrowd() == 0 ? Theme::AMBER : Theme::W95_SHADOW);
     // Everybody who has ever held the phrase, here or not.
     char sq[12];
     const uint8_t members = MeshTalk::rosterCount();

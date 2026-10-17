@@ -16,6 +16,13 @@ static portMUX_TYPE s_sdMux = portMUX_INITIALIZER_UNLOCKED;
 #include "dex.h"
 #include "regulars.h"
 #include "clock.h"
+#include "sound.h"
+#if SQW_SPEAKER
+void bootStage(uint8_t s);   // main.cpp: the power diary's steps through setup()
+#define BOOT_STAGE(n) bootStage(n)
+#else
+#define BOOT_STAGE(n) ((void)0)
+#endif
 #include <Arduino.h>
 #include <WiFi.h>
 #include <esp_wifi.h>
@@ -211,6 +218,33 @@ void setScanInterval(uint16_t ms, uint8_t w) {
 static volatile uint8_t s_scanPin = 0;   // 0 auto, 1 active, 2 passive -- the bench's say
 void setScanPin(uint8_t pin) { s_scanPin = pin > 2 ? 0 : pin; }
 
+#if defined(CYD_GPS)
+// Wardriving's name and company ID from an advert's AD structures (length,
+// type, data): the complete name (0x09), else the short one (0x08), and the
+// first two bytes of the manufacturer data (0xFF). No allocation.
+static void wardriveAdFields(const uint8_t* p, size_t n, char* name /* [33] */, bool& hasId, uint16_t& cid) {
+    name[0] = 0;
+    bool full = false;
+    for (size_t i = 0; i + 1 < n; ) {
+        const uint8_t len = p[i];
+        if (!len || i + 1 + len > n) break;
+        const uint8_t type = p[i + 1];
+        const uint8_t* d = p + i + 2;
+        const size_t dn = len - 1;
+        if ((type == 0x09 || (type == 0x08 && !full && !name[0])) && dn) {
+            const size_t k = dn < 32 ? dn : 32;
+            memcpy(name, d, k);
+            name[k] = 0;
+            if (type == 0x09) full = true;
+        } else if (type == 0xFF && dn >= 2 && !hasId) {
+            hasId = true;
+            cid = (uint16_t)(d[0] | (d[1] << 8));
+        }
+        i += 1 + len;
+    }
+}
+#endif
+
 class BleScanCallbacks : public NimBLEScanCallbacks {
     // First sight of every advert, before any reply. The counts live here
     // and not in onResult: in an active scan a device that never answers
@@ -389,6 +423,33 @@ class BleScanCallbacks : public NimBLEScanCallbacks {
             det.type = DetectionType::AIRTAG;
         }
 
+        // Axon's body-cam tag, "BWCDEVICE": the strongest Axon signature there
+        // is, and independent of the address, which Axon randomises.
+        const uint8_t* raw = adv->getPayload().data();
+        const uint8_t rawLen = (uint8_t)adv->getPayload().size();
+        if (det.type == DetectionType::UNKNOWN && isAxonBwcPayload(raw, rawLen)) {
+            det.type = DetectionType::AXON;
+            label    = "Axon-BWC";
+            det.evidence = MatchEvidence::BLE_PAYLOAD;
+        }
+        // Google's Find Hub trackers (Moto Tag, Chipolo Point, Pebblebee,
+        // eufy and the rest): FMDN's own frame types, which an Eddystone shop
+        // beacon on the same UUID never sends.
+        if (det.type == DetectionType::UNKNOWN && isFmdnPayload(raw, rawLen)) {
+            det.type = DetectionType::GOOGLE_TAG;
+            label    = "FindHub";
+            det.evidence = MatchEvidence::BLE_SERVICE; det.signature = 0xFEAA;
+        }
+        // A known UUID carried as service data rather than in the UUID list --
+        // how most trackers (Tile, the DULT standard) actually advertise.
+        if (det.type == DetectionType::UNKNOWN) {
+            if (const uint16_t u = serviceDataUuid(raw, rawLen)) {
+                det.type = lookupUuid(u);
+                label    = uuidName(u);
+                det.evidence = MatchEvidence::BLE_SERVICE; det.signature = u;
+            }
+        }
+
         // Service UUIDs
         if (det.type == DetectionType::UNKNOWN && adv->haveServiceUUID()) {
             for (int j = 0; j < adv->getServiceUUIDCount(); j++) {
@@ -398,18 +459,13 @@ class BleScanCallbacks : public NimBLEScanCallbacks {
                 // NimBLE-Arduino versions). The equals() method is
                 // a stable API and compares the logical 16-bit value.
                 if (u.bitSize() == 16) {
-                    static const uint16_t kKnown16[] = {
-                        0x1101,  // SPP — skimmer
-                        0xFEED,  // Tile tracker
-                        0xFEEC,  // Tile tracker (second SIG-assigned UUID)
-                        0xFD5F,  // Ray-Ban Meta glasses
-                        0x3100, 0x3200, 0x3300, 0x3400, 0x3500,  // Raven
-                        0xFFFA,  // OpenDroneID
-                        0xFD5A,  // Samsung SmartTag
-                        0xFEAA,  // Google Find My Device Network (Eddystone)
-                        0x3081, 0x3082, 0x3083,  // Flipper Zero, one per case colour
-                    };
-                    for (uint16_t k : kKnown16) {
+                    // The signature table itself, not a hand-kept copy of it
+                    // (the copy had already drifted once). 0xFEAA is the one
+                    // exception: as a listed UUID it is any Eddystone beacon,
+                    // so Find Hub is matched on its frame type above instead.
+                    for (uint16_t i = 0; i < kUuidCount; i++) {
+                        const uint16_t k = kUuidTable[i].uuid;
+                        if (k == 0xFEAA) continue;
                         if (u.equals(NimBLEUUID((uint16_t)k))) {
                             det.type = lookupUuid(k);
                             label    = uuidName(k);
@@ -439,14 +495,13 @@ class BleScanCallbacks : public NimBLEScanCallbacks {
         det.conf = confidenceFor(det.type);
         // ...except HACKER, which is the one type deliberately holding
         // signatures of very different strength. Reaching here on anything
-        // but the name means one of the exact ones matched: a service UUID
-        // that exists on no other product, or Flipper's own SIG company ID.
+        // but the name means an exact Flipper service UUID matched.
         // Arriving on the name alone means somebody's BLE device is called
         // "Flipper", which is a string, not a signature.
         if (det.type == DetectionType::HACKER) {
             det.conf = matchedByName ? Confidence::MED_CONF : Confidence::HIGH_CONF;
         }
-        if (researchMatch.type != DetectionType::UNKNOWN) {
+        if (researchMatch.type != DetectionType::UNKNOWN && det.evidence != MatchEvidence::BLE_PAYLOAD) {
             det.type = researchMatch.type; det.conf = researchMatch.conf; label = researchMatch.label;
             det.evidence = MatchEvidence::RESEARCH_COMPOSITE; det.signature = researchMatch.rule; det.evidenceBits = researchMatch.bits;
         }
@@ -480,14 +535,18 @@ class BleScanCallbacks : public NimBLEScanCallbacks {
         } else if (det.type == DetectionType::SAMSUNG_TAG) {
             det.vendor = "Samsung";
         } else if (det.type == DetectionType::GOOGLE_TAG) {
-            det.vendor = "Google";
+            // Find Hub, DULT or Chipolo: whichever row matched.
+            det.vendor = label ? label : "Google";
         } else if (det.type == DetectionType::TILE) {
             det.vendor = "Tile";
+        } else if (det.type == DetectionType::AXON) {
+            // The tag, a service UUID, the company ID, or a name.
+            det.vendor = label ? label : (strcasestr(det.name, "BodyWorn") ? "BodyWorn" : "Axon");
         } else if (det.type == DetectionType::IBEACON) {
             det.vendor = "iBeacon";
         } else if (det.type == DetectionType::HACKER) {
             // Everything that reaches HACKER over BLE is a Flipper: the
-            // three service UUIDs, the company ID and the name prefix are
+            // three service UUIDs and the name prefix are
             // all theirs. The Pineapple and the deauther arrive over WiFi
             // and are labelled in processWiFiQ().
             det.vendor = "Flipper";
@@ -557,6 +616,7 @@ bool DetectionEngine::init() {
     serialFlush();
     Serial.printf("[boot] heap before WiFi: %lu free, %lu largest\n", (unsigned long)heap_caps_get_free_size(MALLOC_CAP_8BIT), (unsigned long)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
     WiFi.mode(WIFI_STA);
+    BOOT_STAGE(11);
     WiFi.disconnect();
     delay(50);
     // The driver again, on a sniffer's budget. The Arduino core starts WiFi
@@ -592,6 +652,7 @@ bool DetectionEngine::init() {
             if (sta) esp_netif_attach_wifi_station(sta);
             esp_wifi_set_mode(WIFI_MODE_STA);
             esp_wifi_start();
+            BOOT_STAGE(13);
         } else {
             Serial.printf("[boot] slim WiFi init failed (%d), back to the core's\n", (int)rc);
             WiFi.mode(WIFI_OFF);
@@ -600,6 +661,7 @@ bool DetectionEngine::init() {
     }
     Serial.printf("[boot] heap with WiFi started: %lu free, %lu largest\n", (unsigned long)heap_caps_get_free_size(MALLOC_CAP_8BIT), (unsigned long)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
     esp_wifi_set_promiscuous(true);
+    BOOT_STAGE(14);
 #if SQW_WIFI_5G
     {
         // Both bands, then ask the radio which 5 GHz channels it will tune
@@ -700,7 +762,7 @@ bool DetectionEngine::init() {
             } else {
                 g_engine->postWiFi(frame + 16, pkt->rx_ctrl.rssi, pkt->rx_ctrl.channel, ssid, enc, false, false, AddressRole::BSSID);
             }
-        } else if (type == 0 && subtype == 12) {
+        } else if (type == 0 && (subtype == 12 || subtype == 10)) {
             // Copy only fixed-header evidence here. Address 2 is the claimed
             // transmitter, not proof of physical identity: management-frame
             // addresses can be spoofed. One frame is ordinary WiFi traffic;
@@ -722,9 +784,11 @@ bool DetectionEngine::init() {
     s_bootHeap.wifiLargest = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
     Serial.printf("[boot] heap with WiFi up: %lu free, %lu largest\n",
                   (unsigned long)s_bootHeap.wifiFree, (unsigned long)s_bootHeap.wifiLargest);
+    BOOT_STAGE(5);
     Serial.println("[boot] starting Bluetooth");
     serialFlush();
     NimBLEDevice::init("");
+    BOOT_STAGE(6);
     NimBLEScan* scan = NimBLEDevice::getScan();
     // Passive to start, whatever the room: the first second of an active
     // scan in a crowded building is what killed a user's board. Active
@@ -851,6 +915,10 @@ Stats stats() {
 #if SQUACH_MESH
 #include "meshmsg.h"
 #include "meshtalk.h"
+#include "mesh_airtime.h"
+#include "mesh_tx_policy.h"
+#include "mesh_appearance_policy.h"
+#include "mesh_primary_transport.h"
 
 // SquachMesh's radio half: our advert, our scan response and our own
 // address. Everything that does not touch NimBLE -- who is visiting, the
@@ -863,9 +931,33 @@ static uint32_t        s_advAt      = 0;
 // Which outgoing message the scan response carries right now; 0 is none.
 static uint32_t        s_srGen      = 0;
 static bool            s_macSet     = false;
-static const uint16_t  ADV_MS       = 1500;
+static uint32_t        s_txStarts   = 0;
+static uint32_t        s_txFailures = 0;
+static uint32_t        s_txLastTry  = 0;
+static uint8_t         s_txLastError = 0;
+static bool            s_txWasSending = false;
 
-bool advertising() { return s_advOn; }
+// The old s_advOn flag meant "we requested advertising" and was set even
+// when NimBLE failed to start. Never use it to claim that RF is enabled.
+bool advertising() {
+    NimBLEAdvertising* adv = NimBLEDevice::getAdvertising();
+    return adv && adv->isAdvertising();
+}
+TxStatus txStatus() {
+    const bool sending = MeshTalk::sending(millis());
+    return { advertising(), sending, s_txStarts, s_txFailures, s_txLastError };
+}
+static void txFailure(uint8_t code, const char* stage) {
+    s_txFailures++;
+    s_txLastError = code;
+    s_advOn = false;
+    // Frequent failures must not themselves become a memory/logging flood.
+    if (s_txFailures <= 8 || (s_txFailures % 50) == 0)
+        Serial.printf("[mesh-tx] FAILED %s (%u), count=%lu, heap=%lu, largest=%lu\n",
+                      stage, (unsigned)code, (unsigned long)s_txFailures,
+                      (unsigned long)ESP.getFreeHeap(),
+                      (unsigned long)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+}
 
 // The payload we last handed the stack, so an unchanged one is never handed
 // over twice.
@@ -875,7 +967,11 @@ static size_t  s_lastAdvLen = 0;
 static void setAdvertising(bool on, uint32_t now) {
     NimBLEAdvertising* adv = NimBLEDevice::getAdvertising();
     if (!adv) return;
-    if (!on) { if (s_advOn) adv->stop(); s_advOn = false; return; }
+    if (!on) {
+        if (adv->isAdvertising() && !adv->stop()) txFailure(1, "stop");
+        s_advOn = adv->isAdvertising();
+        return;
+    }
 
     uint8_t buf[SquachMesh::LEN_MAX];
     const size_t n = buildSelf(buf);
@@ -893,61 +989,83 @@ static void setAdvertising(bool on, uint32_t now) {
     // propagate without a reboot. Comparing gets that for one memcmp and
     // no allocation at all on the pass where nothing changed, which is
     // every pass but the rare one.
-    // The scan response counts as part of "the advert" here: a message
-    // starting or expiring is a change, and nothing else is.
+    // A frame, presence slot or end-of-message changes the primary payload.
     size_t   outLen = 0;
     uint32_t outGen = 0;
     const uint8_t* out = MeshTalk::outgoing(now, outLen, outGen);
-    const bool same = (n == s_lastAdvLen) && (memcmp(buf, s_lastAdv, n) == 0) &&
+    const bool same = !MeshAppearancePolicy::changed(buf, n, s_lastAdv, s_lastAdvLen) &&
                       outGen == s_srGen;
     if (same && s_advOn) return;
 
+    // Never put both identity and message in one 31-byte legacy ADV.
+    // The existing frame (max 27 B) plus manufacturer ID (2 B) and
+    // AD header (2 B) fits a PRIMARY non-scannable advertisement.
+    const uint8_t* payload = out ? out : buf;
+    const size_t payloadLen = out ? outLen : n;
+    if ((out && !MeshPrimaryTransport::fitsPrimary(outLen)) ||
+        (!out && (n < SquachMesh::LEN_INDEXED || n > SquachMesh::LEN_MAX))) {
+        txFailure(6, "primary-size");
+        return;
+    }
     std::string md;
-    md.reserve(n + 2);
+    md.reserve(payloadLen + 2);
     md.push_back((char)(SquachMesh::COMPANY_ID & 0xFF));
     md.push_back((char)(SquachMesh::COMPANY_ID >> 8));
-    md.append((const char*)buf, n);
+    md.append((const char*)payload, payloadLen);
 
     NimBLEAdvertisementData d;
-    d.setManufacturerData(md);
-    if (s_advOn) adv->stop();
-    adv->setAdvertisementData(d);
-    // A message goes in the scan response, and turning the scan response ON
-    // is also what makes the advert scannable at all: setScanResponseData()
-    // alone stores the bytes and leaves the advert non-scannable, so nobody
-    // would ever ask for them. Off again the moment the message expires.
-    if (out) {
-        std::string sm;
-        sm.reserve(outLen + 2);
-        sm.push_back((char)(SquachMesh::COMPANY_ID & 0xFF));
-        sm.push_back((char)(SquachMesh::COMPANY_ID >> 8));
-        sm.append((const char*)out, outLen);
-        NimBLEAdvertisementData r;
-        r.setManufacturerData(sm);
-        adv->setScanResponseData(r);
-        adv->enableScanResponse(true);
-        // Scannable: a peer's scan request is how the message travels.
-        adv->setDiscoverableMode(BLE_GAP_DISC_MODE_GEN);
-    } else {
-        // 2.x pushes scan-response data to the controller the moment it is
-        // set and enableScanResponse(false) only clears a flag, so the last
-        // message would go on being served to anyone who asked. So the
-        // advert goes non-scannable (non-connectable and non-discoverable
-        // is ADV_NONCONN_IND): the controller answers no scan request in
-        // that mode, so the stale reply is never sent, and no scanner pays
-        // for a request that has nothing behind it. The next message sets
-        // fresh reply data before the advert turns scannable again. (Not
-        // cleared with empty data: the library takes &payload[0] of it.)
-        adv->enableScanResponse(false);
-        adv->setDiscoverableMode(BLE_GAP_DISC_MODE_NON);
+    if (!d.setManufacturerData(md)) {
+        txFailure(2, "manufacturer-size");
+        return;
     }
-    // Never connectable. Update mode's server shares this advertiser, and a
-    // stack with the peripheral role compiled in defaults to connectable.
-    adv->setConnectableMode(BLE_GAP_CONN_MODE_NON);
-    adv->setMinInterval((uint16_t)(ADV_MS * 8 / 5));
-    adv->setMaxInterval((uint16_t)(ADV_MS * 8 / 5 + 16));
-    adv->start();
-
+    // If the library fails any stage, keep state uncommitted and retry.
+    if (adv->isAdvertising() && !adv->stop()) {
+        txFailure(1, "stop");
+        return;
+    }
+    // IMPORTANT with NimBLE-Arduino 2.5.1:
+    // setDiscoverableMode() adds FLAGS to the stored advertisement, and
+    // enableScanResponse() clears its cached-data flag. If either runs
+    // after setAdvertisementData(), start() may re-submit 31 bytes PLUS
+    // 3 bytes of FLAGS and reject the entire primary message. Configure
+    // all modes first; publish the exact complete manufacturer AD *last*.
+    adv->enableScanResponse(false);
+    if (!adv->setDiscoverableMode(BLE_GAP_DISC_MODE_NON)) {
+        txFailure(4, "non-discoverable-mode");
+        return;
+    }
+    // Never connectable. The BLE OTA update server shares this advertiser;
+    // its ownership logic above remains the same.
+    if (!adv->setConnectableMode(BLE_GAP_CONN_MODE_NON)) {
+        txFailure(4, "non-connectable-mode");
+        return;
+    }
+    if (!adv->setAdvertisementData(d)) {
+        txFailure(2, "advert-data");
+        return;
+    }
+    // Message frames live in legacy scan responses. Formerly the 1.5s
+    // advertising interval was almost as long as each 1.6s frame dwell:
+    // every part could miss its only beacon after a stop/restart, leaving
+    // the invitee with a code but the inviter without one. Increase the
+    // beacon cadence *only while a frame is present*. Idle stays 1.5s.
+    // Presence slots during an outgoing message must also use 400ms
+    // beacons; the 1.6s slot would otherwise provide only one chance.
+    const uint16_t advMs = MeshTalk::sending(now) ? MeshAirtime::MESSAGE_ADVERTISING_MS
+                                                  : MeshAirtime::IDLE_ADVERTISING_MS;
+    adv->setMinInterval((uint16_t)(advMs * 8 / 5));
+    adv->setMaxInterval((uint16_t)(advMs * 8 / 5 + 16));
+    if (!adv->start() || !adv->isAdvertising()) {
+        txFailure(5, "start");
+        return;
+    }
+    s_txStarts++;
+    if (out && !s_txWasSending) {
+        Serial.printf("[mesh-tx] controller advertising PRIMARY MESSAGE/INVITE (%u-byte frame), heap=%lu, largest=%lu\n",
+                      (unsigned)outLen, (unsigned long)ESP.getFreeHeap(),
+                      (unsigned long)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+    }
+    s_txWasSending = MeshTalk::sending(now);
     memcpy(s_lastAdv, buf, n);
     s_lastAdvLen = n;
     s_advOn = true;
@@ -977,11 +1095,36 @@ void radioTick(uint32_t now) {
     size_t   ol = 0;
     uint32_t og = 0;
     MeshTalk::outgoing(now, ol, og);
-    if (want && (!s_advOn || (now - s_advAt) > 10000 || og != s_srGen)) {
+    const bool live = advertising();
+
+    // An outfit, shades or name can change while both SquachWatches are
+    // already in range. Previously the radio did not *look* for that change
+    // until the 10-second housekeeping pass. The receiver displays the new
+    // outfit as soon as its next advert arrives; comparing the compact
+    // eight/twenty-byte payload here lets it reach them on the next loop.
+    //
+    // This is strictly a read: it does not allocate, touch NVS, or stop
+    // NimBLE unless the appearance actually differs. Keep the existing
+    // periodic check and transmit-consent gate as well.
+    bool appearanceChanged = false;
+    if (want && live && s_advOn) {
+        uint8_t current[SquachMesh::LEN_MAX];
+        const size_t n = buildSelf(current);
+        appearanceChanged = MeshAppearancePolicy::changed(
+            current, n, s_lastAdv, s_lastAdvLen);
+    }
+    const bool needUpdate = !s_advOn || !live || appearanceChanged ||
+                            (now - s_advAt) > 10000 || og != s_srGen;
+    // A message can be fully queued while the controller refuses the start;
+    // retry with a short backoff, including a single-part message whose
+    // outgoing generation would otherwise remain unchanged for 30 seconds.
+    if (MeshTxPolicy::attempt(want, needUpdate, now, s_txLastTry)) {
+        s_txLastTry = now;
         setAdvertising(true, now);
         s_advAt = now;
     }
-    if (!want && s_advOn) setAdvertising(false, now);
+    if (!want && live) setAdvertising(false, now);
+    if (!want) s_txWasSending = false;
 }
 
 void stopAdvertisingForUpdate() { setAdvertising(false, 0); }

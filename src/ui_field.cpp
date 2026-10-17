@@ -64,10 +64,10 @@ static uint32_t random32(){
 }
 bool keepsAwake(){return page==SCREEN_LIGHT&&lightActive;}
 
-static const char* lightNames[]={"WHITE LIGHT","AMBER LIGHT","RAINBOW LIGHT","CAUTION PULSE","SOS MORSE","CUSTOM MORSE"};
+static const char* const lightNames[]={"WHITE LIGHT","AMBER LIGHT","RAINBOW LIGHT","CAUTION PULSE","SOS MORSE","CUSTOM MORSE"};
 static const char* morseFor(char c){
-    static const char* letters[]={".-","-...","-.-.","-..",".","..-.","--.","....","..",".---","-.-",".-..","--","-.","---",".--.","--.-",".-.","...","-","..-","...-",".--","-..-","-.--","--.."};
-    static const char* digits[]={"-----",".----","..---","...--","....-",".....","-....","--...","---..","----."};
+    static const char* const letters[]={".-","-...","-.-.","-..",".","..-.","--.","....","..",".---","-.-",".-..","--","-.","---",".--.","--.-",".-.","...","-","..-","...-",".--","-..-","-.--","--.."};
+    static const char* const digits[]={"-----",".----","..---","...--","....-",".....","-....","--...","---..","----."};
     if(c>='A'&&c<='Z')return letters[c-'A'];if(c>='0'&&c<='9')return digits[c-'0'];return "";
 }
 static bool morseOn(uint32_t elapsed){

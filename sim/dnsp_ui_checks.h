@@ -1,3 +1,4 @@
+#include "ui_labels.h"
 // Opt-in desktop integration checks against the real firmware setup()/loop().
 #pragma once
 #include "location_label.h"
@@ -60,6 +61,65 @@ static void testDetection(DetectionType type,unsigned id) {
     d.active=true;d.hits=1;d.firstSeen=d.lastSeen=millis();engine.postBle(d);
 }
 static int runDnspUiChecks() {
+    if(getenv("DNSP_UPSTREAM_138_TEST")) {
+      suite("Upstream v1.38 fonts and clock integration");
+      Settings::markTimeZoneChosen();testStep(8000);state=AppState::SETTINGS;
+      const SettingsRow rows[]={SettingsRow::FONT_MENUS,SettingsRow::FONT_BUTTONS,SettingsRow::FONT_BUBBLES,SettingsRow::FONT_PETS,SettingsRow::FONT_XP};
+      const Settings::FontKind kinds[]={Settings::FontKind::MENUS,Settings::FontKind::BUTTONS,Settings::FontKind::BUBBLES,Settings::FontKind::PETS,Settings::FontKind::XP_TILES};
+      for(bool portrait:{false,true}) {
+        TFT_eSPI panel(portrait?240:320,portrait?320:240);Theme::setLarge(false);Theme::setCompact(false);
+        Field::config.large=false;Field::config.language=0;
+        for(unsigned k=0;k<(unsigned)Settings::FontKind::COUNT;++k){Settings::setFontStep((Settings::FontKind)k,2);Settings::setFontFace((Settings::FontKind)k,0);}
+        for(unsigned k=0;k<5;++k) {
+          uiSettingsInit(panel);uiSettingsOpenPage(SettingsPage::FONTS);
+          int rowY=-1;
+          for(int scroll=0;scroll<12&&rowY<0;++scroll){uiSettingsTick(panel,millis(),engine);
+            for(int y=34;y<panel.height()-30;++y)if(uiSettingsHitTest(panel,20,y,panel.width(),panel.height())==rows[k]){rowY=y+8;break;}
+            if(rowY<0)uiSettingsScroll(1);
+          }
+          ck("font slider reachable in both orientations",rowY>=0);
+          if(rowY>=0){
+            for(int n=0;n<7;++n)uiSettingsFontTap(panel,panel.width()-25,rowY,panel.width(),panel.height());
+            int8_t lo,hi;Theme::fontRange(panel,kinds[k],lo,hi);
+            ck("font plus clamps to supported panel range",Theme::fontDelta(kinds[k])==hi);
+            if(Theme::fontHasFace(kinds[k])){const bool before=Theme::fontSmooth(kinds[k]);uiSettingsFontTap(panel,12,rowY,panel.width(),panel.height());ck("font label switches pixel/smooth",Theme::fontSmooth(kinds[k])!=before);}
+            uiSettingsTick(panel,millis(),engine);
+          }
+        }
+        uiSettingsOpenPage(SettingsPage::FONTS);ck("Fonts Back returns to Appearance",uiSettingsParentPage()==SettingsPage::APPEARANCE);
+
+        const bool before=Settings::clock24Hour();Settings::toggleClock24Hour();ck("clock format toggles",Settings::clock24Hour()!=before);
+        Settings::load();ck("clock format survives preference reload",Settings::clock24Hour()!=before);
+        uiSettingsOpenPage(SettingsPage::FONTS);uiSettingsTick(panel,millis(),engine);
+        if(const char* dir=getenv("DNSP_TEST_SHOTS")){
+          std::vector<uint8_t> rgb;for(auto v:panel.pixelsRGB565()){rgb.push_back(((v>>11)&31)*255/31);rgb.push_back(((v>>5)&63)*255/63);rgb.push_back((v&31)*255/31);}
+          char path[1024];snprintf(path,sizeof path,"%s/fonts-%s.png",dir,portrait?"portrait":"landscape");ck("font controls screenshot",PngWriter::write(path,panel.width(),panel.height(),rgb.data()));
+        }
+      }
+      return report();
+    }
+    if(getenv("DNSP_UPSTREAM_137_TEST")) {
+      suite("Upstream v1.36/v1.37 pet rendering through receiver loop");
+      Settings::markTimeZoneChosen();
+      testStep(8000);state=AppState::CLEAR;
+      Settings::previewBackground(Settings::Background::SNOWFALL);
+      Squachy::unlockMeaty("desktop integration check");
+      ck("new companion unlock selects it",Squachy::meatyUnlocked() && Squachy::petChoice()==Squachy::PetId::MEATY);
+      for(int shape=0;shape<10;++shape) {
+        Pet::meatyAct(shape);int drawn=0,x=0,y=0;
+        for(int frame=0;frame<(shape==4?480:240);++frame){testStep(33);drawn+=Pet::drawnAt(x,y);if(frame==15){char name[40];snprintf(name,sizeof name,"pet-action-%d",shape);testShot(name);}}
+        ck("shape runs through both drawing bands",drawn>100);
+        char name[40];snprintf(name,sizeof name,"upstream-pet-shape-%d",shape);testShot(name);
+      }
+      Squachy::unlockPet();
+      for(int i=0;i<8 && Squachy::petChoice()!=Squachy::PetId::YETI;++i)Squachy::cyclePet();
+      ck("Yeti still selectable",Squachy::petChoice()==Squachy::PetId::YETI);
+      for(int dance=0;dance<2;++dance) {
+        Pet::yetiDance(dance);for(int frame=0;frame<240;++frame)testStep(33);
+        char name[40];snprintf(name,sizeof name,"upstream-yeti-dance-%d",dance);testShot(name);
+      }
+      return report();
+    }
     if(getenv("DNSP_UPSTREAM_UI_TEST")) {
       suite("Upstream v1.29/v1.30 integration");
       Squachy::unlockAllOutfits();
@@ -176,6 +236,34 @@ static int runDnspUiChecks() {
         char path[1024];snprintf(path,sizeof path,"%s/custom-splash.png",dir);ck("splash screenshot written",PngWriter::write(path,tft.width(),tft.height(),rgb.data()));
     }
     testStep(1);ck("normal splash exits after seven seconds",state!=AppState::BOOT&&millis()-firstVisible>=7000);
+    // Full-width footer buttons must accept center and right-side taps.
+    {
+        UserLabels::Target target{}; target.original=DetectionType::AXON;
+        const uint8_t mac[]={0x12,0x34,0x56,0x77,0x88,0x99};memcpy(target.mac,mac,6);
+        for(int width: {320,240}) {
+            const int height=width==320?240:320;
+            for(int x: {20,width/2,width-20}) {
+                LabelUI::open(target);
+                ck("cancel accepts entire drawn footer",LabelUI::tap(x,height-24,width,height,millis())==LabelUI::Outcome::CANCELLED&&!LabelUI::active());
+                UserLabels::Label stored{};ck("cancel does not save a user tag",!UserLabels::lookup(mac,stored));
+            }
+            LabelUI::open(target);LabelUI::tap(20,110,width,height,millis()); // confirmation
+            LabelUI::tap(width-20,height-24,width,height,millis()); // full-width back
+            LabelUI::tap(20,height-24,width,height,millis()); // subtag -> type
+            LabelUI::tap(20,height-24,width,height,millis()); // type -> choice
+            ck("review back works on right half",LabelUI::tap(width/2,height-24,width,height,millis())==LabelUI::Outcome::CANCELLED);
+            LabelUI::open(target);LabelUI::tap(20,146,width,height,millis()); // choose type
+            LabelUI::tap(20,50,width,height,millis()); // first type, then subtags
+            LabelUI::tap(width-20,height-24,width,height,millis());
+            LabelUI::tap(width-20,height-24,width,height,millis()); // subtag page 3
+            LabelUI::tap(20,80,width,height,millis()); // custom subtag keyboard
+            LabelUI::tap(width-20,height-24,width,height,millis()); // full-width back
+            LabelUI::tap(20,height-24,width,height,millis());
+            LabelUI::tap(20,height-24,width,height,millis());
+            ck("keyboard back works on right half",LabelUI::tap(width/2,height-24,width,height,millis())==LabelUI::Outcome::CANCELLED);
+
+        }
+    }
     ck("fresh rotation lock enabled",Settings::rotationLocked());
     Settings::toggleRotationLock(); // Remaining tests deliberately exercise rotation gestures.
 

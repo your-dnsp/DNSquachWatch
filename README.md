@@ -1,12 +1,10 @@
-# DNSquachWatch v1.8.4
+# DNSquachWatch v1.9.2
 
-DNSquachWatch is **dnsprincess's friends-and-family edition of SquachWatch** for the classic 2.8-inch ESP32 Cheap Yellow Display (CYD), based on **SquachWatch v1.35.0**. It keeps Squachy, the original visual identity, and the spirit of the project while adding device & microSD recovery, additional OUI and device research, labeling and OUI research contribution mechanisms, accessibility tools, security enhancements, additional scanning and logging capabilities, additional drone detection & support for FPV pilots, and whimsical additions.
+DNSquachWatch is **dnsprincess's friends-and-family edition of SquachWatch** for the classic 2.8-inch ESP32 Cheap Yellow Display (CYD), based on **SquachWatch v1.39.0**. It keeps Squachy, the original visual identity, and the spirit of the project while adding device & microSD recovery, additional OUI and device research, labeling and OUI research contribution mechanisms, accessibility tools, security enhancements, additional scanning and logging capabilities, additional drone detection & support for FPV pilots, and whimsical additions.
 
 **SquachWatch was created by Talking Sasquach / skizzophrenic.** This edition builds on that work; DNSP is responsible for the modifications. For the original firmware, visit [squachwatch.com](https://squachwatch.com/) or [the upstream project](https://github.com/skizzophrenic/SquachWatch-CYD).
 
 **Label devices and contribute research:** open **Research & Data > Device Research**, then hold a LOG row to label or tag an individual device. **RESEARCH REPORT...** creates **REDACTED** and **PRIVATE** copies. Keep PRIVATE locally and submit only REDACTED through [the research form](https://github.com/your-dnsp/DNSquachWatch/issues/new?template=device_research.yml). Reports start unverified; others can comment with corroborating observations. A personal label does not identify every device sharing its manufacturer prefix. See [the contribution guide](CONTRIBUTING.md).
-
-**v1.8.4 ST7789 update:** verifies SD write-response acceptance and programming completion, consumes complete card-status responses, and reports exact Test Card read-back failures on screen and serial. It retains v1.8.2's separate display/card controllers, upstream v1.35 and DNSP features. Existing `DNSP Content/v1.5` remains compatible. Test Card, backup, Safe Shutdown and reset/remount were confirmed by DNSP on the tested device/card; touch appeared normal.
 
 ## Hardware scope and WiGLE
 
@@ -18,19 +16,19 @@ The original [SquachWatch project](https://github.com/skizzophrenic/SquachWatch-
 
 | Your display | Firmware |
 |---|---|
-| ST7789, newer CYD batches | [ST7789-80MHz kit](firmware/v1.8.4/ST7789-80MHz/DNSquachWatch-v1.8.4-ST7789-80MHz.zip) |
+| ST7789, newer CYD batches | [ST7789-80MHz kit](firmware/v1.9.2/ST7789-80MHz/DNSquachWatch-v1.9.2-ST7789-80MHz.zip) |
 
 The current kit targets the **classic 2.8-inch ST7789 CYD** and starts with an **80 MHz display clock**. System settings can switch the display to 40 MHz; the flash clock stays at 40 MHz. Confirm your display controller before flashing: an ST7789 image is not suitable for an ILI9341 panel. Keep the kit's four flashing binaries together.
 
-Also obtain the [microSD content](firmware/v1.5/DNSquachWatch-v1.5-microSD-content.zip) and copy **DNSP Content/v1.5/** to the card root. **Existing v1.5 card content remains compatible with v1.8.4.** Flashing the ESP32 does not copy files to microSD. The full walkthrough, extended language content, and installation document use the supplied card files; backups require the checked installation document. Boot, scanning, essential recovery, and personal visual assets work without card content. No Wi-Fi content download is used.
+Also obtain the [microSD content](firmware/v1.5/DNSquachWatch-v1.5-microSD-content.zip) and copy **DNSP Content/v1.5/** to the card root. **Existing v1.5 card content remains compatible with v1.9.2.** Flashing the ESP32 does not copy files to microSD. The full walkthrough, extended language content, and installation document use the supplied card files; backups require the checked installation document. Boot, scanning, essential recovery, and personal visual assets work without card content. No Wi-Fi content download is used.
 
 Each firmware ZIP includes all four flashing binaries, image checksums, an optional offline installer, and recovery instructions. See [installation guide](docs/user/INSTALLATION.md) for installation and manual card copying, or [GitHub Releases](https://github.com/your-dnsp/DNSquachWatch/releases) for published kits and download checksums.
 
 ## Latest update
 
-**v1.8.4 separates display and microSD controller access.** A read-only probe passed cold boot, two resets and repeated file reads on the affected Lerdisk card after that separation. The receiver now gives microSD HSPI, keeps the display on VSPI and uses software SPI for resistive touch, preserving the existing touch sampling and calibration. Full receiver touch, radio, write, backup and shutdown behavior still needs physical verification. Upstream v1.35 features and DNSP additions remain.
+**v1.9.2 brings in applicable SquachWatch v1.36–v1.39 improvements**, including font controls, 12/24-hour clocks, companion interactions, squad refinements and more selective device signatures. It also fixes tag-editor Cancel and reduces DEAUTH false positives while preserving DNSP's per-transmitter evidence and cooldowns.
 
-The existing `/DNSP Content/v1.5/` remains compatible. ST7789 is the active receiver build; ILI9341 receiver support has been removed. Physical testing of this release remains required. See the [changelog](CHANGELOG.md).
+Keep existing **DNSP Content/v1.5** and flash normally without erasing. See the [changelog](CHANGELOG.md) for detailed history.
 
 ## What DNSquachWatch adds
 
@@ -95,7 +93,7 @@ Radio matches are clues, not proof of a particular device or owner. Manufacturer
 
 **Masked Mode** hides identifiers on supported screens; it does not anonymize logs, backups, or Pocket Reader files. Treat those files as private data.
 
-The current v1.8.4 ST7789 build passes compilation, native receiver tests and desktop UI checks. ILI9341 boards are used only for the separate simulation project. Current BOOT/Pocket Mode, pet, display and storage behavior still needs hardware verification. Earlier ST7789 backup completion was confirmed on hardware in v1.5.1. Avata 2 field testing and human translation review remain pending. See [earlier validation](docs/validation/TEST-REPORT-v1.5.1.md). The active receiver build target is `cyd-fast`.
+The v1.9.2 ST7789 build passes compilation, 61 native test groups, desktop UI checks and focused DEAUTH sanitizer/reference tests. Physical verification of this exact build remains pending; earlier Test Card, backup, Safe Shutdown and reset/remount checks passed on DNSP’s tested v1.8.3 device/card. Avata 2 field testing and human translation review remain pending. The active receiver build target is `cyd-fast`.
 
 ## Credits and thanks
 
@@ -127,7 +125,7 @@ The v1.5 card-content download also contains the extended font and translated te
 | Location | Contents |
 |---|---|
 | [Documentation](docs/README.md) | User guides, research guidance, recovery, validation and translation material |
-| [Firmware](firmware/README.md) | Complete, versioned flashing kits for both CYD display drivers |
+| [Firmware](firmware/README.md) | Versioned flashing kits for the supported ST7789 CYD |
 | `microSD-content/` | Files to copy to your card, with an integrity manifest |
 | `src/` and `include/` | Firmware implementation and headers |
 | `config/` | Flash partition layouts |

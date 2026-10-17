@@ -12,9 +12,8 @@ env.Replace(AR='xtensa-esp32-elf-gcc-ar', RANLIB='xtensa-esp32-elf-gcc-ranlib')
 # role removes server handshake code retained by the pinned generic dispatcher.
 env.Append(LINKFLAGS=['-Wl,--wrap=mbedtls_ssl_handshake_server_step'])
 
-# The pinned SDK asks sscanf only to decode the coexistence version's three
-# integers. Use the equivalent integer-only newlib entry point for that object.
-# No global scanf replacement, SDK mutation or feature removal is involved.
+# Use the integer scanner for the pinned SDK's three-integer version query.
+# Patch only a build-local, hash-checked archive; installed SDK is unchanged.
 from pathlib import Path
 import sys
 sys.path.insert(0, env.subst('$PROJECT_DIR') + '/tools')
@@ -25,3 +24,9 @@ local_sdk = Path(env.subst('$BUILD_DIR')) / 'dnsp-sdk'
 adapt(framework / 'tools/sdk/esp32/lib/libbt.a', local_sdk,
       toolchain / 'xtensa-esp32-elf-ar', toolchain / 'xtensa-esp32-elf-objcopy')
 env.Prepend(LIBPATH=[str(local_sdk)])
+
+# TZ's integer scanner is otherwise the sole remaining general scanner.
+# Preserve the pinned timezone code and adapt only its reviewed call formats.
+from runtime_timezone_scan import adapt as adapt_timezone
+adapt_timezone(toolchain.parent / 'xtensa-esp32-elf/lib/no-rtti/libc.a', local_sdk,
+               toolchain / 'xtensa-esp32-elf-ar', toolchain / 'xtensa-esp32-elf-objcopy')

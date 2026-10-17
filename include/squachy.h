@@ -224,7 +224,7 @@ namespace Squachy {
 
     // Which one. There are two now, so the Settings row cycles rather than
     // toggles: OFF, then each companion in turn.
-    enum class PetId : uint8_t { OFF = 0, SHAGGY, YETI, CLIPPY, TOASTER, BALL, COUNT };
+    enum class PetId : uint8_t { OFF = 0, SHAGGY, YETI, CLIPPY, TOASTER, BALL, MEATY, COUNT };
     PetId       petChoice();
     const char* petName();     // for the row's value column
     void        cyclePet();
@@ -248,6 +248,13 @@ namespace Squachy {
     bool toasterUnlocked();
     void unlockToaster(const char* why);
     const char* takeToasterIntro();
+    // MEATY, unlocked on his own: knock three times on the igloo that turns
+    // up in the SNOWFALL snow, and he rolls out of the door. Put on the moment
+    // he is earned, like the other two.
+    bool meatyUnlocked();
+    void unlockMeaty(const char* why);
+    void relockMeaty();      // the bench's MEATY LOCK: earn him again
+    const char* takeMeatyIntro();
     // The ball and chain, as a pet: earned by serving a whole sentence. Out
     // of custody he still sits chained to the ankle and still stops a throw
     // short; he just has different things to say about it.
@@ -403,6 +410,23 @@ namespace Squachy {
     // words on top, so ours never stands over them.
     void deferBubble(bool on);
     void drawDeferredBubble(TFT_eSPI& t, uint32_t now);
+    // How tall his speech bubble comes out for `text` on this panel, wrapped
+    // as drawn: for a screen that has to leave room for it (the boot splash).
+    int bubbleHeight(TFT_eSPI& t, const char* text);
+    // His bubble saying `text`, centred on cx with its top at topY, no tail:
+    // the FONTS page's preview.
+    void drawSampleBubble(TFT_eSPI& t, int cx, int topY, const char* text);
+    // While on, his bubble keeps the 2.8"'s text size on the big panels too.
+    // Set around one draw and cleared after, like the previews.
+    void setBubbleSmall(bool on);
+    // tick()'s own speech bubble drawn again, unchanged, on top of whatever
+    // the caller drew after tick(): the visit draws the visitor after our
+    // Squachy, and he used to stand over our Squachy's words.
+    void redrawOwnBubble(TFT_eSPI& t, uint32_t now);
+    // The speech bubble the last drawWaving() call drew (a visitor's), so
+    // the visit can keep its message button out from under it. False when
+    // that call drew none.
+    bool cameoBubble(int& x, int& y, int& w, int& h);
 
 #if SQUACH_MESH
     // Which beat of a visit a line is wanted for. The pools live in
@@ -432,6 +456,9 @@ namespace Squachy {
     // the airwaves while there is somebody standing next to him.
     void setVisiting(bool v);
     bool visiting();
+    // Whether he is dancing right now (a squad DANCE emote, party mode, a
+    // milestone): the yeti pet joins in when he is.
+    bool dancing();
 
     // Set around tick() while other Squachys share the scene (a visit, a
     // crowd). His size then ignores what he is wearing: no shrinking so a

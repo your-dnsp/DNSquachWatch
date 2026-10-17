@@ -39,7 +39,7 @@ void uiDetFilterScroll(int delta) {
 static void drawRow(TFT_eSPI& t, int w, int y, int hgt, DetectionType type) {
     bool on = Settings::typeEnabled(type);
     Theme::drawListRowPanel(t, w, y, hgt);
-    t.setTextSize(Theme::uiMenuTextSize(t));
+    Theme::menuFontOn(t, false);   // FONTS > MENUS
     t.setTextColor(Theme::AMBER, Theme::BG);
     t.setCursor(8, y + (hgt - t.fontHeight()) / 2);
     t.print(detectionTypeName(type));
@@ -49,6 +49,7 @@ static void drawRow(TFT_eSPI& t, int w, int y, int hgt, DetectionType type) {
     int vw = t.textWidth(value);
     t.setCursor(w - 18 - vw, y + (hgt - t.fontHeight()) / 2);
     t.print(value);
+    t.setTextFont(1);
 }
 
 void uiDetFilterTick(TFT_eSPI& t, uint32_t now, const DetectionEngine& eng) {

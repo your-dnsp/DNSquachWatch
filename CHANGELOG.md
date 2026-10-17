@@ -1,5 +1,29 @@
 # DNSquachWatch changelog
 
+## v1.9.2
+
+- Integrate applicable upstream v1.39 false-positive fixes: the BUSY Bar vendor prefix/company ID no longer identify a Flipper Zero; Flipper name and service signatures remain.
+- Require twelve deauthentication/disassociation frames, or six broadcast-destination frames, in three seconds from the same claimed transmitter. Preserve DNSP's true sliding window, per-source cooldown, Ignore/filtering and simulation provenance.
+- Preserve research export subtype, bounded evidence, existing card content and storage layout. Unsupported LoRa/GPS/speaker-board additions remain outside the ST7789 receiver.
+
+## v1.9.1
+
+- Integrate applicable upstream v1.38 detection signatures, stricter Find Hub matching, font controls, 12/24-hour clocks, companion gestures and bubble placement.
+- Preserve DNSP menus, address/evidence provenance, simulation labeling, research submissions, location labels, signed updates and tested SD/touch coordination.
+- Explain body-camera payload signatures without claiming recording status; update sensor and drone explanations for the expanded matching paths.
+- Keep font controls in DNSP Display & Appearance; fix the enlarged XP preview on portrait panels.
+- Reclaim space with a tested bounded scanner for existing checkpoints/settings and pinned SDK queries, plus classic-CYD-only rendering specialization. No storage layout or card-content change.
+
+
+## v1.9.0
+
+- Integrate applicable upstream v1.36/v1.37 squad advertising, retry/status, live appearance refresh, clock reset handling, background math and companion improvements.
+- Add M3@ty and Yeti interactions; Crowd NONE hides visitors while preserving squad traffic.
+- Preserve DNSP detection evidence, DD-suffix simulation provenance, label/tag research submissions, Wi-Fi connection-only behavior, signed updates, recovery, accessibility and security.
+- Include the pending full-width Cancel/Back hit-area fix in the label editor.
+- Retain ST7789-only receiver scope, the existing flash layout and DNSP Content/v1.5. GPS, WiGLE and unrelated upstream board/radio additions remain excluded.
+
+
 ## v1.8.4
 
 - Keep the creator subtitle visible by removing the boot-only speech bubble; update the modifier attribution to dnsprincess (your-dnsp).

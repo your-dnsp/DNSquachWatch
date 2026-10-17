@@ -291,12 +291,14 @@ const char *why(const Detection &d) {
     case MatchEvidence::BLE_REMOTE_ID:
     case MatchEvidence::WIFI_REMOTE_ID:
         return "Broadcast claims; identity not authenticated";
+    case MatchEvidence::BLE_PAYLOAD:
+        return DetectionInfo::why(d);
     case MatchEvidence::BLE_COMPANY:
     case MatchEvidence::BLE_SERVICE:
         return "Bluetooth fields matched a listed rule. Other devices can share or imitate these "
                "fields.";
     case MatchEvidence::DEAUTH_BURST:
-        return "Repeated WiFi deauthentication frames came from the same claimed transmitter. "
+        return "Repeated WiFi deauth/disassociation frames came from the same claimed transmitter. "
                "Source addresses can be spoofed; this does not by itself prove an attack.";
     default:
         return "A radio pattern matched. Inspect the evidence; this does not prove wrongdoing.";

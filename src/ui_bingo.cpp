@@ -55,7 +55,7 @@ const char* shortName(DetectionType t) {
 }
 
 const char* dayName(uint8_t d) {
-    static const char* NAMES[8] = { "", "SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT" };
+    static const char* const NAMES[8] = { "", "SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT" };
     return d < 8 ? NAMES[d] : "";
 }
 

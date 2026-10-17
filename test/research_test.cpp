@@ -69,6 +69,10 @@ int main(){
  ck("redacted DEAUTH session",start(Profile::WIFI,false,60000,2000,82,true));observe(1,mac,0,-48,6,deauth,sizeof deauth,2001);tick(2002);
  ck("redacted DEAUTH keeps frame facts but removes all three addresses and encrypted reason",json.find("\"deauth\":true")!=std::string::npos&&json.find("b41e52010203")==std::string::npos&&json.find("101112131415")==std::string::npos&&json.find("202122232425")==std::string::npos&&json.find("\"deauth_reason\":-1")!=std::string::npos&&json.find("\"protected_management\":true")!=std::string::npos);
  ck("protected frame is counted without inventing plaintext reason",stats().deauthFrames==1&&stats().deauthProtected==1&&stats().deauthReasonKnown==0);stop();tick(2003);
+ deauthFrame(deauth);deauth[0]=0xA0;
+ ck("disassociation research session",start(Profile::WIFI,true,60000,3000,83,true));
+ observe(1,mac,0,-48,6,deauth,sizeof deauth,3001);tick(3002);
+ ck("disassociation export retains actual subtype and reason",json.find("\"wifi_subtype\":10")!=std::string::npos&&json.find("\"deauth_reason\":7")!=std::string::npos&&stats().deauthFrames==1);stop();tick(3003);
  ck("wraparound start",start(Profile::BALANCED,false,60000,UINT32_MAX-100,9,true));tick(60000);ck("wraparound timeout",!active());tick(60001);
  ck("write failure session starts",start(Profile::BALANCED,false,60000,1000,10,true));observeOne();fail=true;tick(1002);ck("write error stops capture",!active()&&stats().errors==1);fail=false;
  discard();ck("discard removes pending and notes",!recent(0,r));

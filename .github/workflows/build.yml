@@ -18,6 +18,7 @@ jobs:
       - run: python3 test/coex_size_test.py
       - run: python3 test/runtime_touch_test.py
       - run: python3 test/runtime_sd_test.py
+      - run: python3 test/runtime_timezone_scan_test.py
       - run: python3 test/installer_test.py
       - run: python3 test/install_tools_test.py
       - run: python3 tools/check_language_content.py
@@ -31,6 +32,7 @@ jobs:
       - run: pio run -e cyd-fast
       - run: python3 test/runtime_touch_test.py
       - run: python3 test/runtime_sd_test.py
+      - run: python3 test/runtime_timezone_scan_test.py
   release:
     needs: [native, firmware]
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
