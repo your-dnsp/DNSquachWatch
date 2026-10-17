@@ -20,3 +20,7 @@ Merge companion sound-event identifiers and guarded sound recipes. They remain n
 Focused tests cover 11/12 unicast and 5/6 broadcast thresholds, per-source isolation/cooldown, mixed traffic, inclusive window boundary, rollover, table pressure, simulation source provenance, disassociation bounds/export subtype, exact BSSID continuity including equal timestamps, latest reason after ring wrap, and a 30000-frame independent sliding-window oracle. Sanitizers check the changed tracker. Full native, simulator, driver-adapter, content, layout, installer and package checks accompany the release.
 
 The first direct twelve-sample expansion exceeded static DRAM. The final compact BSSID representation and eight-source table avoid that regression. No partitions or card-content changes; DNSP Content/v1.5 stays compatible. Physical radio/card/touch behavior still needs hardware validation.
+
+## Publication build portability
+
+The official pinned macOS and Linux x86_64 timezone objects have different raw hashes but byte-identical allocated code/data and disassembly/relocations. Review of the Linux package (archive SHA-256 d356109e30ed9cbcfaba5fdee821b188fbc0781f5843aad490e20e9ac7b228dc) confirmed the same five scanner formats. The adapter explicitly permits both reviewed object hashes and still rejects every unknown object. Its test finds either the configured/local PlatformIO directory or the standard user installation so the CI check actually runs after toolchain installation. No runtime firmware bytes or version change is needed for this build-tool correction.

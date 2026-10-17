@@ -5,8 +5,15 @@ ROOT=Path(__file__).resolve().parents[1]
 spec=importlib.util.spec_from_file_location('adapter',ROOT/'tools/runtime_timezone_scan.py')
 module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
 class AdapterTest(unittest.TestCase):
+ def test_only_reviewed_platform_objects_are_allowed(self):
+  self.assertEqual(module.EXPECTED,frozenset({
+   'd11274047743a0ef61e1e0f8285bc5926d033ac9ed7c8c3cd31237fcf94490e5',
+   'd1c1e32a5990152661be6ed93cf3ba7e45267aead9b1b4b42b73ccb991d161ea'}))
+
  def test_pinned_archive_is_scoped_and_source_unchanged(self):
-  core=Path(os.environ.get('PLATFORMIO_CORE_DIR',ROOT.parent/'platformio'))
+  default=ROOT.parent/'platformio'
+  if not default.exists():default=Path.home()/'.platformio'
+  core=Path(os.environ.get('PLATFORMIO_CORE_DIR',default))
   tool=core/'packages/toolchain-xtensa-esp32'
   src=tool/'xtensa-esp32-elf/lib/no-rtti/libc.a';bins=tool/'bin'
   if not src.exists():self.skipTest('Pinned ESP32 toolchain not installed')
