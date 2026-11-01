@@ -1544,7 +1544,18 @@ static void squachyCatch(DetectionType type, const uint8_t* mac, uint32_t hits, 
 enum class Buzz : uint8_t { ALERT, WATCH, SAMPLE };
 static void twatchBuzz(Buzz kind);
 #endif
+struct SnoozeStep { IgnoreList::SnoozeDuration duration; const char* label; };
+static const SnoozeStep SNOOZE_STEP[] = {
+    {IgnoreList::SnoozeDuration::MIN_10,"10 MIN"},
+    {IgnoreList::SnoozeDuration::MIN_30,"30 MIN"},
+    {IgnoreList::SnoozeDuration::HOUR_1,"1 HOUR"},
+    {IgnoreList::SnoozeDuration::HOUR_4,"4 HOURS"},
+};
+static uint8_t s_snoozeStep = 0;
+static uint32_t s_snoozeTapAt = 0;
+static const uint32_t SNOOZE_PICK_MS = 3000;
 static void enterAlert(const Detection& d) {
+    s_snoozeStep = 0;
     if(state==AppState::BREAKOUT){BreakoutUI::suspend(millis());s_backToBreakout=true;}
     s_showFlockResources = false;
     s_alertSnapshot = d;
@@ -4880,6 +4891,39 @@ void loop() {
                 }
                 break;
             }
+            // Once choosing, every fresh tap advances this device's duration;
+            // a held finger cannot repeat because s_alertArmed requires release.
+            // PIN auto-lock remains handled by the normal dispatcher.
+            if (s_snoozeStep) {
+                const uint32_t since = now - s_snoozeTapAt;
+                if (tp.valid && (now - lastTouch) > TOUCH_DEBOUNCE_MS) {
+                    lastTouch = s_snoozeTapAt = now;
+                    s_snoozeStep = (uint8_t)(s_snoozeStep % 4 + 1);
+                    s_alertArmed = false;
+                    uiAlertSetSnoozePick(SNOOZE_STEP[s_snoozeStep-1].label,1000);
+                    break;
+                }
+                if (since >= SNOOZE_PICK_MS) {
+                    const SnoozeStep& step = SNOOZE_STEP[s_snoozeStep-1];
+                    const bool ok = IgnoreList::snooze(s_alertMac,step.duration);
+                    s_snoozeStep = 0;
+                    uiAlertSetSnoozePick(nullptr,0);
+                    lastTouch = now;
+                    if (ok) {
+                        char msg[32];snprintf(msg,sizeof msg,"This device: %s",step.label);
+                        Theme::showToast("SNOOZED",msg,Theme::AMBER);
+                        squachyCatch(lastAlertType,s_alertMac,lastAlertHits,lastAlertRssi,lastAlertConf);
+                        enterClear();
+                    } else {
+                        Theme::showToast("SNOOZE FULL","Nothing changed",Theme::AMBER);
+                        alertStart = now;s_alertArmed = false;
+                    }
+                    break;
+                }
+                uiAlertSetSnoozePick(SNOOZE_STEP[s_snoozeStep-1].label,
+                                    (uint16_t)(1000-since*1000/SNOOZE_PICK_MS));
+                break; // no other alert action or auto-dismiss while selecting
+            }
             if (tp.valid && (now - lastTouch) > TOUCH_DEBOUNCE_MS) {
                 lastTouch = now;
                 if(uiAlertHitSnoozeAll(tp.x,tp.y,tft.width(),tft.height())){
@@ -4905,16 +4949,9 @@ void loop() {
                     squachyCatch(lastAlertType, s_alertMac, lastAlertHits, lastAlertRssi, lastAlertConf);
                     enterClear();
                 } else if (uiAlertHitSnooze(tp.x, tp.y, tft.width(), tft.height())) {
-                    // This device, until the board restarts: no more alerts
-                    // from it, while it goes on being scanned, counted and
-                    // logged like anything IGNOREd. Acknowledges the alert
-                    // like IGNORE does. See IgnoreList::snooze for why it
-                    // is no longer the whole type for an hour.
-                    lastTouch = now;
-                    IgnoreList::snooze(s_alertMac);
-                    Theme::showToast("SNOOZED", "This one, until restart", Theme::AMBER);
-                    squachyCatch(lastAlertType, s_alertMac, lastAlertHits, lastAlertRssi, lastAlertConf);
-                    enterClear();
+                    lastTouch = s_snoozeTapAt = now;
+                    s_snoozeStep = 1;s_alertArmed = false;
+                    uiAlertSetSnoozePick(SNOOZE_STEP[0].label,1000);
                 } else if (uiAlertHitHunt(tp.x, tp.y, tft.width(), tft.height())) {
                     // Same call pair LOG's confirm panel makes. The
                     // DETECTION trigger fires here too: leaving via HUNT

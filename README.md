@@ -1,6 +1,6 @@
-# DNSquachWatch v1.9.2
+# DNSquachWatch v1.9.3
 
-DNSquachWatch is **dnsprincess's friends-and-family edition of SquachWatch** for the classic 2.8-inch ESP32 Cheap Yellow Display (CYD), based on **SquachWatch v1.39.0**. It keeps Squachy, the original visual identity, and the spirit of the project while adding device & microSD recovery, additional OUI and device research, labeling and OUI research contribution mechanisms, accessibility tools, security enhancements, additional scanning and logging capabilities, additional drone detection & support for FPV pilots, and whimsical additions.
+DNSquachWatch is **dnsprincess's friends-and-family edition of SquachWatch** for the classic 2.8-inch ESP32 Cheap Yellow Display (CYD), based on **SquachWatch v1.40.0**. It keeps Squachy, the original visual identity, and the spirit of the project while adding device & microSD recovery, additional OUI and device research, labeling and OUI research contribution mechanisms, accessibility tools, security enhancements, additional scanning and logging capabilities, additional drone detection & support for FPV pilots, and whimsical additions.
 
 **SquachWatch was created by Talking Sasquach / skizzophrenic.** This edition builds on that work; DNSP is responsible for the modifications. For the original firmware, visit [squachwatch.com](https://squachwatch.com/) or [the upstream project](https://github.com/skizzophrenic/SquachWatch-CYD).
 
@@ -16,17 +16,17 @@ The original [SquachWatch project](https://github.com/skizzophrenic/SquachWatch-
 
 | Your display | Firmware |
 |---|---|
-| ST7789, newer CYD batches | [ST7789-80MHz kit](firmware/v1.9.2/ST7789-80MHz/DNSquachWatch-v1.9.2-ST7789-80MHz.zip) |
+| ST7789, newer CYD batches | [ST7789-80MHz kit](firmware/v1.9.3/ST7789-80MHz/DNSquachWatch-v1.9.3-ST7789-80MHz.zip) |
 
 The current kit targets the **classic 2.8-inch ST7789 CYD** and starts with an **80 MHz display clock**. System settings can switch the display to 40 MHz; the flash clock stays at 40 MHz. Confirm your display controller before flashing: an ST7789 image is not suitable for an ILI9341 panel. Keep the kit's four flashing binaries together.
 
-Also obtain the [microSD content](firmware/v1.5/DNSquachWatch-v1.5-microSD-content.zip) and copy **DNSP Content/v1.5/** to the card root. **Existing v1.5 card content remains compatible with v1.9.2.** Flashing the ESP32 does not copy files to microSD. The full walkthrough, extended language content, and installation document use the supplied card files; backups require the checked installation document. Boot, scanning, essential recovery, and personal visual assets work without card content. No Wi-Fi content download is used.
+Also obtain the [microSD content](firmware/v1.5/DNSquachWatch-v1.5-microSD-content.zip) and copy **DNSP Content/v1.5/** to the card root. **Existing v1.5 card content remains compatible with v1.9.3.** Flashing the ESP32 does not copy files to microSD. The full walkthrough, extended language content, and installation document use the supplied card files; backups require the checked installation document. Boot, scanning, essential recovery, and personal visual assets work without card content. No Wi-Fi content download is used.
 
 Each firmware ZIP includes all four flashing binaries, image checksums, an optional offline installer, and recovery instructions. See [installation guide](docs/user/INSTALLATION.md) for installation and manual card copying, or [GitHub Releases](https://github.com/your-dnsp/DNSquachWatch/releases) for published kits and download checksums.
 
 ## Latest update
 
-**v1.9.2 brings in applicable SquachWatch v1.36–v1.39 improvements**, including font controls, 12/24-hour clocks, companion interactions, squad refinements and more selective device signatures. It also fixes tag-editor Cancel and reduces DEAUTH false positives while preserving DNSP's per-transmitter evidence and cooldowns.
+**v1.9.3 integrates upstream v1.40’s timed device Snooze and background speech-font fixes.** Repeated Snooze taps select 10 minutes, 30 minutes, one hour or four hours; Ignore remains permanent, and DNSP’s Snooze All remains separate.
 
 Keep existing **DNSP Content/v1.5** and flash normally without erasing. See the [changelog](CHANGELOG.md) for detailed history.
 
@@ -93,7 +93,7 @@ Radio matches are clues, not proof of a particular device or owner. Manufacturer
 
 **Masked Mode** hides identifiers on supported screens; it does not anonymize logs, backups, or Pocket Reader files. Treat those files as private data.
 
-The v1.9.2 ST7789 build passes compilation, 61 native test groups, desktop UI checks and focused DEAUTH sanitizer/reference tests. Physical verification of this exact build remains pending; earlier Test Card, backup, Safe Shutdown and reset/remount checks passed on DNSP’s tested v1.8.3 device/card. Avata 2 field testing and human translation review remain pending. The active receiver build target is `cyd-fast`.
+The v1.9.3 ST7789 build passes compilation, 61 native test groups, desktop UI checks and focused Snooze and DEAUTH regression tests. Physical verification of this exact build remains pending; earlier Test Card, backup, Safe Shutdown and reset/remount checks passed on DNSP’s tested v1.8.3 device/card. Avata 2 field testing and human translation review remain pending. The active receiver build target is `cyd-fast`.
 
 ## Credits and thanks
 

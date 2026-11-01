@@ -61,6 +61,67 @@ static void testDetection(DetectionType type,unsigned id) {
     d.active=true;d.hits=1;d.firstSeen=d.lastSeen=millis();engine.postBle(d);
 }
 static int runDnspUiChecks() {
+    if(getenv("DNSP_UPSTREAM_140_TEST")) {
+      suite("v1.40 timed Snooze through the real receiver touch dispatcher");
+      Settings::markTimeZoneChosen();testStep(8000);AlertSnooze::resume();
+      const uint32_t durations[]={600000,1800000,3600000,14400000,600000};
+      auto clearAwards=[](){uint8_t idx;while(Squachy::consumeOutfitUnlock(idx)){}while(Squachy::consumePetUnlockCard()){}};
+      for(unsigned taps=1;taps<=5;++taps){
+        clearAwards();IgnoreList::clear();engine.clearLog();engine.alerts.clear();state=AppState::CLEAR;testStep(400);
+        testDetection(DetectionType::SKIMMER,180+taps);testStep(400);
+        ck("new source opens alert",state==AppState::ALERT);
+        const uint8_t mac[6]={0xAC,0,0,0,0,(uint8_t)(180+taps)};
+        testTap(tft.width()/2,tft.height()-12);
+        ck("first Snooze tap keeps the card open",state==AppState::ALERT&&!IgnoreList::snoozed(mac));
+        for(unsigned i=1;i<taps;++i)testTap(20,90); // deliberately away from the button
+        testShot(taps==4?"snooze-four-hours":"snooze-selecting");
+        testStep(2400);ck("selection stays open before quiet interval ends",state==AppState::ALERT);
+        testStep(650);ck("selection commits and dismisses once",state==AppState::CLEAR);
+        const uint32_t left=IgnoreList::snoozeRemaining(mac);
+        ck("tap count selects expected duration and cycles after four",left>durations[taps-1]-100&&left<=durations[taps-1]);
+        ck("selected snooze never becomes permanent Ignore",!IgnoreList::contains(mac));
+      }
+      clearAwards();IgnoreList::clear();engine.clearLog();engine.alerts.clear();state=AppState::CLEAR;testStep(400);
+      testDetection(DetectionType::SKIMMER,200);testStep(400);testStep(300);ck("held-touch case opens its alert",state==AppState::ALERT); // idle release arms the newly opened card
+      screenToRaw(tft.width()/2,tft.height()-12,SimTouch::rawX,SimTouch::rawY);SimTouch::down=true;testStep(300);
+      for(unsigned i=0;i<5;i++)testStep(200);
+      SimTouch::down=false;testStep();testStep(2100);
+      const uint8_t heldMac[6]={0xAC,0,0,0,0,200};
+      ck("held finger produces one ten-minute selection",state==AppState::CLEAR&&IgnoreList::snoozeRemaining(heldMac)>599900);
+      clearAwards();IgnoreList::clear();engine.clearLog();engine.alerts.clear();state=AppState::CLEAR;testStep(400);
+      for(unsigned i=0;i<IgnoreList::SNOOZE_MAX;i++){uint8_t mac[6]={1,2,3,4,5,(uint8_t)i};IgnoreList::snooze(mac);}
+      testDetection(DetectionType::SKIMMER,210);testStep(400);testTap(tft.width()/2,tft.height()-12);testStep(3100);
+      const uint8_t fullMac[6]={0xAC,0,0,0,0,210};
+      ck("full table leaves alert open and does not claim a snooze",state==AppState::ALERT&&!IgnoreList::snoozed(fullMac));
+      testShot("snooze-full");IgnoreList::clear();
+      clearAwards();engine.clearLog();engine.alerts.clear();state=AppState::CLEAR;testStep(400);
+      testDetection(DetectionType::SKIMMER,220);testStep(400);testTap(tft.width()/2,tft.height()-12);
+      ck("temporary test PIN enabled",Security::setPin("2468"));Security::lock();testStep(3100);
+      const uint8_t menuMac[6]={0xAC,0,0,0,0,220};
+      ck("PIN lock prevents an unconfirmed Snooze applying",Security::locked()&&!IgnoreList::snoozed(menuMac));
+      testTap(20,90);ck("locked alert returns to lock screen",state==AppState::LOCKED);
+      Security::disable();
+      for(bool portrait:{false,true}){
+        TFT_eSPI panel(portrait?240:320,portrait?320:240);Detection d{};d.type=DetectionType::SKIMMER;d.rssi=-60;d.conf=Confidence::HIGH_CONF;uiAlertInit(panel,d);
+        uiAlertSetSnoozePick("4 HOURS",500);uiAlertTick(panel,millis(),engine,false,nullptr,nullptr);
+        ck("timed Snooze hit area stays available in both orientations",uiAlertHitSnooze(panel.width()/2,panel.height()-12,panel.width(),panel.height()));
+        if(const char* dir=getenv("DNSP_TEST_SHOTS")){std::vector<uint8_t> rgb;for(auto v:panel.pixelsRGB565()){rgb.push_back(((v>>11)&31)*255/31);rgb.push_back(((v>>5)&63)*255/63);rgb.push_back((v&31)*255/31);}char path[1024];snprintf(path,sizeof path,"%s/snooze-%s.png",dir,portrait?"portrait":"landscape");ck("snooze display screenshot",PngWriter::write(path,panel.width(),panel.height(),rgb.data()));}
+      }
+      suite("Background speech honors Pets font choices");
+      for(bool portrait:{false,true}){
+        TFT_eSPI panel(portrait?240:320,portrait?320:240);
+        for(auto bg:{Settings::Background::FIRE,Settings::Background::SNOWFALL}){
+          Settings::previewBackground(bg);
+          for(unsigned step=0;step<5;step++)for(unsigned face=0;face<3;face++){
+            Settings::setFontStep(Settings::FontKind::PETS,step);Settings::setFontFace(Settings::FontKind::PETS,face);
+            Theme::drawActiveBackground(panel,1500+step*45000+face*3000,24,panel.height()-36,engine);
+            Theme::drawBackgroundOverlay(panel,1500+step*45000+face*3000);
+          }
+          ck("background speech renders across font steps/faces",true);
+        }
+      }
+      return report();
+    }
     if(getenv("DNSP_UPSTREAM_138_TEST")) {
       suite("Upstream v1.38 fonts and clock integration");
       Settings::markTimeZoneChosen();testStep(8000);state=AppState::SETTINGS;

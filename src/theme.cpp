@@ -6130,7 +6130,13 @@ void drawFire(TFT_eSPI& t, uint32_t now, int yStart, int yEnd) {
                 ? SCARED[((now - s_wolfAt) / 1400) % (sizeof(SCARED) / sizeof(SCARED[0]))]
                 : reek ? "WHAT REEKS?!"
                 : QUIPS[(slot * 5 + 2) % NQUIP];
-            t.setTextSize(1);
+            // The pets' face, so FONTS > PETS sizes him with them and the
+            // large panels get their bigger balloon: the 6x8 font at size 1
+            // on the small boards, exactly as before. A line too wide for
+            // the band steps down, as a pet's does.
+            const uint8_t callerFont = t.textfont;
+            petFontOn(t);
+            while (t.textWidth(q) + 8 > w - 4 && petFontSmaller(t)) {}
             const int bw = t.textWidth(q) + 8;
             // Derived, not the hard-coded 11 this used to be. Squachy's
             // bubbles and the pet's both size themselves off fontHeight();
@@ -6149,11 +6155,12 @@ void drawFire(TFT_eSPI& t, uint32_t now, int yStart, int yEnd) {
             // clears the top of his head, and only then falls back to
             // clamping against the screen edge.
             const int squachyLeft = (int)(w * 0.34f);
+            // Heights from the balloon's own: 14 and 26 at the 6x8 font.
             int bx = owlX + 10;
-            int by = owlY - 14;
+            int by = owlY - 1 - bh;
             if (bx + bw > squachyLeft) {
                 bx = owlX - bw / 2 + 4;      // centred over the owl
-                by = owlY - 26;
+                by = owlY - 2 * bh;
             }
             if (bx + bw > w - 2)    bx = w - 2 - bw;
             if (bx < 1)             bx = 1;
@@ -6176,6 +6183,8 @@ void drawFire(TFT_eSPI& t, uint32_t now, int yStart, int yEnd) {
             t.setTextColor(ink, paper);
             t.setCursor(bx + 4, by + 3);
             t.print(q);
+            t.setTextFont(callerFont);
+            t.setTextSize(1);
             if (reek) {
                 // Where he is and where his bubble is, for the tap.
                 s_owlX = owlX; s_owlY = owlY;
@@ -6398,8 +6407,13 @@ static uint32_t    s_saySkiTil = 0, s_sayYetTil = 0, s_sayNextAt = 0;
 // and ink the werewolf uses on FIRE, at half the size.
 static void snowSay(TFT_eSPI& t, int x, int topY, const char* txt) {
     if (!txt) return;
-    t.setTextSize(1);
-    const int bw = t.textWidth(txt) + 6, bh = 11;
+    // The pets' face, as the fire owl's: unchanged on the small boards
+    // (11 high at the 6x8 font), bigger on the large ones, and FONTS > PETS
+    // moves it.
+    const uint8_t callerFont = t.textfont;
+    petFontOn(t);
+    while (t.textWidth(txt) + 6 > t.width() - 2 && petFontSmaller(t)) {}
+    const int bw = t.textWidth(txt) + 6, bh = t.fontHeight() + 3;
     int bx = x - bw / 2;
     if (bx < 1) bx = 1;
     if (bx + bw > t.width() - 1) bx = t.width() - 1 - bw;
@@ -6415,6 +6429,8 @@ static void snowSay(TFT_eSPI& t, int x, int topY, const char* txt) {
     t.setTextColor(ink, paper);
     t.setCursor(bx + 3, by + 2);
     t.print(txt);
+    t.setTextFont(callerFont);
+    t.setTextSize(1);
 }
 
 // THE EAT. The payoff, and it runs about one chase in six, so it has to
@@ -7258,9 +7274,12 @@ void drawBackgroundOverlay(TFT_eSPI& t, uint32_t now) {
     const int w = s_wolfSayW;
     const int yStart = s_wolfSayTop;
         auto wolfBubble = [&](const char* txt, int by, uint8_t dim, bool big) {
-            t.setTextSize(big ? 2 : 1);
+            // The howl is the 6x8 font doubled everywhere; the lines are the
+            // pets' face, like the owl's (11 high at the 6x8 font, as before).
+            const uint8_t callerFont = t.textfont;
+            if (big) { t.setTextFont(1); t.setTextSize(2); } else petFontOn(t);
             const int bw = t.textWidth(txt) + (big ? 11 : 7);
-            const int bh = big ? 20 : 11;
+            const int bh = big ? 20 : t.fontHeight() + 3;
             int bx = w - 2 - bw;
             if (bx < 1)          bx = 1;
             if (by < yStart + 1) by = yStart + 1;
@@ -7278,6 +7297,7 @@ void drawBackgroundOverlay(TFT_eSPI& t, uint32_t now) {
             t.setTextColor(ink, paper);
             t.setCursor(bx + 4, by + (big ? 4 : 2));
             t.print(txt);
+            t.setTextFont(callerFont);
             t.setTextSize(1);
         };
 

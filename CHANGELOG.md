@@ -1,5 +1,12 @@
 # DNSquachWatch changelog
 
+## v1.9.3
+
+- Integrate upstream v1.40 timed per-device Snooze: 10/30 minutes, one/four hours, repeated taps and a three-second confirmation interval. Acquisition and logging continue.
+- Preserve permanent Ignore and DNSP’s separate Snooze All; transient timers never create another persistent suppression list. Full lists report failure without replacing an active timer.
+- Apply speech-font sizing/restoration fixes to background characters. Preserve DNSP menus, research submissions, simulation provenance, recovery/security and ST7789-only scope.
+- Keep the app-slot layout and DNSP Content/v1.5 unchanged.
+
 ## v1.9.2
 
 - Integrate applicable upstream v1.39 false-positive fixes: the BUSY Bar vendor prefix/company ID no longer identify a Flipper Zero; Flipper name and service signatures remain.

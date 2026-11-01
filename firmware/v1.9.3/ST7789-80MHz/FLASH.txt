@@ -1,0 +1,11 @@
+Run from this extracted folder; replace the port if necessary. Do not erase.
+
+python3 -m esptool --chip esp32 --port /dev/cu.usbserial-10 write_flash \
+  --flash_mode dio --flash_freq 40m --flash_size 4MB \
+  0x1000 bootloader.bin \
+  0x8000 partitions.bin \
+  0xe000 boot_app0.bin \
+  0x10000 firmware.bin
+
+Serial: python3 -m serial.tools.miniterm /dev/cu.usbserial-10 115200
+Keep DNSP Content/v1.5 unchanged. See FIRMWARE-NOTES.md for the hardware checks.

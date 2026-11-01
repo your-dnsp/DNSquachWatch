@@ -1,9 +1,15 @@
 // SquachWatch-CYD — per-device alert suppression ("IGNORE") implementation
 #include "ignore_list.h"
 #include <Preferences.h>
+#include <Arduino.h>
 #include <string.h>
 
 namespace IgnoreList {
+// Parallel arrays avoid per-record alignment padding: 320 bytes, bounded.
+static uint8_t s_snz[SNOOZE_MAX][6];
+static uint32_t s_snzDeadline[SNOOZE_MAX];
+static uint8_t s_snzN = 0;
+
 
 static const uint8_t REC = 7;      // mac[6] + DetectionType
 
@@ -129,28 +135,57 @@ DetectionType typeAt(uint8_t idx) {
 void clear() {
     begin();
     s_count = 0;
+    s_snzN = 0;
     s_prefs.remove(KEY);
 }
 
-// ---- SNOOZE: RAM only, gone at restart --------------------------------------
-static const uint8_t SNOOZE_MAX = 32;
-static uint8_t s_snz[SNOOZE_MAX][6];
-static uint8_t s_snzN = 0, s_snzNext = 0;
-
-bool snoozed(const uint8_t* mac) {
-    if (!mac) return false;
-    for (uint8_t i = 0; i < s_snzN; i++)
-        if (memcmp(s_snz[i], mac, 6) == 0) return true;
-    return false;
+// Timed snoozes never write NVS. Full tables report failure rather than silently
+// replacing another device's active timer. Expired slots are reclaimed first.
+static void eraseSnooze(uint8_t i) {
+    --s_snzN;
+    if (i != s_snzN) {
+        memcpy(s_snz[i], s_snz[s_snzN], 6);
+        s_snzDeadline[i] = s_snzDeadline[s_snzN];
+    }
 }
-
-void snooze(const uint8_t* mac) {
-    if (!mac || snoozed(mac)) return;
-    memcpy(s_snz[s_snzNext], mac, 6);
-    s_snzNext = (uint8_t)((s_snzNext + 1) % SNOOZE_MAX);
-    if (s_snzN < SNOOZE_MAX) s_snzN++;
+static void pruneSnoozes(uint32_t now) {
+    for (uint8_t i = 0; i < s_snzN; ) {
+        // A live deadline can be at most four hours ahead, including across
+        // millis() rollover. Also reject long-stale entries after half a cycle.
+        const uint32_t left = s_snzDeadline[i] - now;
+        if (!left || left > 14400000UL) eraseSnooze(i);
+        else ++i;
+    }
 }
-
+static int snoozeIndex(const uint8_t* mac) {
+    if (mac) for (uint8_t i = 0; i < s_snzN; ++i)
+        if (!memcmp(s_snz[i],mac,6)) return i;
+    return -1;
+}
+uint32_t snoozeRemaining(const uint8_t* mac) {
+    const uint32_t now = millis();pruneSnoozes(now);
+    const int i = snoozeIndex(mac);
+    return i < 0 ? 0 : (uint32_t)(s_snzDeadline[i] - now);
+}
+bool snoozed(const uint8_t* mac) { return snoozeRemaining(mac) != 0; }
+bool snooze(const uint8_t* mac, SnoozeDuration duration) {
+    if (!mac || (uint8_t)duration > (uint8_t)SnoozeDuration::HOUR_4) return false;
+    static const uint32_t MS[] = {600000,1800000,3600000,14400000};
+    const uint32_t now = millis();pruneSnoozes(now);
+    int i = snoozeIndex(mac);
+    if (i < 0) {
+        if (s_snzN == SNOOZE_MAX) return false;
+        i = s_snzN++;memcpy(s_snz[i],mac,6);
+    }
+    s_snzDeadline[i] = now + MS[(uint8_t)duration];
+    return true;
+}
+void snooze(const uint8_t* mac) { (void)snooze(mac,SnoozeDuration::MIN_10); }
+bool unsnooze(const uint8_t* mac) {
+    pruneSnoozes(millis());const int i = snoozeIndex(mac);
+    if (i < 0) return false;
+    eraseSnooze((uint8_t)i);return true;
+}
 bool silenced(const uint8_t* mac) { return contains(mac) || snoozed(mac); }
 
-}  // namespace IgnoreList
+} // namespace IgnoreList
