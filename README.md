@@ -40,7 +40,7 @@ Expanded research covers **Flock, Raven, Axon, other ALPR clues, Meta glasses, t
 
 Device popups can last **15, 30, 45, or 60 seconds**, with 30 seconds as the default. Queued alerts show **X more**, and **Snooze All** helps when sightings arrive back-to-back. Stored Alert History includes every retained detection event, rather than just special rule incidents; boot, crash, and system records have separate views.
 
-Wi-Fi **DEAUTH** findings require six observed frames from the **same claimed transmitter** within three seconds, with a separate 15-second cooldown for each source. Evidence can include BSSID, receiver targets, reason code, protection status, channel, signal strength, and burst details. Addresses can be spoofed; this is an observation of repeated traffic, not identification of an attacker.
+Wi-Fi **DEAUTH** findings require 12 observed deauthentication/disassociation frames, or six frames addressed to the broadcast destination, from the **same claimed transmitter** within three seconds, with a separate 15-second cooldown for each source. Evidence can include BSSID, receiver targets, reason code, protection status, channel, signal strength, and burst details. Addresses can be spoofed; this is an observation of repeated traffic, not identification of an attacker.
 
 The **Sketchy Environment** rule adds a caution when an ALPR clue and a deauthentication burst occur within **90 seconds**. It retains the paired evidence and exports an incident record to microSD, without claiming that the events are causally connected.
 
