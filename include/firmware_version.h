@@ -1,6 +1,6 @@
 #pragma once
 // Shared release identity for device UI, exports, host checks and packaging.
-#define DNSP_RELEASE_VERSION "1.9.4"
+#define DNSP_RELEASE_VERSION "1.9.5"
 #define DNSP_BASE_VERSION "1.44.0"
 #ifndef FIRMWARE_VERSION
 #define FIRMWARE_VERSION DNSP_RELEASE_VERSION

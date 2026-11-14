@@ -1,4 +1,4 @@
-# DNSquachWatch v1.9.4 — ST7789-80MHz
+# DNSquachWatch v1.9.5 — ST7789-80MHz
 
 Based on SquachWatch v1.44.0 by Talking Sasquach / skizzophrenic.
 DNSP modifications are by dnsprincess (your-dnsp).

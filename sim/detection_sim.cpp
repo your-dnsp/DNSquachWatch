@@ -18,6 +18,7 @@
 // logic that decides what counts as a detection in the first place.
 #include "detection.h"
 #include <cstring>
+#include <cstdlib>
 
 // ---- SdLog: no card, ever -------------------------------------------
 void SdLog::describe(char* out, size_t cap) { snprintf(out, cap, "No mounted microSD card. The desktop emulator has no card hardware."); }
@@ -126,8 +127,12 @@ const RawBleResult* DetectionEngine::rawBleAt(uint8_t idx) const {
 }
 void DetectionEngine::startRawWifiScan() {}
 bool DetectionEngine::rawWifiScanDone() const { return true; }
-uint8_t DetectionEngine::rawWifiCount() const { return 0; }
-const char* DetectionEngine::rawWifiSsid(uint8_t) const { return ""; }
+// Opt-in fixture for the Masked Mode rendering regression check.
+uint8_t DetectionEngine::rawWifiCount() const { return rawWifiSsid(0)[0] ? 1 : 0; }
+const char* DetectionEngine::rawWifiSsid(uint8_t idx) const {
+    const char* name = std::getenv("DNSP_TEST_RAW_WIFI_SSID");
+    return idx == 0 && name ? name : "";
+}
 int8_t DetectionEngine::rawWifiRssi(uint8_t) const { return 0; }
 uint8_t DetectionEngine::rawWifiChannel(uint8_t) const { return 0; }
 bool DetectionEngine::rawWifiOpen(uint8_t) const { return false; }

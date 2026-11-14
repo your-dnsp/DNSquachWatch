@@ -1,6 +1,8 @@
 # DNSquachWatch changelog
 
-## v1.9.4
+## v1.9.5
+
+Supersedes v1.9.4 and restores SSID masking in the Wi-Fi scan list.
 
 - Reviewed upstream v1.41 through v1.44. Manual Wi-Fi scans and network discovery in Wi-Fi setup and updates listen for beacons without sending probes.
 - Replaced a misattributed Espressif camera prefix with the three Arlo Technology prefixes. Masked Mode preserves type and vendor text on the LOG action panel.

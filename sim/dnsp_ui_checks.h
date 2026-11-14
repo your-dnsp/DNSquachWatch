@@ -32,6 +32,7 @@
 #include "ui_update.h"
 #include "png_writer.h"
 #include "ui_rule_alert.h"
+#include "ui_rawscan.h"
 #include "ui_alert.h"
 extern uint32_t alertStart;
 extern uint32_t lastTouch;
@@ -61,6 +62,32 @@ static void testDetection(DetectionType type,unsigned id) {
     d.active=true;d.hits=1;d.firstSeen=d.lastSeen=millis();engine.postBle(d);
 }
 static int runDnspUiChecks() {
+    if (getenv("DNSP_RAW_SCAN_TEST")) {
+        suite("Masked Mode hides the Wi-Fi scan row's SSID suffix");
+        const auto render = [](const char* ssid) {
+            setenv("DNSP_TEST_RAW_WIFI_SSID", ssid, 1);
+            TFT_eSPI panel(320, 240);
+            uiRawScanInit(panel, false);
+            uiRawScanTick(panel, 10000, engine, false, true, false, nullptr,
+                          false, false, false, false, false);
+            auto pixels = panel.pixelsRGB565();
+            for (int y = 0; y < 240; ++y) {
+                for (int x = 0; x < 320; ++x) {
+                    if (uiRawScanRowAt(panel, x, y, 320, 240) != 0)
+                        pixels[y * 320 + x] = 0;
+                }
+            }
+            return pixels;
+        };
+        if (Settings::privacyMode()) Settings::togglePrivacyMode();
+        ck("Unmasked SSID suffix changes the row pixels", render("Net-A") != render("Net-B"));
+        Settings::togglePrivacyMode();
+        ck("Masked SSID suffix does not change the row pixels", render("Net-A") == render("Net-B"));
+        unsetenv("DNSP_TEST_RAW_WIFI_SSID");
+        Settings::togglePrivacyMode();
+        return report();
+    }
+
     if(getenv("DNSP_UPSTREAM_140_TEST")) {
       suite("v1.40 timed Snooze through the real receiver touch dispatcher");
       Settings::markTimeZoneChosen();testStep(8000);AlertSnooze::resume();

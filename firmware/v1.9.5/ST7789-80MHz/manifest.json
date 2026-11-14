@@ -1,6 +1,6 @@
 {
-  "firmware": "DNSquachWatch v1.9.4",
-  "internal_version": "1.9.4",
+  "firmware": "DNSquachWatch v1.9.5",
+  "internal_version": "1.9.5",
   "base": "SquachWatch v1.44.0",
   "target": "cyd-fast",
   "board": "2.8-inch classic ESP32 CYD",
@@ -35,11 +35,11 @@
     {
       "file": "firmware.bin",
       "offset": "0x10000",
-      "bytes": 1963296,
-      "sha256": "f859b71e1de9b554ca98eb5eb30d78cff3672e3b839142ead9fd6198cd1f0414"
+      "bytes": 1963312,
+      "sha256": "c2f0f95a85f126cd3d9a43befc0f51d8f3b17fccec061e37a3810b243a5a5ee7"
     }
   ],
-  "package_revision": "v1.9.4",
+  "package_revision": "v1.9.5",
   "build_revision": "upstream-v1.44-dnsp-integration",
   "upstream_commit": "a4303d5f00ee9f72be0b57f0f0db343eece61718",
   "hardware_validation": "pending",
@@ -47,5 +47,5 @@
   "display_controller": "VSPI",
   "resistive_touch_transport": "software SPI",
   "app_slot_bytes": 1966080,
-  "app_slot_free_bytes": 2784
+  "app_slot_free_bytes": 2768
 }

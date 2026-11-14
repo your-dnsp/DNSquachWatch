@@ -349,15 +349,14 @@ if (!Theme::stillBackdrop(t)) switch (Settings::background()) {
             UserLabels::Label ul{};
             const bool labeled = UserLabels::lookup(r->mac, ul);
             char heading[48];
-            char pv[40];
-            const char* name = r->name[0] ? Privacy::name(r->name, pv, sizeof pv)
-                                          : rawBleKindLabel(r->kind);
+            const char* name = r->name[0] ? r->name : rawBleKindLabel(r->kind);
             if (labeled) snprintf(heading, sizeof heading, "%s: %s", UserLabels::typeName(ul.type), name);
             else snprintf(heading, sizeof heading, "%s", name);
             t.setTextSize(2);
             t.setTextColor(labeled && ul.type != UserLabels::OTHER_TAG ? Theme::colorFor((DetectionType)ul.type) : Theme::CYAN, Theme::BG);
             t.setCursor(4, y + topPad);
-            t.print(heading);
+            char pv[40];
+            t.print(r->name[0] ? Privacy::name(heading, pv, sizeof pv) : heading);
 
             Theme::bodyFontOn(t);
             t.setTextColor(Theme::WHITE, Theme::BG);
@@ -395,7 +394,7 @@ if (!Theme::stillBackdrop(t)) switch (Settings::background()) {
             t.setTextSize(2);
             t.setTextColor(labeled && ul.type != UserLabels::OTHER_TAG ? Theme::colorFor((DetectionType)ul.type) : Theme::CYAN, Theme::BG);
             t.setCursor(4, y + topPad);
-            t.print(heading);
+            char pv[40]; t.print(Privacy::name(heading, pv, sizeof pv));
 
             Theme::bodyFontOn(t);
             t.setTextColor(Theme::WHITE, Theme::BG);
