@@ -48,11 +48,3 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: python3 tools/publish_release.py
-      - name: Withdraw superseded v1.9.4 release
-        if: github.repository == 'your-dnsp/DNSquachWatch'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release edit v1.9.4 --repo "$GITHUB_REPOSITORY" --draft --latest=false \
-            --title 'DNSquachWatch v1.9.4 (withdrawn)' \
-            --notes 'Superseded by v1.9.5, which restores Masked Mode in Wi-Fi scan results.'
