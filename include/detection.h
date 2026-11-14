@@ -14,6 +14,8 @@
 #include <atomic>
 #include <cstring>   // memcmp, for the inline isWatched()/isHunted() below
 
+#include "raw_ble_kind.h"
+
 // A single unfiltered BLE sighting from the manual raw scanner (see
 // startRawBleScan() below) -- every device seen, not just ones
 // matching a known surveillance signature like the log's Detection
@@ -23,6 +25,7 @@ struct RawBleResult {
     int8_t  rssi;
     int8_t  prev;       // the reading before this one; equal to rssi until there is one
     char    name[24];   // empty if the device didn't advertise one
+    uint8_t kind;       // RawBleKind, a tentative display hint only
 };
 
 #if SQUACH_MESH

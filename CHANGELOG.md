@@ -1,5 +1,12 @@
 # DNSquachWatch changelog
 
+## v1.9.4
+
+- Reviewed upstream v1.41 through v1.44. Manual Wi-Fi scans and network discovery in Wi-Fi setup and updates listen for beacons without sending probes.
+- Replaced a misattributed Espressif camera prefix with the three Arlo Technology prefixes. Masked Mode preserves type and vendor text on the LOG action panel.
+- Unnamed manual BLE results show tentative advertising hints. Watch and Hunt use the selected address and keep their existing behavior.
+- ST7789-80MHz remains the sole receiver target. See [upstream review](docs/development/history/UPSTREAM-v1.44-REVIEW.md) for the scope of this integration.
+
 ## v1.9.3
 
 - Integrate upstream v1.40 timed per-device Snooze: 10/30 minutes, one/four hours, repeated taps and a three-second confirmation interval. Acquisition and logging continue.

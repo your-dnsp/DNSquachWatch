@@ -127,6 +127,7 @@ TESTS += sd_recovery_test readable_storage_test backup_progress_test ble_advert_
 crash_reports_test_SRCS := $(SRC)/crash_reports.cpp
 
 TESTS += pocket_screen_test
+TESTS += raw_ble_kind_test
 
 .PHONY: all clean
 TESTS += integer_scan_test mesh_airtime_test mesh_tx_policy_test mesh_appearance_test mesh_primary_transport_test mesh_visit_appearance_test

@@ -1258,6 +1258,10 @@ static char s_confirmName[sizeof(Detection::name)]     = "";
 static char s_alertVendor[16]   = "";
 static char s_alertName[sizeof(Detection::name)]       = "";
 static char    s_confirmLabel[24];
+static bool    s_confirmLabelIsName = false;
+static const char* confirmLabelOnScreen() {
+    return s_confirmLabelIsName ? privLabel(s_confirmLabel) : s_confirmLabel;
+}
 // LOG's long-press sets this per-row (BLE vs WiFi isn't implied by a
 // "current mode" the way it is for RAWSCAN, which already knows that
 // from s_rawScanIsBle) -- RAWSCAN's own WATCH/HUNT branches don't
@@ -5023,7 +5027,7 @@ void loop() {
             // drawActiveBackground in ui_log.cpp is a comment, not a call.
             drawTwoBand([&](TFT_eSPI& t, bool) {
                 UserLabels::Label userLabel{};const bool userLabeled=UserLabels::lookup(s_confirmMac,userLabel);
-                uiLogTick(t, now, engine, 0, s_confirmPending, privLabel(s_confirmLabel),
+                uiLogTick(t, now, engine, 0, s_confirmPending, confirmLabelOnScreen(),
                           s_infoPending, infoTypeName, infoText,
                           engine.isWatched(s_confirmMac, s_confirmIsBle),
                           engine.isHunted(s_confirmMac, s_confirmIsBle),
@@ -5205,7 +5209,8 @@ void loop() {
                         labelTargetFromDetection(*d);
                         snprintf(s_confirmVendor, sizeof s_confirmVendor, "%s", vendorText(*d));
                         memcpy(s_confirmName,   d->name,   sizeof s_confirmName);
-                        const char* lbl = d->name[0] ? d->name : vendorText(*d);
+                        s_confirmLabelIsName = d->name[0] != 0;
+                        const char* lbl = s_confirmLabelIsName ? d->name : vendorText(*d);
                         strncpy(s_confirmLabel, lbl, sizeof(s_confirmLabel) - 1);
                         s_confirmLabel[sizeof(s_confirmLabel) - 1] = 0;
                         s_confirmPending = true;
@@ -5230,7 +5235,7 @@ void loop() {
             drawTwoBand([&](TFT_eSPI& t, bool advance) {
                 UserLabels::Label userLabel{};
                 const bool userLabeled = UserLabels::lookup(s_confirmMac, userLabel);
-                uiRawScanTick(t, now, engine, s_rawScanIsBle, done, s_confirmPending, privLabel(s_confirmLabel),
+                uiRawScanTick(t, now, engine, s_rawScanIsBle, done, s_confirmPending, confirmLabelOnScreen(),
                               engine.isWatched(s_confirmMac, s_rawScanIsBle),
                               engine.isHunted(s_confirmMac, s_rawScanIsBle),
                               IgnoreList::contains(s_confirmMac), userLabeled, advance);
@@ -5366,7 +5371,8 @@ void loop() {
                                 s_confirmTarget.original = DetectionType::UNKNOWN;
                                 s_confirmTarget.rssi = r->rssi;
                                 snprintf(s_confirmTarget.name, sizeof s_confirmTarget.name, "%s", r->name);
-                                strncpy(s_confirmLabel, r->name[0] ? r->name : "Unnamed device",
+                                s_confirmLabelIsName = r->name[0] != 0;
+                                strncpy(s_confirmLabel, s_confirmLabelIsName ? r->name : rawBleKindLabel(r->kind),
                                         sizeof(s_confirmLabel) - 1);
                                 haveTarget = true;
                             }
@@ -5382,6 +5388,7 @@ void loop() {
                                 s_confirmTarget.rssi = engine.rawWifiRssi((uint8_t)row);
                                 s_confirmTarget.channel = engine.rawWifiChannel((uint8_t)row);
                                 snprintf(s_confirmTarget.name, sizeof s_confirmTarget.name, "%s", ssid);
+                                s_confirmLabelIsName = ssid[0] != 0;
                                 strncpy(s_confirmLabel, ssid[0] ? ssid : "(hidden)", sizeof(s_confirmLabel) - 1);
                                 haveTarget = true;
                             }

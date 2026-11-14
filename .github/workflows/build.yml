@@ -13,6 +13,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
+      - run: bash tools/check_emissions.sh
       - run: make -C test -j2
       - run: python3 test/version_consistency_test.py
       - run: python3 test/coex_size_test.py

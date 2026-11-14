@@ -159,7 +159,8 @@ void fail(Fail f) {
 void startScan() {
     s_netN = 0;
     WiFi.scanDelete();
-    WiFi.scanNetworks(true /* async */, false /* no hidden */);
+    // Listen for beacons without sending probe requests.
+    WiFi.scanNetworks(true /* async */, false /* no hidden */, true /* passive */, 150);
     s_state = State::SCANNING;
 }
 

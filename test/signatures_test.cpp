@@ -14,6 +14,7 @@
 #include "signatures.h"
 #include "test_util.h"
 #include <cstring>
+#include <initializer_list>
 
 static DetectionType lookup(uint8_t a, uint8_t b, uint8_t c, Confidence* conf) {
     const uint8_t mac[6] = { a, b, c, 0x11, 0x22, 0x33 };
@@ -92,6 +93,15 @@ int main() {
     ck("...and graded HIGH", conf == Confidence::HIGH_CONF);
     ck("Amazon's umbrella block is RING", lookup(0xFC, 0x65, 0xDE, &conf) == DetectionType::RING);
     ck("...and graded MED", conf == Confidence::MED_CONF);
+
+    suite("Arlo and Espressif OUI correction");
+    ck("Espressif BC:DD:C2 does not identify a camera",
+       lookup(0xBC, 0xDD, 0xC2, &conf) == DetectionType::UNKNOWN);
+    for (const auto& block : {0xFC9C98u, 0x486264u, 0xA41162u}) {
+        const uint8_t mac[] = {uint8_t(block >> 16), uint8_t(block >> 8), uint8_t(block), 1, 2, 3};
+        ck("Arlo Technology prefix maps to a camera",
+           lookupOui(mac, &conf) == DetectionType::CAMERA && conf == Confidence::HIGH_CONF);
+    }
 
     suite("A miss leaves the caller's value alone");
     // The WiFi path seeds conf from the type before asking, so lookupOui
